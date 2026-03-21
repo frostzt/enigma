@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 4.2)
+cmake_minimum_required(VERSION 3.20)
 project(enigmadb)
 
 # --- CMake Flags ---
@@ -14,6 +14,15 @@ add_compile_options(
 )
 add_compile_options(-Wno-gnu-zero-variadic-macro-arguments)
 
+# --- Build Flags and stuff ---
+
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+  add_compile_options(-O0 -g)
+  add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
+  add_link_options(-fsanitize=address,undefined)
+  add_compile_definitions(DEBUG)
+endif()
+
 # --- Modules ---
 
 include(cmake/external.cmake)
@@ -25,13 +34,5 @@ add_subdirectory(src)
 
 # Test files
 add_subdirectory(tests)
-
-# --- Build Flags and stuff ---
-if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-  add_compile_options(-O0 -g)
-  add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
-  add_link_options(-fsanitize=address,undefined)
-  add_compile_definitions(DEBUG)
-endif()
 
 # --- Project Targets ---

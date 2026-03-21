@@ -10,14 +10,18 @@
 
 #include <string>
 
-enum ErrorCode {
+enum class ErrorCode {
   UNEXPECTED_ERR = 0,
 };
 
 struct Error {
   /* An internal code for representing what went wrong */
   ErrorCode code;
-  std::string &message;
+  std::string message;
+
+  static Error unexpected(std::string message) {
+    return Error{ErrorCode::UNEXPECTED_ERR, std::move(message)};
+  }
 };
 
 #endif // ENIGMA_DB_ERROR_H
