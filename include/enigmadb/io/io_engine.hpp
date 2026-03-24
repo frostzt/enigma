@@ -34,17 +34,17 @@ enum class Mode {
  */
 class FileHandle {
 private:
-  int _fd;
+  int fd_;
 
   ~FileHandle() {
-    if (_fd != -1) {
-      close(_fd);
+    if (fd_ != -1) {
+      close(fd_);
     }
   }
 
 public:
   struct __tag__ {};
-  FileHandle(__tag__, int fd) : _fd(fd) {}
+  FileHandle(__tag__, int fd) : fd_(fd) {}
 
   FileHandle(const FileHandle &other) = delete;
   FileHandle &operator=(const FileHandle &other) = delete;
@@ -52,20 +52,20 @@ public:
   friend class IOEngine;
 
   /* Returns internal file descriptor */
-  int fd() const { return _fd; }
+  int fd() const { return fd_; }
 
   FileHandle &operator=(FileHandle &&other) noexcept {
     /* Release current fd before we take ownership of the other fd */
-    if (_fd != -1) {
-      close(_fd);
+    if (fd_ != -1) {
+      close(fd_);
     }
     /* Take the new fd */
-    this->_fd = other._fd;
-    other._fd = -1;
+    this->fd_ = other.fd_;
+    other.fd_ = -1;
     return *this;
   }
 
-  FileHandle(FileHandle &&other) noexcept : _fd(other._fd) { other._fd = -1; };
+  FileHandle(FileHandle &&other) noexcept : fd_(other.fd_) { other.fd_ = -1; };
 };
 
 class IOEngine {
@@ -87,28 +87,24 @@ public:
    * @param fh       Handle to an open file (must have been opened with
    * Mode::Read).param
    * @param[out] buffer Destination buffer; caller-owned
-   * @param buffer_len Size of @p buffer in bytes
    * @param length Length of bytes to append to the file
    * @return Number of bytes appended, or Error on failure.
    */
-  virtual ExpectResult<size_t, Error> append(const FileHandle &fh, char *buffer,
-                                             size_t buffer_len,
-                                             size_t length) = 0;
+  virtual ExpectResult<size_t, Error>
+  append(const FileHandle &fh, const char *buffer, size_t length) = 0;
 
   /**
    * @brief Reads up to @p count bytes from @p fh at the given @p offset.
    *
-   * @param count    Maximum number of bytes to read.
    * @param fh       Handle to an open file (must have been opened with
    * Mode::Read).
+   * @param count    Maximum number of bytes to read.
    * @param[out] buffer     Destination buffer; caller-owned.
-   * @param buffer_len     Size of @p buffer in bytes. Must be >= @p count.
    * @param offset   Byte offset from the start of the file.
    * @return Number of bytes actually read, or Error on failure.
    */
-  virtual ExpectResult<size_t, Error> read(size_t count, const FileHandle &fh,
-                                           char *buffer, size_t buffer_len,
-                                           size_t offset) = 0;
+  virtual ExpectResult<size_t, Error> read(const FileHandle &fh, size_t count,
+                                           char *buffer, size_t offset) = 0;
 
   /**
    * @brief Commits all the changes into disk
