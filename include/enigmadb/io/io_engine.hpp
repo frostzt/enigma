@@ -36,15 +36,15 @@ class FileHandle {
 private:
   int fd_;
 
+public:
+  struct construct_tag {};
+  FileHandle(construct_tag, int fd) : fd_(fd) {}
+
   ~FileHandle() {
     if (fd_ != -1) {
       close(fd_);
     }
   }
-
-public:
-  struct __tag__ {};
-  FileHandle(__tag__, int fd) : fd_(fd) {}
 
   FileHandle(const FileHandle &other) = delete;
   FileHandle &operator=(const FileHandle &other) = delete;
@@ -70,7 +70,7 @@ public:
 
 class IOEngine {
 public:
-  inline ~IOEngine() = default;
+  virtual ~IOEngine() = default;
 
   /**
    * @brief Tries to open a file specified at @p path with @p mode specified
@@ -107,9 +107,26 @@ public:
                                            char *buffer, size_t offset) = 0;
 
   /**
-   * @brief Commits all the changes into disk
+   * @brief Flushes all the changes to the disk similar to fsync
+   *
+   * @param fh       Handle to an open file (must have been opened with
+   * Mode::Read).
+   * @return void is successful, or Error on failure.
    */
-  virtual ExpectResult<void, Error> sync(const FileHandle &fh) = 0;
+  virtual ExpectResult<void, Error> sync_all(const FileHandle &fh) = 0;
+
+  /**
+   * @brief Flushes all the data changes except metadata* to the disk
+   * similar to fdatasync
+   *
+   * Note that in case of appends fdatasync still guarantees filesize
+   * will be comitted.
+   *
+   * @param fh       Handle to an open file (must have been opened with
+   * Mode::Read).
+   * @return void is successful, or Error on failure.
+   */
+  virtual ExpectResult<void, Error> sync_data(const FileHandle &fh) = 0;
 };
 
 } // namespace enigmadb::io
