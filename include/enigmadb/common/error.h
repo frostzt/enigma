@@ -16,6 +16,7 @@ enum class ErrorCode {
   /// Basic error types
   FILE_DESCRIPTER_ERR = 1,
   FSYNC_ERR = 2,
+  CLOSE_ERR = 3,
 };
 
 struct Error {

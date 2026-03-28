@@ -107,6 +107,15 @@ public:
                                            char *buffer, size_t offset) = 0;
 
   /**
+   * @brief Flushes all the directory and flushes it to the disk
+   *
+   * @param fh       Handle to an open file (must have been opened with
+   * Mode::Read).
+   * @return void is successful, or Error on failure.
+   */
+  virtual ExpectResult<void, Error> sync_directory(const std::string &path) = 0;
+
+  /**
    * @brief Flushes all the changes to the disk similar to fsync
    *
    * @param fh       Handle to an open file (must have been opened with
