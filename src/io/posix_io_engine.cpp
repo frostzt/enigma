@@ -14,14 +14,14 @@ namespace enigmadb::io {
 ExpectResult<FileHandle, Error> PosixIOEngine::open(const std::string& path,
                                                     Mode mode) {
     // clang-format off
-  int flags;
-  switch (mode) {
-    case Mode::Read:      flags = O_RDONLY;                        break;
-    case Mode::Write:     flags = O_WRONLY | O_CREAT;              break;
-    case Mode::ReadWrite: flags = O_RDWR   | O_CREAT;              break;
-    case Mode::Append:    flags = O_WRONLY | O_APPEND | O_CREAT;   break;
-    case Mode::Overwrite: flags = O_WRONLY | O_CREAT | O_TRUNC;    break;
-  }
+    int flags;
+    switch (mode) {
+      case Mode::Read:      flags = O_RDONLY;                        break;
+      case Mode::Write:     flags = O_WRONLY | O_CREAT;              break;
+      case Mode::ReadWrite: flags = O_RDWR   | O_CREAT;              break;
+      case Mode::Append:    flags = O_WRONLY | O_APPEND | O_CREAT;   break;
+      case Mode::Overwrite: flags = O_WRONLY | O_CREAT | O_TRUNC;    break;
+    }
     // clang-format on
 
     errno = 0;
