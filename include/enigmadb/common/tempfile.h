@@ -1,5 +1,5 @@
 /*
- * @file tempfile.hpp
+ * @file tempfile.h
  * @brief A temporary file wrapper that can create a tempfile, note
  * that this is used mainly for tests
  * @author frostzt
