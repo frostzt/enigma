@@ -14,9 +14,12 @@ enum class ErrorCode {
   UNEXPECTED_ERR = 0,
 
   /// Basic error types
-  FILE_DESCRIPTER_ERR = 1,
+  FILE_DESCRIPTOR_ERR = 1,
   FSYNC_ERR = 2,
   CLOSE_ERR = 3,
+  BAD_CONFIG = 4,
+  WRITE_ERR = 5,
+  READ_ERR = 6,
 };
 
 struct Error {
