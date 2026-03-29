@@ -22,6 +22,8 @@ struct Tempfile {
     strncpy(pattern, pattern_str.c_str(), sizeof(pattern));
     fd = mkstemp(pattern);
     path = pattern;
+    ::close(fd);
+    fd = -1;
   }
 
   ~Tempfile() {
