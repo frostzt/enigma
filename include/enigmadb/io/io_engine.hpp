@@ -20,10 +20,11 @@
 namespace enigmadb::io {
 
 enum class Mode {
-  Read,     /// O_RDONLY
-  Write,    /// O_WRONLY | O_CREAT
-  Append,   /// O_WRONLY | O_APPEND | O_CREAT
-  Overwrite /// O_WRONLY | O_CREAT | O_TRUNC
+  Read,      /// O_RDONLY
+  Write,     /// O_WRONLY | O_CREAT
+  ReadWrite, /// O_RDWR   | O_CREAT
+  Append,    /// O_WRONLY | O_APPEND | O_CREAT
+  Overwrite  /// O_WRONLY | O_CREAT | O_TRUNC
 };
 
 /**
