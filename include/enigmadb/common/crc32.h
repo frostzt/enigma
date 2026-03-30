@@ -11,9 +11,8 @@
 #include <cassert>
 #include <cstdint>
 #include <cstring>
-#include <vector>
 
-static constexpr uint32_t crc32Table[256] = {
+static constexpr uint32_t crc_32_table[256] = {
     0x00000000L, 0xF26B8303L, 0xE13B70F7L, 0x1350F3F4L, 0xC79A971FL,
     0x35F1141CL, 0x26A1E7E8L, 0xD4CA64EBL, 0x8AD958CFL, 0x78B2DBCCL,
     0x6BE22838L, 0x9989AB3BL, 0x4D43CFD0L, 0xBF284CD3L, 0xAC78BF27L,
@@ -67,9 +66,6 @@ static constexpr uint32_t crc32Table[256] = {
     0x988C474DL, 0x6AE7C44EL, 0xBE2DA0A5L, 0x4C4623A6L, 0x5F16D052L,
     0xAD7D5351L};
 
-uint32_t computeCRC32(const std::byte* data, size_t offset, size_t length);
-
-uint32_t computeCRC32(const std::vector<std::byte>& data, size_t offset,
-                      size_t length);
+uint32_t compute_crc_32(const char* data, size_t length);
 
 #endif  // ENIGMA_DB_CRC32_H
