@@ -27,19 +27,54 @@ enum class WalOpType : uint8_t {
 
 struct WalColumn {
     std::string column_name;
-    std::string value;
+    std::vector<uint8_t> value;
 };
 
 struct WalRecord {
     WalOpType op_type;
     uint64_t timestamp;
     uint64_t sequence;
-    std::string partition_key;
-    std::string clustering_key;
+    std::vector<uint8_t> partition_key;
+    std::vector<uint8_t> clustering_key;
     std::vector<WalColumn> columns;
 };
 
-std::vector<char> serialize_wal_record(const WalRecord& record);
+size_t get_record_size(const WalRecord& record);
+
+// clang-format off
+/**
+ * @brief Serializes the WAL Record into raw bytes
+ *
+ * Here is how the serialization is done and how it looks like
+ *
+ * 0  1  2  3  4  5  6  7  0  1  2  3  4  5  6  7  - bytes NOT bits
+ * |   LENGTH  |   CRC32   |OP| Timestamp -> next byte too
+ *    |       Sequence        | P.KEY LEN |  PART KEY ARBITRARY |
+ * | C.KEY LEN | CLUS KEY ARBITRARY |C.LEN|CNAME|
+ * | COL NAME ARBITRARY | COL.VALUE | COL VALUE ARBITRARY
+ *
+ * --- HEADER ---
+ * Length (4 bytes) -- Length of the entire record
+ * CRC32  (4 bytes) -- CRC Checksum of the entire record
+ *
+ * --- BODY ---
+ * Wal Op Type           (1 byte)  -- Type of operation
+ * Timestamp             (8 bytes) -- Timestamp of this operation
+ * Sequence              (8 bytes) -- Ever increasing number assigned to this op
+ * Partition Key Length  (4 bytes) -- Length of the next byte sequence containing Partition key
+ * Partition Key       (ARBITRARY) -- Partition key name
+ * Clustering Key Length (4 bytes) -- Length of the next byte sequence containing Clustering key
+ * Clustering Key      (ARBITRARY) -- Clustering key name
+ * Columns               (2 bytes) -- Numbers of column
+ *    --- REPEATED xColumns
+ *    Column Name Size            (2 bytes) -- Length of the column name
+ *    Column Name               (ARBITRARY) -- Name of the column
+ *    Column Value Size           (4 bytes) -- Length of the column value
+ *    Column Value              (ARBITRARY) -- Column value
+ *    --- REPEATED xColumns
+ */
+std::vector<uint8_t> serialize_wal_record(const WalRecord& record);
+// clang-format on
 
 ExpectResult<WalRecord, Error> deserialize_wal_record(const char* buffer,
                                                       size_t length);
