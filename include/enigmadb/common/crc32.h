@@ -66,6 +66,6 @@ static constexpr uint32_t crc_32_table[256] = {
     0x988C474DL, 0x6AE7C44EL, 0xBE2DA0A5L, 0x4C4623A6L, 0x5F16D052L,
     0xAD7D5351L};
 
-uint32_t compute_crc_32(const char* data, size_t length);
+uint32_t compute_crc_32(const uint8_t* data, size_t length);
 
 #endif  // ENIGMA_DB_CRC32_H

@@ -4,7 +4,7 @@
 
 TEST(encoding, round_trip_uint8) {
     uint8_t value = 12;
-    char buffer[50] = "";
+    uint8_t buffer[50] = "";
 
     auto encode_return = encode_uint8(value, buffer, 0);
     ASSERT_EQ(encode_return, 1);
@@ -15,7 +15,7 @@ TEST(encoding, round_trip_uint8) {
 
 TEST(encoding, round_trip_uint8_max) {
     uint8_t value = UINT8_MAX;
-    char buffer[50] = "";
+    uint8_t buffer[50] = "";
 
     auto encode_return = encode_uint8(value, buffer, 0);
     ASSERT_EQ(encode_return, 1);
@@ -26,7 +26,7 @@ TEST(encoding, round_trip_uint8_max) {
 
 TEST(encoding, round_trip_uint8_zero) {
     uint8_t value = 0;
-    char buffer[50] = "";
+    uint8_t buffer[50] = "";
 
     auto encode_return = encode_uint8(value, buffer, 0);
     ASSERT_EQ(encode_return, 1);
@@ -37,7 +37,7 @@ TEST(encoding, round_trip_uint8_zero) {
 
 TEST(encoding, round_trip_uint16_max) {
     uint16_t value = UINT16_MAX;
-    char buffer[50] = "";
+    uint8_t buffer[50] = "";
 
     auto encode_return = encode_uint16(value, buffer, 0);
     ASSERT_EQ(encode_return, 2);
@@ -48,7 +48,7 @@ TEST(encoding, round_trip_uint16_max) {
 
 TEST(encoding, round_trip_uint16_zero) {
     uint16_t value = 0;
-    char buffer[50] = "";
+    uint8_t buffer[50] = "";
 
     auto encode_return = encode_uint16(value, buffer, 0);
     ASSERT_EQ(encode_return, 2);
@@ -59,7 +59,7 @@ TEST(encoding, round_trip_uint16_zero) {
 
 TEST(encoding, round_trip_uint32_max) {
     uint32_t value = UINT32_MAX;
-    char buffer[50] = "";
+    uint8_t buffer[50] = "";
 
     auto encode_return = encode_uint32(value, buffer, 0);
     ASSERT_EQ(encode_return, 4);
@@ -70,7 +70,7 @@ TEST(encoding, round_trip_uint32_max) {
 
 TEST(encoding, round_trip_uint32_zero) {
     uint32_t value = 0;
-    char buffer[50] = "";
+    uint8_t buffer[50] = "";
 
     auto encode_return = encode_uint32(value, buffer, 0);
     ASSERT_EQ(encode_return, 4);
@@ -81,7 +81,7 @@ TEST(encoding, round_trip_uint32_zero) {
 
 TEST(encoding, round_trip_uint64_max) {
     uint64_t value = UINT64_MAX;
-    char buffer[50] = "";
+    uint8_t buffer[50] = "";
 
     auto encode_return = encode_uint64(value, buffer, 0);
     ASSERT_EQ(encode_return, 8);
@@ -92,7 +92,7 @@ TEST(encoding, round_trip_uint64_max) {
 
 TEST(encoding, round_trip_uint64_zero) {
     uint64_t value = 0;
-    char buffer[50] = "";
+    uint8_t buffer[50] = "";
 
     auto encode_return = encode_uint64(value, buffer, 0);
     ASSERT_EQ(encode_return, 8);
@@ -102,7 +102,7 @@ TEST(encoding, round_trip_uint64_zero) {
 }
 
 TEST(encoding, round_trip_arbitrary) {
-    char buffer[256] = "";
+    uint8_t buffer[256] = "";
 
     // 8 bits
     auto byte = encode_uint8(UINT8_MAX, buffer, 0);

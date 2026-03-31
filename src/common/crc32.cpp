@@ -1,6 +1,6 @@
 #include "enigmadb/common/crc32.h"
 
-uint32_t compute_crc_32(const char* data, const size_t length) {
+uint32_t compute_crc_32(const uint8_t* data, const size_t length) {
     uint32_t crc = 0xFFFFFFFFU;
     for (size_t i = 0; i < length; ++i) {
         const auto byte = static_cast<uint8_t>(data[i]);
