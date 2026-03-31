@@ -1,6 +1,7 @@
 #include "enigmadb/common/encoding.h"
 
 #include <cstddef>
+#include <cstring>
 
 size_t encode_uint8(uint8_t value, uint8_t* buffer, size_t offset) {
     buffer[offset] = value;
@@ -53,4 +54,10 @@ uint64_t decode_uint64(const uint8_t* buffer, size_t offset) {
                  << ((7 - i) * 8);
     }
     return total;
+}
+
+size_t encode_bytes(const void* data, size_t length, uint8_t* buffer,
+                    size_t offset) {
+    memcpy(buffer + offset, data, length);
+    return offset + length;
 }

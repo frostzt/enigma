@@ -108,4 +108,7 @@ size_t encode_uint64(uint64_t value, uint8_t* buffer, size_t offset);
  */
 uint64_t decode_uint64(const uint8_t* buffer, size_t offset);
 
+size_t encode_bytes(const void* data, size_t length, uint8_t* buffer,
+                    size_t offset);
+
 #endif  // ENIGMA_DB_ENCODING_H

@@ -14,7 +14,7 @@ size_t get_record_size(const WalRecord& record) {
     /* Columns */
     total_size += 2; /* Column Count size */
     for (const auto& col : record.columns) {
-        total_size += col.column_name.size() + 2;
+        total_size += col.name.size() + 2;
         total_size += col.value.size() + 4;
     }
     return total_size;
@@ -51,19 +51,18 @@ std::vector<uint8_t> serialize_wal_record(const WalRecord& record) {
     offset += clustering_key_length;
 
     /* Columns */
-    offset = encode_uint16(record.columns.size(), buf, offset);
+    offset = encode_uint16(static_cast<uint16_t>(record.columns.size()), buf,
+                           offset);
     for (const auto& column : record.columns) {
         /* Column Name */
-        auto column_name_len = column.column_name.size();
-        offset = encode_uint16(column_name_len, buf, offset);
-        memcpy(buf + offset, column.column_name.data(), column_name_len);
-        offset += column_name_len;
+        auto cname_len = column.name.size();
+        offset = encode_uint16(cname_len, buf, offset);
+        offset = encode_bytes(column.name.data(), cname_len, buf, offset);
 
         /* Column Value */
-        auto column_value_len = column.value.size();
-        offset = encode_uint32(column_value_len, buf, offset);
-        memcpy(buf + offset, column.value.data(), column_value_len);
-        offset += column_value_len;
+        auto cvalue_len = column.value.size();
+        offset = encode_uint32(cvalue_len, buf, offset);
+        offset = encode_bytes(column.value.data(), cvalue_len, buf, offset);
     }
 
     /* update header */

@@ -26,7 +26,7 @@ enum class WalOpType : uint8_t {
 };
 
 struct WalColumn {
-    std::string column_name;
+    std::string name;
     std::vector<uint8_t> value;
 };
 
