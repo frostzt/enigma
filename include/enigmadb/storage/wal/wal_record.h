@@ -76,7 +76,7 @@ size_t get_record_size(const WalRecord& record);
 std::vector<uint8_t> serialize_wal_record(const WalRecord& record);
 // clang-format on
 
-ExpectResult<WalRecord, Error> deserialize_wal_record(const char* buffer,
+ExpectResult<WalRecord, Error> deserialize_wal_record(const uint8_t* buffer,
                                                       size_t length);
 
 }  // namespace enigmadb::storage::wal

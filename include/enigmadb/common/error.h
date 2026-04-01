@@ -20,6 +20,7 @@ enum class ErrorCode {
     BAD_CONFIG = 4,
     WRITE_ERR = 5,
     READ_ERR = 6,
+    READ_OUT_OF_RANGE = 7,
 };
 
 struct Error {
