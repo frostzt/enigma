@@ -4,6 +4,7 @@
 #include <unistd.h>
 
 #include <cerrno>
+#include <cstring>
 
 #include "enigmadb/common/error.h"
 #include "enigmadb/common/result.h"
