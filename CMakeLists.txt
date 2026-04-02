@@ -23,6 +23,10 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
   add_compile_definitions(DEBUG)
 endif()
 
+# --- Testing ---
+
+enable_testing()
+
 # --- Modules ---
 
 include(cmake/external.cmake)
