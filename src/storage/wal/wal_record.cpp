@@ -92,6 +92,11 @@ ExpectResult<WalRecord, Error> deserialize_wal_record(const uint8_t* buffer,
     auto checksum = decode_uint32(buffer, offset);
     offset += 4;
 
+    if (body_length > length - 8) {
+        return ExpectResult<WalRecord, Error>::err(
+            Error{ErrorCode::READ_OUT_OF_RANGE, "out of range"});
+    }
+
     /* validate checksum */
     auto gen_checksum = compute_crc_32(buffer + 8, body_length);
     if (checksum != gen_checksum) {
