@@ -95,7 +95,7 @@ class IOEngine {
      * @return Number of bytes appended, or Error on failure.
      */
     virtual enigmadb::common::ExpectResult<size_t, enigmadb::common::Error>
-    append(const FileHandle& fh, const char* buffer, size_t length) = 0;
+    append(const FileHandle& fh, const uint8_t* buffer, size_t length) = 0;
 
     /**
      * @brief Reads up to @p count bytes from @p fh at the given @p offset.
@@ -108,7 +108,8 @@ class IOEngine {
      * @return Number of bytes actually read, or Error on failure.
      */
     virtual enigmadb::common::ExpectResult<size_t, enigmadb::common::Error>
-    read(const FileHandle& fh, size_t count, char* buffer, size_t offset) = 0;
+    read(const FileHandle& fh, size_t count, uint8_t* buffer,
+         size_t offset) = 0;
 
     /**
      * @brief Flushes all the directory and flushes it to the disk

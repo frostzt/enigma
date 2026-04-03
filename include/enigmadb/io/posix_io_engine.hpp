@@ -27,10 +27,10 @@ class PosixIOEngine : public IOEngine {
         const std::string& path, Mode mode) override;
 
     enigmadb::common::ExpectResult<size_t, enigmadb::common::Error> append(
-        const FileHandle& fh, const char* buffer, size_t length) override;
+        const FileHandle& fh, const uint8_t* buffer, size_t length) override;
 
     enigmadb::common::ExpectResult<size_t, enigmadb::common::Error> read(
-        const FileHandle& fh, size_t count, char* buffer,
+        const FileHandle& fh, size_t count, uint8_t* buffer,
         size_t offset) override;
 
     enigmadb::common::ExpectResult<void, enigmadb::common::Error> sync_all(

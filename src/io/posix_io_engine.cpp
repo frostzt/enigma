@@ -99,7 +99,7 @@ ExpectResult<void, Error> PosixIOEngine::sync_directory(
 }
 
 ExpectResult<size_t, Error> PosixIOEngine::append(const FileHandle& fh,
-                                                  const char* buffer,
+                                                  const uint8_t* buffer,
                                                   size_t length) {
     errno = 0;
     if (fh.fd() == -1) {
@@ -125,7 +125,7 @@ ExpectResult<size_t, Error> PosixIOEngine::append(const FileHandle& fh,
 }
 
 ExpectResult<size_t, Error> PosixIOEngine::read(const FileHandle& fh,
-                                                size_t count, char* buffer,
+                                                size_t count, uint8_t* buffer,
                                                 size_t offset) {
     if (fh.fd() == -1) {
         return ExpectResult<size_t, Error>::err(
