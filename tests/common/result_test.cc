@@ -3,6 +3,8 @@
 #include "enigmadb/common/error.h"
 #include "gtest/gtest.h"
 
+using namespace enigmadb::common;
+
 TEST(Result, result_expectOk) {
     auto res = ExpectResult<int, std::runtime_error>::ok(1);
     ASSERT_TRUE(res.has_value());

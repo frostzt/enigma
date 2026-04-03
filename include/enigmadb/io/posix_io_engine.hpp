@@ -23,20 +23,24 @@ class PosixIOEngine : public IOEngine {
    public:
     ~PosixIOEngine() {};
 
-    ExpectResult<FileHandle, Error> open(const std::string& path,
-                                         Mode mode) override;
+    enigmadb::common::ExpectResult<FileHandle, enigmadb::common::Error> open(
+        const std::string& path, Mode mode) override;
 
-    ExpectResult<size_t, Error> append(const FileHandle& fh, const char* buffer,
-                                       size_t length) override;
+    enigmadb::common::ExpectResult<size_t, enigmadb::common::Error> append(
+        const FileHandle& fh, const char* buffer, size_t length) override;
 
-    ExpectResult<size_t, Error> read(const FileHandle& fh, size_t count,
-                                     char* buffer, size_t offset) override;
+    enigmadb::common::ExpectResult<size_t, enigmadb::common::Error> read(
+        const FileHandle& fh, size_t count, char* buffer,
+        size_t offset) override;
 
-    ExpectResult<void, Error> sync_all(const FileHandle& fh) override;
+    enigmadb::common::ExpectResult<void, enigmadb::common::Error> sync_all(
+        const FileHandle& fh) override;
 
-    ExpectResult<void, Error> sync_directory(const std::string& path) override;
+    enigmadb::common::ExpectResult<void, enigmadb::common::Error>
+    sync_directory(const std::string& path) override;
 
-    ExpectResult<void, Error> sync_data(const FileHandle& fh) override;
+    enigmadb::common::ExpectResult<void, enigmadb::common::Error> sync_data(
+        const FileHandle& fh) override;
 };
 
 }  // namespace enigmadb::io

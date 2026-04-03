@@ -83,8 +83,8 @@ class IOEngine {
      * @param mode Specifies the mode in which to open this file
      * @return A FileHandle which manages the file opened otherwise Error
      */
-    virtual ExpectResult<FileHandle, Error> open(const std::string& path,
-                                                 Mode mode) = 0;
+    virtual enigmadb::common::ExpectResult<FileHandle, enigmadb::common::Error>
+    open(const std::string& path, Mode mode) = 0;
 
     /* @brief Tries to append data directly into the file handled by @p fh
      *
@@ -94,9 +94,8 @@ class IOEngine {
      * @param length Length of bytes to append to the file
      * @return Number of bytes appended, or Error on failure.
      */
-    virtual ExpectResult<size_t, Error> append(const FileHandle& fh,
-                                               const char* buffer,
-                                               size_t length) = 0;
+    virtual enigmadb::common::ExpectResult<size_t, enigmadb::common::Error>
+    append(const FileHandle& fh, const char* buffer, size_t length) = 0;
 
     /**
      * @brief Reads up to @p count bytes from @p fh at the given @p offset.
@@ -108,8 +107,8 @@ class IOEngine {
      * @param offset   Byte offset from the start of the file.
      * @return Number of bytes actually read, or Error on failure.
      */
-    virtual ExpectResult<size_t, Error> read(const FileHandle& fh, size_t count,
-                                             char* buffer, size_t offset) = 0;
+    virtual enigmadb::common::ExpectResult<size_t, enigmadb::common::Error>
+    read(const FileHandle& fh, size_t count, char* buffer, size_t offset) = 0;
 
     /**
      * @brief Flushes all the directory and flushes it to the disk
@@ -118,8 +117,8 @@ class IOEngine {
      * Mode::Read).
      * @return void is successful, or Error on failure.
      */
-    virtual ExpectResult<void, Error> sync_directory(
-        const std::string& path) = 0;
+    virtual enigmadb::common::ExpectResult<void, enigmadb::common::Error>
+    sync_directory(const std::string& path) = 0;
 
     /**
      * @brief Flushes all the changes to the disk similar to fsync
@@ -128,7 +127,8 @@ class IOEngine {
      * Mode::Read).
      * @return void is successful, or Error on failure.
      */
-    virtual ExpectResult<void, Error> sync_all(const FileHandle& fh) = 0;
+    virtual enigmadb::common::ExpectResult<void, enigmadb::common::Error>
+    sync_all(const FileHandle& fh) = 0;
 
     /**
      * @brief Flushes all the data changes except metadata* to the disk
@@ -141,7 +141,8 @@ class IOEngine {
      * Mode::Read).
      * @return void is successful, or Error on failure.
      */
-    virtual ExpectResult<void, Error> sync_data(const FileHandle& fh) = 0;
+    virtual enigmadb::common::ExpectResult<void, enigmadb::common::Error>
+    sync_data(const FileHandle& fh) = 0;
 };
 
 }  // namespace enigmadb::io

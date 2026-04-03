@@ -3,6 +3,7 @@
 #include "enigmadb/common/utils.h"
 #include "gtest/gtest.h"
 
+using namespace enigmadb::common;
 using namespace enigmadb::storage::wal;
 
 WalRecord get_a_record(size_t column_count,

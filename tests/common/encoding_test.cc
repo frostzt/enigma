@@ -2,6 +2,8 @@
 
 #include <gtest/gtest.h>
 
+using namespace enigmadb::common;
+
 TEST(encoding, round_trip_uint8) {
     uint8_t value = 12;
     uint8_t buffer[50] = "";

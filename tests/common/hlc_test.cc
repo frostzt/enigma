@@ -6,6 +6,8 @@
 #include <unordered_set>
 #include <vector>
 
+using namespace enigmadb::common;
+
 TEST(HybridLogicalClock, generator) {
     TimestampGenerator tsGen;
 

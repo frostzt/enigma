@@ -2,6 +2,8 @@
 
 #include <gtest/gtest.h>
 
+using namespace enigmadb::common;
+
 TEST(crc32, produces_same_checksum) {
     uint8_t buffer[] = "sourav";
     auto crc32 = compute_crc_32(buffer, 6);
