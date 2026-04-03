@@ -14,6 +14,8 @@
 #include <cstring>
 #include <string>
 
+namespace enigmadb::common {
+
 struct Tempfile {
     std::string path;
     int fd;
@@ -34,5 +36,7 @@ struct Tempfile {
         unlink(path.c_str());
     }
 };
+
+}  // namespace enigmadb::common
 
 #endif  // ENIGMA_DB_TEMPFILE_HPP

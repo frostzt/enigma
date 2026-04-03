@@ -11,6 +11,8 @@
 #include <stdexcept>
 #include <variant>
 
+namespace enigmadb::common {
+
 template <typename T, typename E>
 class ExpectResult {
    private:
@@ -86,5 +88,6 @@ class ExpectResult<void, E> {
 
     static ExpectResult err(E error) { return ExpectResult(std::move(error)); }
 };
+}  // namespace enigmadb::common
 
 #endif  // ENIGMA_DB_RESULT_H

@@ -10,6 +10,8 @@
 
 #include <string>
 
+namespace enigmadb::common {
+
 enum class ErrorCode {
     UNEXPECTED_ERR = 0,
 
@@ -32,5 +34,7 @@ struct Error {
         return Error{ErrorCode::UNEXPECTED_ERR, std::move(message)};
     }
 };
+
+}  // namespace enigmadb::common
 
 #endif  // ENIGMA_DB_ERROR_H

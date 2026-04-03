@@ -1,5 +1,7 @@
 #include "enigmadb/common/crc32.h"
 
+namespace enigmadb::common {
+
 uint32_t compute_crc_32(const uint8_t* data, const size_t length) {
     uint32_t crc = 0xFFFFFFFFU;
     for (size_t i = 0; i < length; ++i) {
@@ -8,3 +10,5 @@ uint32_t compute_crc_32(const uint8_t* data, const size_t length) {
     }
     return ~crc;
 }
+
+}  // namespace enigmadb::common

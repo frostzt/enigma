@@ -10,8 +10,12 @@
 
 #include <vector>
 
+namespace enigmadb::common {
+
 inline std::vector<uint8_t> string_to_bytes(std::string_view str) {
     return {str.begin(), str.end()};
 }
+
+}  // namespace enigmadb::common
 
 #endif  // ENIGMA_DB_UTILS_H

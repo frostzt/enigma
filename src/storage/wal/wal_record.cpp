@@ -5,6 +5,8 @@
 #include "enigmadb/common/error.h"
 #include "enigmadb/common/result.h"
 
+using namespace enigmadb::common;
+
 namespace enigmadb::storage::wal {
 
 size_t get_record_size(const WalRecord& record) {

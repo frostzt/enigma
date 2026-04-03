@@ -3,6 +3,8 @@
 #include <cstddef>
 #include <cstring>
 
+namespace enigmadb::common {
+
 size_t encode_uint8(uint8_t value, uint8_t* buffer, size_t offset) {
     buffer[offset] = value;
     return offset + 1;
@@ -61,3 +63,5 @@ size_t encode_bytes(const void* data, size_t length, uint8_t* buffer,
     memcpy(buffer + offset, data, length);
     return offset + length;
 }
+
+}  // namespace enigmadb::common

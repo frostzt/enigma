@@ -17,6 +17,8 @@
 #include <cstddef>
 #include <cstdint>
 
+namespace enigmadb::common {
+
 /**
  * @brief Encodes a uint8_t into @p buffer at the given @p offset.
  *
@@ -110,5 +112,6 @@ uint64_t decode_uint64(const uint8_t* buffer, size_t offset);
 
 size_t encode_bytes(const void* data, size_t length, uint8_t* buffer,
                     size_t offset);
+}  // namespace enigmadb::common
 
 #endif  // ENIGMA_DB_ENCODING_H

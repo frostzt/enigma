@@ -2,6 +2,8 @@
 
 #include <chrono>
 
+namespace enigmadb::common {
+
 uint64_t TimestampGenerator::next() {
     // Generate milliseconds from the current epoch with the system clock
     const std::chrono::time_point<std::chrono::system_clock> now =
@@ -27,3 +29,5 @@ uint64_t TimestampGenerator::next() {
     } while (!lastReturned_.compare_exchange_weak(prev, candidate));
     return candidate;
 }
+
+}  // namespace enigmadb::common

@@ -11,6 +11,8 @@
 
 #include <atomic>
 
+namespace enigmadb::common {
+
 class TimestampGenerator {
    private:
     std::atomic<uint64_t> logicalCounter_{};
@@ -19,5 +21,7 @@ class TimestampGenerator {
    public:
     uint64_t next();
 };
+
+}  // namespace enigmadb::common
 
 #endif  // ENIGMA_DB_HLC_H
