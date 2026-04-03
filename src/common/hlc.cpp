@@ -14,18 +14,16 @@ uint64_t TimestampGenerator::next() {
     // Take Wall Clock's 48 Bits and Lamport Counters 16 bits
     const uint64_t wallTime48 = (static_cast<uint64_t>(millis) & 0xFFFFFFFFFFFF)
                                 << 16;
-    uint64_t lamport16 = logicalCounter_++ & 0xFFFF;
-
-    uint64_t candidate = wallTime48 | lamport16;
-    const uint64_t prev = lastReturned_.load();
+    uint64_t candidate;
+    uint64_t prev;
 
     // Account for clock rebalance
-    while (candidate <= prev) {
-        lamport16 = logicalCounter_++ & 0xFFFF;
-        candidate = wallTime48 | lamport16;
-    }
-
-    lastReturned_.store(candidate);
-
+    do {
+        prev = lastReturned_.load();
+        candidate = wallTime48 | (logicalCounter_++ & 0xFFFF);
+        if (candidate <= prev) {
+            candidate = prev + 1;
+        }
+    } while (!lastReturned_.compare_exchange_weak(prev, candidate));
     return candidate;
 }
