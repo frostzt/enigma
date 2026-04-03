@@ -8,6 +8,7 @@
 #include "gtest/gtest.h"
 
 using namespace enigmadb::io;
+using namespace enigmadb::common;
 
 TEST(POSIX_IO_Engine, open_non_existent_file) {
     PosixIOEngine engine;
