@@ -18,6 +18,9 @@
 
 namespace enigmadb::storage::wal {
 
+template <typename T>
+using WalResult = common::ExpectResult<T, common::Error>;
+
 enum class WalOpType : uint8_t {
     PUT_ROW = 0x01,
     DELETE_ROW = 0x02,

@@ -23,6 +23,7 @@ enum class ErrorCode {
     WRITE_ERR = 5,
     READ_ERR = 6,
     READ_OUT_OF_RANGE = 7,
+    ERR_EOF = 8,
 };
 
 struct Error {

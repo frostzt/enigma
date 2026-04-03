@@ -14,8 +14,7 @@ using namespace enigmadb::common;
 
 namespace enigmadb::io {
 
-ExpectResult<FileHandle, Error> PosixIOEngine::open(const std::string& path,
-                                                    Mode mode) {
+IOResult<FileHandle> PosixIOEngine::open(const std::string& path, Mode mode) {
     // clang-format off
     int flags;
     switch (mode) {
@@ -41,7 +40,7 @@ ExpectResult<FileHandle, Error> PosixIOEngine::open(const std::string& path,
     return ExpectResult<FileHandle, Error>::ok(std::move(fh));
 };
 
-ExpectResult<void, Error> PosixIOEngine::sync_data(const FileHandle& fh) {
+IOResult<void> PosixIOEngine::sync_data(const FileHandle& fh) {
     if (fh.fd() == -1) {
         return ExpectResult<void, Error>::err(
             Error{ErrorCode::FILE_DESCRIPTOR_ERR, "invalid file descriptor"});
@@ -61,7 +60,7 @@ ExpectResult<void, Error> PosixIOEngine::sync_data(const FileHandle& fh) {
     return ExpectResult<void, Error>::ok();
 }
 
-ExpectResult<void, Error> PosixIOEngine::sync_all(const FileHandle& fh) {
+IOResult<void> PosixIOEngine::sync_all(const FileHandle& fh) {
     if (fh.fd() == -1) {
         return ExpectResult<void, Error>::err(
             Error{ErrorCode::FILE_DESCRIPTOR_ERR, "invalid file descriptor"});
@@ -80,8 +79,7 @@ ExpectResult<void, Error> PosixIOEngine::sync_all(const FileHandle& fh) {
     return ExpectResult<void, Error>::ok();
 }
 
-ExpectResult<void, Error> PosixIOEngine::sync_directory(
-    const std::string& path) {
+IOResult<void> PosixIOEngine::sync_directory(const std::string& path) {
     errno = 0;
     int fd = ::open(path.c_str(), O_RDONLY);
     if (fd == -1) {
@@ -98,9 +96,8 @@ ExpectResult<void, Error> PosixIOEngine::sync_directory(
     return ExpectResult<void, Error>::ok();
 }
 
-ExpectResult<size_t, Error> PosixIOEngine::append(const FileHandle& fh,
-                                                  const uint8_t* buffer,
-                                                  size_t length) {
+IOResult<size_t> PosixIOEngine::append(const FileHandle& fh,
+                                       const uint8_t* buffer, size_t length) {
     errno = 0;
     if (fh.fd() == -1) {
         return ExpectResult<size_t, Error>::err(
@@ -124,9 +121,8 @@ ExpectResult<size_t, Error> PosixIOEngine::append(const FileHandle& fh,
     return bytes_written;
 }
 
-ExpectResult<size_t, Error> PosixIOEngine::read(const FileHandle& fh,
-                                                size_t count, uint8_t* buffer,
-                                                size_t offset) {
+IOResult<size_t> PosixIOEngine::read(const FileHandle& fh, size_t count,
+                                     uint8_t* buffer, size_t offset) {
     if (fh.fd() == -1) {
         return ExpectResult<size_t, Error>::err(
             Error{ErrorCode::FILE_DESCRIPTOR_ERR, "invalid file descriptor"});

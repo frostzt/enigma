@@ -13,6 +13,7 @@
 #include <unistd.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 
 #include "enigmadb/io/io_engine.hpp"
@@ -23,24 +24,19 @@ class PosixIOEngine : public IOEngine {
    public:
     ~PosixIOEngine() {};
 
-    enigmadb::common::ExpectResult<FileHandle, enigmadb::common::Error> open(
-        const std::string& path, Mode mode) override;
+    IOResult<FileHandle> open(const std::string& path, Mode mode) override;
 
-    enigmadb::common::ExpectResult<size_t, enigmadb::common::Error> append(
-        const FileHandle& fh, const uint8_t* buffer, size_t length) override;
+    IOResult<size_t> append(const FileHandle& fh, const uint8_t* buffer,
+                            size_t length) override;
 
-    enigmadb::common::ExpectResult<size_t, enigmadb::common::Error> read(
-        const FileHandle& fh, size_t count, uint8_t* buffer,
-        size_t offset) override;
+    IOResult<size_t> read(const FileHandle& fh, size_t count, uint8_t* buffer,
+                          size_t offset) override;
 
-    enigmadb::common::ExpectResult<void, enigmadb::common::Error> sync_all(
-        const FileHandle& fh) override;
+    IOResult<void> sync_all(const FileHandle& fh) override;
 
-    enigmadb::common::ExpectResult<void, enigmadb::common::Error>
-    sync_directory(const std::string& path) override;
+    IOResult<void> sync_directory(const std::string& path) override;
 
-    enigmadb::common::ExpectResult<void, enigmadb::common::Error> sync_data(
-        const FileHandle& fh) override;
+    IOResult<void> sync_data(const FileHandle& fh) override;
 };
 
 }  // namespace enigmadb::io
