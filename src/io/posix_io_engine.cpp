@@ -10,6 +10,8 @@
 #include "enigmadb/common/result.h"
 #include "enigmadb/io/io_engine.hpp"
 
+using namespace enigmadb::common;
+
 namespace enigmadb::io {
 
 ExpectResult<FileHandle, Error> PosixIOEngine::open(const std::string& path,
