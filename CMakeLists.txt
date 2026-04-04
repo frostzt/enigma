@@ -36,6 +36,9 @@ include(cmake/external.cmake)
 # Source files
 add_subdirectory(src)
 
+# Docs
+add_subdirectory(docs)
+
 # Test files
 add_subdirectory(tests)
 
