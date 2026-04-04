@@ -9,7 +9,7 @@
 #ifndef ENIGMA_DB_WAL_WRITER_H
 #define ENIGMA_DB_WAL_WRITER_H
 
-#include "enigmadb/io/io_engine.hpp"
+#include "enigmadb/io/io_engine.h"
 #include "enigmadb/storage/wal/wal_record.h"
 
 namespace enigmadb::storage::wal {

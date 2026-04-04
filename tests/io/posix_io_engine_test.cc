@@ -1,11 +1,11 @@
-#include "enigmadb/io/posix_io_engine.hpp"
+#include "enigmadb/io/posix_io_engine.h"
 
 #include <cstring>
 #include <string>
 
 #include "enigmadb/common/error.h"
 #include "enigmadb/common/tempfile.h"
-#include "enigmadb/io/io_engine.hpp"
+#include "enigmadb/io/io_engine.h"
 #include "gtest/gtest.h"
 
 using namespace enigmadb::io;

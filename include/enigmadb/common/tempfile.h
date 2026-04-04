@@ -6,8 +6,8 @@
  * @date 2026-03-29
  */
 
-#ifndef ENIGMA_DB_TEMPFILE_HPP
-#define ENIGMA_DB_TEMPFILE_HPP
+#ifndef ENIGMA_DB_TEMPFILE_H
+#define ENIGMA_DB_TEMPFILE_H
 
 #include <unistd.h>
 
@@ -39,4 +39,4 @@ struct Tempfile {
 
 }  // namespace enigmadb::common
 
-#endif  // ENIGMA_DB_TEMPFILE_HPP
+#endif  // ENIGMA_DB_TEMPFILE_H

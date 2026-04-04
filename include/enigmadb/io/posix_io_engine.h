@@ -5,8 +5,8 @@
  * @date 2026-03-25
  */
 
-#ifndef ENIGMADB_POSIX_IO_ENGINE_HPP
-#define ENIGMADB_POSIX_IO_ENGINE_HPP
+#ifndef ENIGMADB_POSIX_IO_ENGINE_H
+#define ENIGMADB_POSIX_IO_ENGINE_H
 
 #include <fcntl.h>
 #include <sys/fcntl.h>
@@ -16,7 +16,7 @@
 #include <cstdint>
 #include <string>
 
-#include "enigmadb/io/io_engine.hpp"
+#include "enigmadb/io/io_engine.h"
 
 namespace enigmadb::io {
 
@@ -41,4 +41,4 @@ class PosixIOEngine : public IOEngine {
 
 }  // namespace enigmadb::io
 
-#endif  // ENIGMADB_POSIX_IO_ENGINE_HPP
+#endif  // ENIGMADB_POSIX_IO_ENGINE_H

@@ -5,10 +5,11 @@
  * @date 2026-03-24
  */
 
-#ifndef ENIGMADB_IO_ENGINE_HPP
-#define ENIGMADB_IO_ENGINE_HPP
+#ifndef ENIGMADB_IO_ENGINE_H
+#define ENIGMADB_IO_ENGINE_H
 
 #include <fcntl.h>
+#include <stdint.h>
 #include <sys/fcntl.h>
 #include <unistd.h>
 
@@ -146,4 +147,4 @@ class IOEngine {
 
 }  // namespace enigmadb::io
 
-#endif  // ENIGMADB_IO_ENGINE_HPP
+#endif  // ENIGMADB_IO_ENGINE_H

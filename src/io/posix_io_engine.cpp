@@ -1,4 +1,4 @@
-#include "enigmadb/io/posix_io_engine.hpp"
+#include "enigmadb/io/posix_io_engine.h"
 
 #include <sys/fcntl.h>
 #include <unistd.h>
@@ -8,7 +8,7 @@
 
 #include "enigmadb/common/error.h"
 #include "enigmadb/common/result.h"
-#include "enigmadb/io/io_engine.hpp"
+#include "enigmadb/io/io_engine.h"
 
 using namespace enigmadb::common;
 
