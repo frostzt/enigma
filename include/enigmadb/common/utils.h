@@ -8,6 +8,8 @@
 #ifndef ENIGMA_DB_UTILS_H
 #define ENIGMA_DB_UTILS_H
 
+#include <stdint.h>
+
 #include <vector>
 
 namespace enigmadb::common {
