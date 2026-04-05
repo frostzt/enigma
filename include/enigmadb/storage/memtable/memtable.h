@@ -133,6 +133,8 @@ class Memtable {
      */
     bool should_flush() const;
 
+    size_t count() const { return entries_.size(); };
+
     auto begin() const { return entries_.begin(); }
 
     auto end() const { return entries_.end(); }
