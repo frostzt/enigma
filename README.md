@@ -35,4 +35,8 @@ enigmadb/
 Note that this *WILL NOT* compile on Windows machines.
 
 - [x] MacOS (Apple Silicon)
-- [ ] Linux (To be tested, Trixie)
+- [x] Linux (Trixie, partial NOT under ASan)
+
+## Todo's and Fixme's
+
+- [ ] Doesn't compile in `Debug` under ASan in Linux
