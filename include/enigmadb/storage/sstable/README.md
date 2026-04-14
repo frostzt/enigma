@@ -47,6 +47,8 @@ Here is how I am thinking my SSTable to be:
 
 ## Current structure
 
+<img width="2150" height="1073" alt="SSTable 1" src="https://github.com/user-attachments/assets/56e28965-3abb-4198-aacf-f185e068e301" />
+
 ```plaintext
 [Data Block 0]
   Entry: key_len(4) | key | value_len(4) | value | is_tombstone(1)
