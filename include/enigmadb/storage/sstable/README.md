@@ -94,7 +94,7 @@ on I think we can do some btree stuff to make it efficient.
 
 ## TODOs for later
 
-- [] Compression -- lz4 or snappy
-- [] Filter Blocks -- bloom and Cuckoo filters
-- [] Meta Block -- metadata and stuff
-- [] Btree -- Indexes can be improved?
+- [ ] Compression -- lz4 or snappy
+- [ ] Filter Blocks -- bloom and Cuckoo filters
+- [ ] Meta Block -- metadata and stuff
+- [ ] Btree -- Indexes can be improved?
