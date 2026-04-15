@@ -26,36 +26,42 @@ SSTExpectResult<void> SSTableWriter::add(const std::vector<uint8_t>& key,
                          /* is_tombstone */ 1;
 
     /* check if we need to flush and create a new one */
-    if (buffer_.size() + required_size > max_bytes_) {
-        finish();
+    if (buffer_.size() + required_size > MAX_PAGING_SIZE_BYTES) {
+        flush_block();
     }
 
-    /* serialize data */
-    current_offset_ =
-        common::encode_uint32(key_len, buffer_.data(), current_offset_);
-    current_offset_ = common::encode_bytes(key.data(), key_len, buffer_.data(),
-                                           current_offset_);
-    current_offset_ =
-        common::encode_uint32(value_len, buffer_.data(), current_offset_);
-    current_offset_ = common::encode_bytes(value.data.data(), value_len,
-                                           buffer_.data(), current_offset_);
-    current_offset_ = common::encode_uint8(value.is_tombstone, buffer_.data(),
-                                           current_offset_);
+    /* set the first key for this entire data block */
+    if (buffer_.empty()) {
+        current_block_first_key_ = key;
+        current_block_start_offset_ = current_file_offset_;
+    }
 
+    size_t offset = buffer_.size();
+    buffer_.resize(offset + required_size);
+
+    /* serialize data */
+    offset = common::encode_uint32(key_len, buffer_.data(), offset);
+    offset = common::encode_bytes(key.data(), key_len, buffer_.data(), offset);
+    offset = common::encode_uint32(value_len, buffer_.data(), offset);
+    offset = common::encode_bytes(value.data.data(), value_len, buffer_.data(),
+                                  offset);
+    offset = common::encode_uint8(value.is_tombstone, buffer_.data(), offset);
+
+    entry_count_++;
     return SSTExpectResult<void>::ok();
 }
 
 SSTExpectResult<void> SSTableWriter::flush_block() {
+    index_entries_.push_back(IndexEntry{
+        current_block_first_key_, current_block_start_offset_, buffer_.size()});
+    current_file_offset_ += buffer_.size();
+
     /* flush to disk */
     auto write_result = engine_.append(fh_, buffer_.data(), buffer_.size());
     if (!write_result.has_value()) {
         return SSTExpectResult<void>::err(write_result.err());
     }
-    auto sync_result = engine_.sync_all(fh_);
-    if (!sync_result.has_value()) {
-        return SSTExpectResult<void>::err(sync_result.err());
-    }
-
+    current_block_first_key_.clear(); /* clear the first key */
     buffer_.clear(); /* clear keeps the mem allocated so good for us */
     return SSTExpectResult<void>::ok();
 }

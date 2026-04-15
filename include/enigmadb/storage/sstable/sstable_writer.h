@@ -19,34 +19,45 @@
 
 namespace enigmadb::storage::sstable {
 
+/* TODO: This could come from OS paging size too */
+constexpr size_t MAX_PAGING_SIZE_BYTES = 4096;
+
 template <typename T>
 using SSTExpectResult = common::ExpectResult<T, common::Error>;
 
+struct IndexEntry {
+    std::vector<uint8_t> first_key;
+    size_t block_offset;
+    size_t block_size;
+};
+
 class SSTableWriter {
    private:
-    std::vector<uint8_t> buffer_;
-    std::vector<uint8_t> current_block_first_key_;
-    size_t current_offset_;
-    size_t current_file_offset_;
-
     io::IOEngine& engine_;
-    std::string path_;
     io::FileHandle fh_;
-    size_t max_bytes_;
+    std::string path_;
+    size_t max_block_bytes_;
+
+    std::vector<uint8_t> buffer_;  // current block being built
+    std::vector<uint8_t>
+        current_block_first_key_;  // first key of the curr block
+    size_t current_file_offset_;
+    size_t current_block_start_offset_;
+    std::vector<IndexEntry> index_entries_;
+    size_t entry_count_;
 
     SSTableWriter(io::IOEngine& engine, const std::string& path,
                   io::FileHandle fh, size_t max_bytes)
-        :
-
-          buffer_(max_bytes),
-          current_offset_(0),
-          current_file_offset_(0),
-          engine_(engine),
-          path_(path),
+        : engine_(engine),
           fh_(std::move(fh)),
-          max_bytes_(max_bytes) {}
-
-    SSTExpectResult<std::vector<uint8_t>> serialize();
+          path_(path),
+          max_block_bytes_(max_bytes),
+          current_file_offset_(0),
+          current_block_start_offset_(0),
+          entry_count_(0) {
+        /* The buffer will always deal with configured paging size */
+        buffer_.reserve(MAX_PAGING_SIZE_BYTES);
+    }
 
    public:
     static SSTExpectResult<SSTableWriter> create(io::IOEngine& engine,
