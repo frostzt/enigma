@@ -8,6 +8,7 @@
 #ifndef ENIGMA_DB_SSTABLE_WRITER_H
 #define ENIGMA_DB_SSTABLE_WRITER_H
 
+#include <array>
 #include <string>
 #include <utility>
 #include <vector>
@@ -21,6 +22,12 @@ namespace enigmadb::storage::sstable {
 
 /* TODO: This could come from OS paging size too */
 constexpr size_t MAX_PAGING_SIZE_BYTES = 4096;
+
+constexpr size_t SSTABLE_FORMAT_VERSION = 1;
+
+static constexpr size_t MAGIC_SIZE = 8;
+static constexpr std::array<char, 8> MAGIC = {'E', 'N', 'I', 'G',
+                                              'S', 'S', 'T', 'B'};
 
 template <typename T>
 using SSTExpectResult = common::ExpectResult<T, common::Error>;

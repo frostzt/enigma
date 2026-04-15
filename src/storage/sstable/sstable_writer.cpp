@@ -66,4 +66,78 @@ SSTExpectResult<void> SSTableWriter::flush_block() {
     return SSTExpectResult<void>::ok();
 }
 
+SSTExpectResult<void> SSTableWriter::finish() {
+    if (!buffer_.empty()) {
+        flush_block();
+    }
+
+    auto index_block_start = current_file_offset_;
+
+    /* construct the index block */
+    size_t index_size = 0;
+    for (const auto& entry : index_entries_) {
+        index_size += 4 + entry.first_key.size() + 8 + 4;
+    }
+    std::vector<uint8_t> index_buffer(index_size);
+    size_t offset = 0;
+    for (const auto& current_index : index_entries_) {
+        auto keylen = current_index.first_key.size();
+        offset = common::encode_uint32(keylen, index_buffer.data(), offset);
+        offset = common::encode_bytes(current_index.first_key.data(), keylen,
+                                      index_buffer.data(), offset);
+        offset = common::encode_uint64(current_index.block_offset,
+                                       index_buffer.data(), offset);
+        offset = common::encode_uint32(current_index.block_size,
+                                       index_buffer.data(), offset);
+    }
+
+    auto write_idx_block_result =
+        engine_.append(fh_, index_buffer.data(), index_buffer.size());
+    if (!write_idx_block_result.has_value()) {
+        return SSTExpectResult<void>::err(write_idx_block_result.err());
+    }
+
+    /* construct the index block */
+    std::vector<uint8_t> footer_buffer;
+    footer_buffer.resize(32);
+    size_t footer_offset = 0;
+
+    footer_offset = common::encode_uint64(index_block_start,
+                                          footer_buffer.data(), footer_offset);
+    footer_offset = common::encode_uint32(index_buffer.size(),
+                                          footer_buffer.data(), footer_offset);
+    footer_offset = common::encode_uint32(entry_count_, footer_buffer.data(),
+                                          footer_offset);
+    footer_offset = common::encode_uint16(SSTABLE_FORMAT_VERSION,
+                                          footer_buffer.data(), footer_offset);
+    footer_offset = common::encode_uint32(0, footer_buffer.data(),
+                                          footer_offset); /* checksum */
+    footer_offset =
+        common::encode_bytes(MAGIC.data(), MAGIC_SIZE, footer_buffer.data(),
+                             footer_offset); /* magic */
+    footer_offset = common::encode_uint16(0, footer_buffer.data(),
+                                          footer_offset); /* pad with 2 bytes */
+
+    auto write_footer_block_result =
+        engine_.append(fh_, footer_buffer.data(), footer_buffer.size());
+    if (!write_footer_block_result.has_value()) {
+        return SSTExpectResult<void>::err(write_footer_block_result.err());
+    }
+
+    /* flush this sstable to disk */
+    auto sync_all_result = engine_.sync_all(fh_);
+    if (!sync_all_result.has_value()) {
+        return SSTExpectResult<void>::err(sync_all_result.err());
+    }
+
+    /* sync parent dir */
+    std::string parent = path_.substr(0, path_.rfind('/'));
+    auto sync_dir_result = engine_.sync_directory(parent);
+    if (!sync_dir_result.has_value()) {
+        return SSTExpectResult<void>::err(sync_dir_result.err());
+    }
+
+    return SSTExpectResult<void>::ok();
+}
+
 }  // namespace enigmadb::storage::sstable
