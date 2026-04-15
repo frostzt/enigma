@@ -9,6 +9,7 @@
 #define ENIGMA_DB_SSTABLE_WRITER_H
 
 #include <array>
+#include <iostream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -64,6 +65,7 @@ class SSTableWriter {
           entry_count_(0) {
         /* The buffer will always deal with configured paging size */
         buffer_.reserve(MAX_PAGING_SIZE_BYTES);
+        std::cout << "UNUSED: " << max_block_bytes_ << std::endl;
     }
 
    public:
