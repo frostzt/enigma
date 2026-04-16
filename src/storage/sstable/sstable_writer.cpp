@@ -27,7 +27,10 @@ SSTExpectResult<void> SSTableWriter::add(const std::vector<uint8_t>& key,
 
     /* check if we need to flush and create a new one */
     if (buffer_.size() + required_size > MAX_PAGING_SIZE_BYTES) {
-        flush_block();
+        auto flush_block_result = flush_block();
+        if (!flush_block_result.has_value()) {
+            return SSTExpectResult<void>::err(flush_block_result.err());
+        }
     }
 
     /* set the first key for this entire data block */
@@ -68,7 +71,10 @@ SSTExpectResult<void> SSTableWriter::flush_block() {
 
 SSTExpectResult<void> SSTableWriter::finish() {
     if (!buffer_.empty()) {
-        flush_block();
+        auto flush_block_result = flush_block();
+        if (!flush_block_result.has_value()) {
+            return SSTExpectResult<void>::err(flush_block_result.err());
+        }
     }
 
     auto index_block_start = current_file_offset_;

@@ -68,6 +68,8 @@ class SSTableWriter {
         std::cout << "UNUSED: " << max_block_bytes_ << std::endl;
     }
 
+    SSTExpectResult<void> flush_block();
+
    public:
     static SSTExpectResult<SSTableWriter> create(io::IOEngine& engine,
                                                  const std::string& path,
@@ -75,8 +77,6 @@ class SSTableWriter {
 
     SSTExpectResult<void> add(const std::vector<uint8_t>& key,
                               const memtable::MemtableValue& value);
-
-    SSTExpectResult<void> flush_block();
 
     SSTExpectResult<void> finish();
 };

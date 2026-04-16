@@ -27,17 +27,26 @@ TEST(SSTableWriter, add_finish_verify) {
 
     auto& writer = crewriter_result.value();
 
-    writer.add(encode_composite_key(string_to_bytes("alice"),
-                                    string_to_bytes("2026-01"), "age"),
-               memtable::MemtableValue{string_to_bytes("30"), false});
+    ASSERT_TRUE(
+        writer
+            .add(encode_composite_key(string_to_bytes("alice"),
+                                      string_to_bytes("2026-01"), "age"),
+                 memtable::MemtableValue{string_to_bytes("30"), false})
+            .has_value());
 
-    writer.add(encode_composite_key(string_to_bytes("alice"),
-                                    string_to_bytes("2026-01"), "name"),
-               memtable::MemtableValue{string_to_bytes("Alice"), false});
+    ASSERT_TRUE(
+        writer
+            .add(encode_composite_key(string_to_bytes("alice"),
+                                      string_to_bytes("2026-01"), "name"),
+                 memtable::MemtableValue{string_to_bytes("Alice"), false})
+            .has_value());
 
-    writer.add(encode_composite_key(string_to_bytes("bob"),
-                                    string_to_bytes("2026-01"), "name"),
-               memtable::MemtableValue{string_to_bytes("Bob"), false});
+    ASSERT_TRUE(
+        writer
+            .add(encode_composite_key(string_to_bytes("bob"),
+                                      string_to_bytes("2026-01"), "name"),
+                 memtable::MemtableValue{string_to_bytes("Bob"), false})
+            .has_value());
 
     auto finish_result = writer.finish();
     ASSERT_TRUE(finish_result.has_value());
