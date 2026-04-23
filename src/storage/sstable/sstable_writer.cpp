@@ -8,12 +8,11 @@
 namespace enigmadb::storage::sstable {
 
 SSTExpectResult<SSTableWriter> SSTableWriter::create(io::IOEngine& engine,
-                                                     const std::string& path,
-                                                     const size_t max_bytes) {
+                                                     const std::string& path) {
     auto open_result = engine.open(path, io::Mode::Write);
     if (!open_result.has_value()) return open_result.err();
     auto& fh = open_result.value();
-    SSTableWriter writer(engine, path, std::move(fh), max_bytes);
+    SSTableWriter writer(engine, path, std::move(fh));
     return SSTExpectResult<SSTableWriter>::ok(std::move(writer));
 }
 

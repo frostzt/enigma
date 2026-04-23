@@ -22,7 +22,7 @@ TEST(SSTableWriter, add_finish_verify) {
 
     auto prev_size = std::filesystem::file_size(testfile.path);
 
-    auto crewriter_result = SSTableWriter::create(engine, testfile.path, 5096);
+    auto crewriter_result = SSTableWriter::create(engine, testfile.path);
     ASSERT_TRUE(crewriter_result.has_value());
 
     auto& writer = crewriter_result.value();
