@@ -32,6 +32,8 @@ class PosixIOEngine : public IOEngine {
     IOResult<size_t> read(const FileHandle& fh, size_t count, uint8_t* buffer,
                           size_t offset) override;
 
+    IOResult<size_t> file_size(const FileHandle& fh) override;
+
     IOResult<void> sync_all(const FileHandle& fh) override;
 
     IOResult<void> sync_directory(const std::string& path) override;

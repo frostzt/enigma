@@ -2,6 +2,7 @@
 
 #include <vector>
 
+#include "enigmadb/common/crc32.h"
 #include "enigmadb/common/encoding.h"
 #include "enigmadb/io/io_engine.h"
 
@@ -54,15 +55,17 @@ SSTExpectResult<void> SSTableWriter::add(const std::vector<uint8_t>& key,
 }
 
 SSTExpectResult<void> SSTableWriter::flush_block() {
-    index_entries_.push_back(IndexEntry{
-        current_block_first_key_, current_block_start_offset_, buffer_.size()});
-    current_file_offset_ += buffer_.size();
-
     /* flush to disk */
     auto write_result = engine_.append(fh_, buffer_.data(), buffer_.size());
     if (!write_result.has_value()) {
         return SSTExpectResult<void>::err(write_result.err());
     }
+
+    /* update index entries */
+    index_entries_.push_back(IndexEntry{
+        current_block_first_key_, current_block_start_offset_, buffer_.size()});
+    current_file_offset_ += buffer_.size();
+
     current_block_first_key_.clear(); /* clear the first key */
     buffer_.clear(); /* clear keeps the mem allocated so good for us */
     return SSTExpectResult<void>::ok();
@@ -102,7 +105,7 @@ SSTExpectResult<void> SSTableWriter::finish() {
         return SSTExpectResult<void>::err(write_idx_block_result.err());
     }
 
-    /* construct the index block */
+    /* construct the footer block */
     std::vector<uint8_t> footer_buffer;
     footer_buffer.resize(32);
     size_t footer_offset = 0;
@@ -115,7 +118,10 @@ SSTExpectResult<void> SSTableWriter::finish() {
                                           footer_offset);
     footer_offset = common::encode_uint16(SSTABLE_FORMAT_VERSION,
                                           footer_buffer.data(), footer_offset);
-    footer_offset = common::encode_uint32(0, footer_buffer.data(),
+
+    /* calculate checksum */
+    auto checksum = common::compute_crc_32(footer_buffer.data(), 18);
+    footer_offset = common::encode_uint32(checksum, footer_buffer.data(),
                                           footer_offset); /* checksum */
     footer_offset =
         common::encode_bytes(MAGIC.data(), MAGIC_SIZE, footer_buffer.data(),
@@ -136,7 +142,13 @@ SSTExpectResult<void> SSTableWriter::finish() {
     }
 
     /* sync parent dir */
-    std::string parent = path_.substr(0, path_.rfind('/'));
+    std::string parent;
+    auto slash_pos = path_.rfind("/");
+    if (slash_pos == std::string::npos) {
+        parent = ".";
+    } else {
+        parent = path_.substr(0, slash_pos);
+    }
     auto sync_dir_result = engine_.sync_directory(parent);
     if (!sync_dir_result.has_value()) {
         return SSTExpectResult<void>::err(sync_dir_result.err());

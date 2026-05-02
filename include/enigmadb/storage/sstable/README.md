@@ -100,3 +100,4 @@ on I think we can do some btree stuff to make it efficient.
 - [ ] Filter Blocks -- bloom and Cuckoo filters
 - [ ] Meta Block -- metadata and stuff
 - [ ] Btree -- Indexes can be improved?
+- [ ] Offset Table -- Improve the index block parsing logic
