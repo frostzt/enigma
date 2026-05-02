@@ -186,7 +186,6 @@ TEST(SSTableWriter, tombstone_record) {
     auto read_res = reader.get(encode_composite_key(
         string_to_bytes("alice"), string_to_bytes("2026-01"), "age"));
     ASSERT_TRUE(read_res.has_value());
-
     auto val = read_res.value().value();
     ASSERT_TRUE(val.is_tombstone);
 }
