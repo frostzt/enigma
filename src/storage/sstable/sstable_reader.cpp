@@ -79,7 +79,9 @@ SSTExpectResult<SSTableReader> SSTableReader::create(io::IOEngine& engine,
         auto key_len = common::decode_uint32(index_buffer.data(), offset);
         offset += 4;
         if (offset + key_len + 8 + 4 > index_block_size) {
-            break;
+            return SSTExpectResult<SSTableReader>::err(
+                common::Error{common::ErrorCode::READ_OUT_OF_RANGE,
+                              "index entry out of range"});
         }
         entry.first_key.assign(index_buffer.data() + offset,
                                index_buffer.data() + offset + key_len);
@@ -127,18 +129,43 @@ SSTExpectResult<std::optional<memtable::MemtableValue>> SSTableReader::get(
     while (block_offset < it->block_size) {
         current_key.clear();
         current_value.clear();
+        if (block_offset + 4 > it->block_size) {
+            return SSTExpectResult<std::optional<memtable::MemtableValue>>::err(
+                common::Error{common::ErrorCode::BAD_FILE,
+                              "out of range read for key len"});
+        }
         auto key_len = common::decode_uint32(block_buffer.data(), block_offset);
         block_offset += 4;
+        if (block_offset + key_len > it->block_size) {
+            return SSTExpectResult<std::optional<memtable::MemtableValue>>::err(
+                common::Error{common::ErrorCode::BAD_FILE,
+                              "out of range read for key"});
+        }
         current_key.assign(block_buffer.data() + block_offset,
                            block_buffer.data() + block_offset + key_len);
         block_offset += key_len;
         /* value */
+        if (block_offset + 4 > it->block_size) {
+            return SSTExpectResult<std::optional<memtable::MemtableValue>>::err(
+                common::Error{common::ErrorCode::BAD_FILE,
+                              "out of range read for value len"});
+        }
         auto value_len =
             common::decode_uint32(block_buffer.data(), block_offset);
         block_offset += 4;
+        if (block_offset + value_len > it->block_size) {
+            return SSTExpectResult<std::optional<memtable::MemtableValue>>::err(
+                common::Error{common::ErrorCode::BAD_FILE,
+                              "out of range read for value"});
+        }
         current_value.assign(block_buffer.data() + block_offset,
                              block_buffer.data() + block_offset + value_len);
         block_offset += value_len;
+        if (block_offset + 1 > it->block_size) {
+            return SSTExpectResult<std::optional<memtable::MemtableValue>>::err(
+                common::Error{common::ErrorCode::BAD_FILE,
+                              "out of range read for tombstone"});
+        }
         auto tombstone =
             common::decode_uint8(block_buffer.data(), block_offset);
         block_offset += 1;
