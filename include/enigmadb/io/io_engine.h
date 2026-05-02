@@ -100,6 +100,8 @@ class IOEngine {
     virtual IOResult<size_t> append(const FileHandle& fh, const uint8_t* buffer,
                                     size_t length) = 0;
 
+    virtual IOResult<size_t> file_size(const FileHandle& fh) = 0;
+
     /**
      * @brief Reads up to @p count bytes from @p fh at the given @p offset.
      *

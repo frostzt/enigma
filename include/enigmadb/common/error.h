@@ -24,6 +24,9 @@ enum class ErrorCode {
     READ_ERR = 6,
     READ_OUT_OF_RANGE = 7,
     ERR_EOF = 8,
+    FSTAT_ERR = 9,
+    BAD_MAGIC = 10,
+    BAD_FILE = 11,
 };
 
 struct Error {

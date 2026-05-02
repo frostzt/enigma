@@ -18,7 +18,7 @@ inline std::vector<uint8_t> string_to_bytes(std::string_view str) {
     return {str.begin(), str.end()};
 }
 
-inline std::string bytes_to_string(std::vector<uint8_t>& vec) {
+inline std::string bytes_to_string(const std::vector<uint8_t>& vec) {
     return std::string(vec.begin(), vec.end());
 }
 

@@ -1,6 +1,7 @@
 #include "enigmadb/io/posix_io_engine.h"
 
 #include <sys/fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <cerrno>
@@ -147,6 +148,16 @@ IOResult<size_t> PosixIOEngine::read(const FileHandle& fh, size_t count,
     }
 
     return bytes_read;
+}
+
+IOResult<size_t> PosixIOEngine::file_size(const FileHandle& fh) {
+    struct stat st;
+    errno = 0;
+    if (::fstat(fh.fd(), &st) == -1) {
+        char* err_msg = strerror(errno);
+        return IOResult<size_t>::err(Error{ErrorCode::FSTAT_ERR, err_msg});
+    }
+    return IOResult<size_t>::ok(static_cast<size_t>(st.st_size));
 }
 
 }  // namespace enigmadb::io
