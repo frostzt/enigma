@@ -1,10 +1,13 @@
 #include "enigmadb/storage/sstable/sstable_writer.h"
 
+#include <cassert>
 #include <vector>
 
 #include "enigmadb/common/crc32.h"
 #include "enigmadb/common/encoding.h"
+#include "enigmadb/common/error.h"
 #include "enigmadb/io/io_engine.h"
+#include "enigmadb/storage/sstable/sstable_common.h"
 
 namespace enigmadb::storage::sstable {
 
@@ -61,6 +64,11 @@ SSTExpectResult<void> SSTableWriter::flush_block() {
         return SSTExpectResult<void>::err(write_result.err());
     }
 
+    if (write_result.value() != buffer_.size()) {
+        return SSTExpectResult<void>::err(common::Error{
+            common::ErrorCode::UNEXPECTED_ERR, "failed to write full block"});
+    }
+
     /* update index entries */
     index_entries_.push_back(IndexEntry{
         current_block_first_key_, current_block_start_offset_, buffer_.size()});
@@ -103,6 +111,11 @@ SSTExpectResult<void> SSTableWriter::finish() {
         engine_.append(fh_, index_buffer.data(), index_buffer.size());
     if (!write_idx_block_result.has_value()) {
         return SSTExpectResult<void>::err(write_idx_block_result.err());
+    }
+
+    if (write_idx_block_result.value() != index_buffer.size()) {
+        return SSTExpectResult<void>::err(common::Error{
+            common::ErrorCode::UNEXPECTED_ERR, "failed to write index block"});
     }
 
     /* construct the footer block */
