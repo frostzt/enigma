@@ -23,6 +23,7 @@ class StorageEngine {
     const std::string data_dir_;
 
     wal::WalWriter wal_writer_;
+    uint64_t memtable_size_;
     memtable::Memtable active_memtable_;
     std::vector<sstable::SSTableReader> sst_readers_;
     common::TimestampGenerator hlc_;
@@ -31,12 +32,14 @@ class StorageEngine {
     uint64_t next_sst_seq_;
 
     StorageEngine(io::IOEngine& engine, std::string data_dir,
-                  wal::WalWriter wal_writer, memtable::Memtable active_memtable,
+                  wal::WalWriter wal_writer, uint64_t memtable_size,
+                  memtable::Memtable active_memtable,
                   std::vector<sstable::SSTableReader> sst_readers,
                   uint64_t next_wal_seq, uint64_t next_sst_seq)
         : engine_(engine),
           data_dir_(std::move(data_dir)),
           wal_writer_(std::move(wal_writer)),
+          memtable_size_(memtable_size),
           active_memtable_(std::move(active_memtable)),
           sst_readers_(std::move(sst_readers)),
           lsn_(0),

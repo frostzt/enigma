@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <iomanip>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -12,11 +13,17 @@
 #include "enigmadb/common/error.h"
 #include "enigmadb/storage/memtable/memtable.h"
 #include "enigmadb/storage/sstable/sstable_reader.h"
+#include "enigmadb/storage/sstable/sstable_writer.h"
 #include "enigmadb/storage/wal/wal_reader.h"
 #include "enigmadb/storage/wal/wal_record.h"
 #include "enigmadb/storage/wal/wal_writer.h"
 
 namespace fs = std::filesystem;
+
+using namespace enigmadb::common;
+using namespace enigmadb::storage::wal;
+using namespace enigmadb::storage::memtable;
+using namespace enigmadb::storage::sstable;
 
 namespace enigmadb::storage {
 
@@ -104,7 +111,7 @@ Result<StorageEngine> StorageEngine::open(io::IOEngine& engine,
                          extract_num(b.filename().string());
               });
 
-    memtable::Memtable mtable{memtable_size};
+    Memtable mtable{memtable_size};
     uint64_t highest_wal_seq = 0;
     for (const auto& entry : wal_log_files) {
         /* find the highest sequence */
@@ -155,12 +162,106 @@ Result<StorageEngine> StorageEngine::open(io::IOEngine& engine,
     StorageEngine storage_engine{engine,
                                  std::move(data_dir),
                                  std::move(wal_writer_res.value()),
+                                 memtable_size,
                                  std::move(mtable),
                                  std::move(sst_readers),
                                  highest_wal_seq + 1,
                                  highest_sst_seq + 1};
 
     return Result<StorageEngine>::ok(std::move(storage_engine));
+}
+
+Result<void> StorageEngine::put(const std::vector<uint8_t>& partition_key,
+                                const std::vector<uint8_t>& clustering_key,
+                                const std::string& column_name,
+                                const std::vector<uint8_t>& value) {
+    if (value.empty()) {
+        return Result<void>::err(
+            Error{ErrorCode::BAD_CONFIG, "value is empty"});
+    }
+
+    /* write into wal */
+    std::vector<wal::WalColumn> columns{wal::WalColumn{column_name, value}};
+    wal::WalRecord record{wal::WalOpType::PUT_ROW, hlc_.next(),
+                          next_wal_seq_,           partition_key,
+                          clustering_key,          columns};
+
+    auto write_result = wal_writer_.append(record);
+    if (!write_result.has_value()) {
+        return Result<void>::err(write_result.err());
+    }
+
+    auto sync_result = wal_writer_.sync();
+    if (!sync_result.has_value()) {
+        return Result<void>::err(sync_result.err());
+    }
+
+    /* insert into memtable */
+    active_memtable_.put(partition_key, clustering_key, column_name, value);
+    if (active_memtable_.should_flush()) {
+        flush();
+    }
+
+    return Result<void>::ok();
+}
+
+Result<void> StorageEngine::flush() {
+    /* create a new sstable writer */
+    auto create_writer =
+        SSTableWriter::create(engine_, sst_path(next_sst_seq_));
+    if (!create_writer.has_value()) {
+        return Result<void>::err(create_writer.err());
+    }
+
+    /* itr memtable and add entry to the sstable */
+    auto& writer = create_writer.value();
+    for (auto it = active_memtable_.begin(); it != active_memtable_.end();
+         it++) {
+        auto add_result = writer.add(it->first, it->second);
+        if (!add_result.has_value()) {
+            return Result<void>::err(add_result.err());
+        }
+    }
+
+    if (auto finish_result = writer.finish(); !finish_result.has_value()) {
+        return Result<void>::err(finish_result.err());
+    }
+
+    /* open an sstable reader */
+    auto create_reader =
+        SSTableReader::create(engine_, sst_path(next_sst_seq_));
+    if (!create_reader.has_value()) {
+        return Result<void>::err(create_reader.err());
+    }
+    sst_readers_.emplace_back(std::move(create_reader.value()));
+
+    /* replace with a new empty memtable */
+    Memtable mtable{memtable_size_};
+    active_memtable_ = std::move(mtable);
+
+    auto create_wal_writer =
+        WalWriter::create(engine_, wal_path(next_wal_seq_));
+    if (!create_wal_writer.has_value()) {
+        return Result<void>::err(create_wal_writer.err());
+    }
+
+    if (!fs::remove(wal_path(next_wal_seq_ - 1))) {
+        return Result<void>::err(
+            Error{ErrorCode::UNEXPECTED_ERR, "File not found!"});
+    }
+
+    return Result<void>::ok();
+}
+
+Result<std::optional<MemtableValue>> StorageEngine::get(
+    const std::vector<uint8_t>& partition_key,
+    const std::vector<uint8_t>& clustering_key,
+    const std::string& column_name) {
+    /* first check memtable */
+    auto found =
+        active_memtable_.get(partition_key, clustering_key, column_name);
+    if (found.has_value()) {
+    }
 }
 
 }  // namespace enigmadb::storage
