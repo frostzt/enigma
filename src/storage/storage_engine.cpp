@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "enigmadb/common/error.h"
+#include "enigmadb/storage/key_encoding.h"
 #include "enigmadb/storage/memtable/memtable.h"
 #include "enigmadb/storage/sstable/sstable_reader.h"
 #include "enigmadb/storage/sstable/sstable_writer.h"
@@ -179,29 +180,45 @@ Result<void> StorageEngine::put(const std::vector<uint8_t>& partition_key,
         return Result<void>::err(
             Error{ErrorCode::BAD_CONFIG, "value is empty"});
     }
+    return put_record(partition_key, clustering_key, column_name, value, false);
+}
 
-    /* write into wal */
-    std::vector<wal::WalColumn> columns{wal::WalColumn{column_name, value}};
-    wal::WalRecord record{wal::WalOpType::PUT_ROW, hlc_.next(),
-                          next_wal_seq_,           partition_key,
-                          clustering_key,          columns};
+Result<void> StorageEngine::remove(const std::vector<uint8_t>& partition_key,
+                                   const std::vector<uint8_t>& clustering_key,
+                                   const std::string& column_name) {
+    return put_record(partition_key, clustering_key, column_name, std::nullopt,
+                      true);
+}
 
-    auto write_result = wal_writer_.append(record);
-    if (!write_result.has_value()) {
-        return Result<void>::err(write_result.err());
+Result<void> StorageEngine::put_record(
+    const std::vector<uint8_t>& partition_key,
+    const std::vector<uint8_t>& clustering_key, const std::string& column_name,
+    const std::optional<std::vector<uint8_t>>& value, bool remove) {
+    WalOpType op = remove ? WalOpType::DELETE_ROW : WalOpType::PUT_ROW;
+    std::vector<WalColumn> columns;
+    if (!remove) {
+        columns.push_back(WalColumn{column_name, value.value()});
     }
+    WalRecord record{op,     hlc_.next(), lsn_++, partition_key, clustering_key,
+                     columns};
 
-    auto sync_result = wal_writer_.sync();
-    if (!sync_result.has_value()) {
-        return Result<void>::err(sync_result.err());
+    /* write and sync WAL */
+    auto& writer = wal_writer_.value();
+    auto write_result = writer.append(record);
+    if (!write_result.has_value()) return write_result.err();
+    auto sync_result = writer.sync();
+    if (!sync_result.has_value()) return sync_result.err();
+
+    /* update memtable */
+    if (remove) {
+        active_memtable_.remove(partition_key, clustering_key, column_name);
+    } else {
+        active_memtable_.put(partition_key, clustering_key, column_name,
+                             value.value());
     }
-
-    /* insert into memtable */
-    active_memtable_.put(partition_key, clustering_key, column_name, value);
     if (active_memtable_.should_flush()) {
-        flush();
+        return flush();
     }
-
     return Result<void>::ok();
 }
 
@@ -244,12 +261,15 @@ Result<void> StorageEngine::flush() {
     if (!create_wal_writer.has_value()) {
         return Result<void>::err(create_wal_writer.err());
     }
+    wal_writer_.emplace(std::move(create_wal_writer.value()));
 
     if (!fs::remove(wal_path(next_wal_seq_ - 1))) {
         return Result<void>::err(
             Error{ErrorCode::UNEXPECTED_ERR, "File not found!"});
     }
 
+    next_sst_seq_++;
+    next_wal_seq_++;
     return Result<void>::ok();
 }
 
@@ -261,7 +281,32 @@ Result<std::optional<MemtableValue>> StorageEngine::get(
     auto found =
         active_memtable_.get(partition_key, clustering_key, column_name);
     if (found.has_value()) {
+        if (found.value().is_tombstone) {
+            return Result<std::optional<MemtableValue>>::ok(std::nullopt);
+        }
+        return Result<std::optional<MemtableValue>>::ok(found);
     }
+
+    /* reverse lookup on every sstable */
+    for (auto it = sst_readers_.rbegin(); it != sst_readers_.rend(); ++it) {
+        auto lookup_result = it->get(
+            encode_composite_key(partition_key, clustering_key, column_name));
+        if (!lookup_result.has_value()) { /* result impl always errors out if
+                                             has_value is false */
+            return Result<std::optional<MemtableValue>>::err(
+                lookup_result.err());
+        }
+
+        auto found = lookup_result.value();
+        if (found.has_value()) {
+            if (found.value().is_tombstone) {
+                return Result<std::optional<MemtableValue>>::ok(std::nullopt);
+            }
+            return Result<std::optional<MemtableValue>>::ok(found);
+        }
+    }
+
+    return Result<std::optional<MemtableValue>>::ok(std::nullopt);
 }
 
 }  // namespace enigmadb::storage

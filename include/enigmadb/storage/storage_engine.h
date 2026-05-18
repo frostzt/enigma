@@ -22,7 +22,7 @@ class StorageEngine {
     io::IOEngine& engine_;
     const std::string data_dir_;
 
-    wal::WalWriter wal_writer_;
+    std::optional<wal::WalWriter> wal_writer_;
     uint64_t memtable_size_;
     memtable::Memtable active_memtable_;
     std::vector<sstable::SSTableReader> sst_readers_;
@@ -48,6 +48,12 @@ class StorageEngine {
 
     std::string wal_path(uint64_t seq);
     std::string sst_path(uint64_t seq);
+
+    Result<void> put_record(const std::vector<uint8_t>& partition_key,
+                            const std::vector<uint8_t>& clustering_key,
+                            const std::string& column_name,
+                            const std::optional<std::vector<uint8_t>>& value,
+                            bool remove);
 
    public:
     static Result<StorageEngine> open(io::IOEngine& engine,
