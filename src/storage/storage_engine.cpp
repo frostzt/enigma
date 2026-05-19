@@ -257,13 +257,13 @@ Result<void> StorageEngine::flush() {
     active_memtable_ = std::move(mtable);
 
     auto create_wal_writer =
-        WalWriter::create(engine_, wal_path(next_wal_seq_));
+        WalWriter::create(engine_, wal_path(next_wal_seq_ + 1));
     if (!create_wal_writer.has_value()) {
         return Result<void>::err(create_wal_writer.err());
     }
     wal_writer_.emplace(std::move(create_wal_writer.value()));
 
-    if (!fs::remove(wal_path(next_wal_seq_ - 1))) {
+    if (!fs::remove(wal_path(next_wal_seq_))) {
         return Result<void>::err(
             Error{ErrorCode::UNEXPECTED_ERR, "File not found!"});
     }
