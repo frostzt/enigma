@@ -55,6 +55,8 @@ class StorageEngine {
                             const std::optional<std::vector<uint8_t>>& value,
                             bool remove);
 
+    Result<void> recover();
+
    public:
     static Result<StorageEngine> open(io::IOEngine& engine,
                                       std::string& data_dir,
@@ -76,9 +78,6 @@ class StorageEngine {
 
     // Flush the current memtable to an SSTable
     Result<void> flush();
-
-    // Recovery — replay WAL on startup
-    Result<void> recover();
 };
 
 }  // namespace enigmadb::storage

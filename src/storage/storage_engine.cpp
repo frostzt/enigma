@@ -1,6 +1,7 @@
 #include "enigmadb/storage/storage_engine.h"
 
 #include <algorithm>
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -121,35 +122,6 @@ Result<StorageEngine> StorageEngine::open(io::IOEngine& engine,
         if (seq_found > highest_wal_seq) {
             highest_wal_seq = seq_found;
         }
-
-        auto wal_reader_res = wal::WalReader::create(engine, entry);
-        if (!wal_reader_res.has_value()) {
-            return Result<StorageEngine>::err(wal_reader_res.err());
-        }
-
-        auto& wal_reader = wal_reader_res.value();
-        while (true) {
-            auto possible_next = wal_reader.next();
-            if (!possible_next.has_value()) {
-                break;
-            }
-
-            auto wal_record = possible_next.value();
-
-            if (wal_record.op_type == wal::WalOpType::DELETE_COLUMN ||
-                wal_record.op_type == wal::WalOpType::DELETE_ROW ||
-                wal_record.op_type == wal::WalOpType::DELETE_PARTITION) {
-                for (const auto& col : wal_record.columns) {
-                    mtable.remove(wal_record.partition_key,
-                                  wal_record.clustering_key, col.name);
-                }
-            } else {
-                for (const auto& col : wal_record.columns) {
-                    mtable.put(wal_record.partition_key,
-                               wal_record.clustering_key, col.name, col.value);
-                }
-            }
-        }
     }
 
     std::stringstream ss;
@@ -168,6 +140,7 @@ Result<StorageEngine> StorageEngine::open(io::IOEngine& engine,
                                  std::move(sst_readers),
                                  highest_wal_seq + 1,
                                  highest_sst_seq + 1};
+    storage_engine.recover();
 
     return Result<StorageEngine>::ok(std::move(storage_engine));
 }
@@ -307,6 +280,75 @@ Result<std::optional<MemtableValue>> StorageEngine::get(
     }
 
     return Result<std::optional<MemtableValue>>::ok(std::nullopt);
+}
+
+Result<void> StorageEngine::recover() {
+    fs::path wal_dir_path = data_dir_ + "/wal";
+    if (!fs::is_directory(wal_dir_path)) {
+        return Result<void>::err(
+            Error{ErrorCode::UNEXPECTED_ERR, "wal directory does not exist"});
+    }
+
+    std::vector<fs::path> wal_log_files;
+    for (const auto& entry : fs::directory_iterator(wal_dir_path)) {
+        if (entry.is_regular_file() && entry.path().extension() == ".log") {
+            wal_log_files.push_back(entry.path());
+        }
+    }
+
+    std::sort(wal_log_files.begin(), wal_log_files.end(),
+              [](const fs::path& a, const fs::path& b) {
+                  return extract_num(a.filename().string()) <
+                         extract_num(b.filename().string());
+              });
+
+    /* recover data reading the wal files */
+    uint64_t highest_wal_seq = 0;
+    for (const auto& entry : wal_log_files) {
+        auto filename = entry.filename();
+        auto seq_found = extract_num(filename);
+        if (seq_found > highest_wal_seq) {
+            highest_wal_seq = seq_found;
+        }
+
+        auto wal_reader_res = wal::WalReader::create(engine_, entry);
+        if (!wal_reader_res.has_value()) {
+            return Result<void>::err(wal_reader_res.err());
+        }
+
+        auto& wal_reader = wal_reader_res.value();
+        while (true) {
+            auto possible_next = wal_reader.next();
+            if (!possible_next.has_value()) {
+                break;
+            }
+
+            auto wal_record = possible_next.value();
+            if (wal_record.op_type == WalOpType::DELETE_COLUMN ||
+                wal_record.op_type == WalOpType::DELETE_ROW ||
+                wal_record.op_type == WalOpType::DELETE_PARTITION) {
+                for (const auto& col : wal_record.columns) {
+                    active_memtable_.remove(wal_record.partition_key,
+                                            wal_record.clustering_key,
+                                            col.name);
+                }
+            } else {
+                for (const auto& col : wal_record.columns) {
+                    active_memtable_.put(wal_record.partition_key,
+                                         wal_record.clustering_key, col.name,
+                                         col.value);
+                }
+            }
+        }
+    }
+
+    /* flush into a new sstable */
+    flush();
+
+    auto deleted_num = fs::remove_all(wal_dir_path);
+    assert(deleted_num == wal_log_files.size());
+
+    return Result<void>::ok();
 }
 
 }  // namespace enigmadb::storage
