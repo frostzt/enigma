@@ -110,3 +110,44 @@ TEST(StorageEngine, crash_recovery) {
         ASSERT_EQ(bytes_to_string(value.data), "12");
     }
 }
+
+TEST(StorageEngine, delete_shadowing_across_layers) {
+    PosixIOEngine engine;
+    std::string data_dir_path = "./storage_engine_tests";
+    Tempdir testdir(data_dir_path);
+
+    auto storage_engine_result =
+        StorageEngine::open(engine, data_dir_path, 512);
+    ASSERT_TRUE(storage_engine_result.has_value());
+
+    auto& storage_engine = storage_engine_result.value();
+
+    ASSERT_TRUE(storage_engine
+                    .put(string_to_bytes("alice"), string_to_bytes("2026-05"),
+                         "age", string_to_bytes("12"))
+                    .has_value());
+
+    ASSERT_TRUE(storage_engine.flush().has_value());
+
+    auto res = storage_engine.get(string_to_bytes("alice"),
+                                  string_to_bytes("2026-05"), "age");
+
+    ASSERT_TRUE(res.has_value());
+    ASSERT_TRUE(res.value().has_value());
+
+    auto value = res.value().value();
+    ASSERT_EQ(bytes_to_string(value.data), "12");
+
+    ASSERT_TRUE(
+        storage_engine
+            .remove(string_to_bytes("alice"), string_to_bytes("2026-05"), "age")
+            .has_value());
+
+    ASSERT_TRUE(storage_engine.flush().has_value());
+
+    auto res2 = storage_engine.get(string_to_bytes("alice"),
+                                   string_to_bytes("2026-05"), "age");
+
+    ASSERT_TRUE(res2.has_value());
+    ASSERT_FALSE(res2.value().has_value());
+}
