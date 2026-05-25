@@ -1,5 +1,6 @@
 #include "enigmadb/storage/storage_engine.h"
 
+#include <filesystem>
 #include <string>
 
 #include "enigmadb/common/tempdir.h"
@@ -150,4 +151,24 @@ TEST(StorageEngine, delete_shadowing_across_layers) {
 
     ASSERT_TRUE(res2.has_value());
     ASSERT_FALSE(res2.value().has_value());
+}
+
+TEST(StorageEngine, handle_empty_memtable_flush) {
+    PosixIOEngine engine;
+    std::string data_dir_path = "./storage_engine_tests";
+    Tempdir testdir(data_dir_path);
+
+    auto storage_engine_result =
+        StorageEngine::open(engine, data_dir_path, 512);
+    ASSERT_TRUE(storage_engine_result.has_value());
+
+    auto& storage_engine = storage_engine_result.value();
+
+    ASSERT_TRUE(storage_engine.flush().has_value());
+
+    std::filesystem::path p = "./storage_engine_tests/sst";
+
+    auto count = std::distance(std::filesystem::directory_iterator(p),
+                               std::filesystem::directory_iterator{});
+    ASSERT_TRUE(count == 0);
 }

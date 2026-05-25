@@ -201,6 +201,10 @@ Result<void> StorageEngine::put_record(
 }
 
 Result<void> StorageEngine::flush() {
+    if (active_memtable_.count() == 0) {
+        return Result<void>::ok();
+    }
+
     /* create a new sstable writer */
     auto create_writer =
         SSTableWriter::create(engine_, sst_path(next_sst_seq_));
