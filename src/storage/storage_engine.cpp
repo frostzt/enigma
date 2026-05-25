@@ -189,9 +189,14 @@ Result<void> StorageEngine::put_record(
         active_memtable_.put(partition_key, clustering_key, column_name,
                              value.value());
     }
+
     if (active_memtable_.should_flush()) {
-        return flush();
+        auto flush_result = flush();
+        if (!flush_result.has_value()) {
+            return flush_result.err();
+        }
     }
+
     return Result<void>::ok();
 }
 
@@ -230,8 +235,9 @@ Result<void> StorageEngine::flush() {
     active_memtable_ = std::move(mtable);
 
     auto wal_to_delete = next_wal_seq_;
-    auto create_wal_writer = WalWriter::create(
-        engine_, wal_path(++next_wal_seq_)); /* wal increment here */
+    auto path = wal_path(++next_wal_seq_);
+    auto create_wal_writer =
+        WalWriter::create(engine_, path); /* wal increment here */
     if (!create_wal_writer.has_value()) {
         return Result<void>::err(create_wal_writer.err());
     }
@@ -289,28 +295,29 @@ Result<void> StorageEngine::recover() {
             Error{ErrorCode::UNEXPECTED_ERR, "wal directory does not exist"});
     }
 
-    std::vector<fs::path> wal_log_files;
+    /* collect only OLD wal files (before the current active WAL) */
+    std::vector<fs::path> old_wal_files;
     for (const auto& entry : fs::directory_iterator(wal_dir_path)) {
-        if (entry.is_regular_file() && entry.path().extension() == ".log") {
-            wal_log_files.push_back(entry.path());
+        if (!entry.is_regular_file() || entry.path().extension() != ".log")
+            continue;
+        auto seq = extract_num(entry.path().filename().string());
+        if (seq < next_wal_seq_) {
+            old_wal_files.push_back(entry.path());
         }
     }
 
-    std::sort(wal_log_files.begin(), wal_log_files.end(),
+    if (old_wal_files.empty()) {
+        return Result<void>::ok();
+    }
+
+    std::sort(old_wal_files.begin(), old_wal_files.end(),
               [](const fs::path& a, const fs::path& b) {
                   return extract_num(a.filename().string()) <
                          extract_num(b.filename().string());
               });
 
-    /* recover data reading the wal files */
-    uint64_t highest_wal_seq = 0;
-    for (const auto& entry : wal_log_files) {
-        auto filename = entry.filename();
-        auto seq_found = extract_num(filename);
-        if (seq_found > highest_wal_seq) {
-            highest_wal_seq = seq_found;
-        }
-
+    /* replay old WAL records into the active memtable */
+    for (const auto& entry : old_wal_files) {
         auto wal_reader_res = wal::WalReader::create(engine_, entry);
         if (!wal_reader_res.has_value()) {
             return Result<void>::err(wal_reader_res.err());
@@ -342,11 +349,18 @@ Result<void> StorageEngine::recover() {
         }
     }
 
-    /* flush into a new sstable */
-    flush();
+    /* flush recovered data into a new sstable */
+    if (active_memtable_.approximate_size() > 0) {
+        auto flush_result = flush();
+        if (!flush_result.has_value()) {
+            return Result<void>::err(flush_result.err());
+        }
+    }
 
-    auto deleted_num = fs::remove_all(wal_dir_path);
-    assert(deleted_num == wal_log_files.size());
+    /* clean up the old WAL segments that were replayed */
+    for (const auto& f : old_wal_files) {
+        fs::remove(f);
+    }
 
     return Result<void>::ok();
 }

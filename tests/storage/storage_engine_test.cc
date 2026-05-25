@@ -47,7 +47,7 @@ TEST(StorageEngine, flush_and_read_sstable) {
 
     auto& storage_engine = storage_engine_result.value();
 
-    for (size_t i = 10; i < 60; ++i) {
+    for (size_t i = 10; i < 160; ++i) {
         ASSERT_TRUE(storage_engine
                         .put(string_to_bytes("alice"),
                              string_to_bytes("2026-" + std::to_string(i)),
@@ -56,7 +56,7 @@ TEST(StorageEngine, flush_and_read_sstable) {
                         .has_value());
     }
 
-    for (size_t i = 10; i < 60; ++i) {
+    for (size_t i = 10; i < 160; ++i) {
         auto result =
             storage_engine.get(string_to_bytes("alice"),
                                string_to_bytes("2026-" + std::to_string(i)),
