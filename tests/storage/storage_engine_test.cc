@@ -69,3 +69,44 @@ TEST(StorageEngine, flush_and_read_sstable) {
         ASSERT_EQ(bytes_to_string(value.data), "12" + std::to_string(i));
     }
 }
+
+TEST(StorageEngine, crash_recovery) {
+    Tempdir testdir("./storage_engine_tests");
+
+    {
+        /* store and crash */
+        std::string data_dir_path = "./storage_engine_tests";
+        PosixIOEngine engine;
+        auto storage_engine_result =
+            StorageEngine::open(engine, data_dir_path, 500000);
+        ASSERT_TRUE(storage_engine_result.has_value());
+
+        auto& storage_engine = storage_engine_result.value();
+
+        ASSERT_TRUE(storage_engine
+                        .put(string_to_bytes("alice"),
+                             string_to_bytes("2026-05"), "age",
+                             string_to_bytes("12"))
+                        .has_value());
+    }
+
+    {
+        std::string data_dir_path = "./storage_engine_tests";
+        PosixIOEngine engine;
+        auto storage_engine_result =
+            StorageEngine::open(engine, data_dir_path, 500000);
+
+        ASSERT_TRUE(storage_engine_result.has_value());
+
+        auto& storage_engine = storage_engine_result.value();
+
+        auto res = storage_engine.get(string_to_bytes("alice"),
+                                      string_to_bytes("2026-05"), "age");
+
+        ASSERT_TRUE(res.has_value());
+        ASSERT_TRUE(res.value().has_value());
+
+        auto value = res.value().value();
+        ASSERT_EQ(bytes_to_string(value.data), "12");
+    }
+}
