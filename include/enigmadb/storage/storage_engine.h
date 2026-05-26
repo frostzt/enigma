@@ -59,7 +59,7 @@ class StorageEngine {
 
    public:
     static Result<StorageEngine> open(io::IOEngine& engine,
-                                      std::string& data_dir,
+                                      const std::string& data_dir,
                                       const uint64_t memtable_size);
 
     Result<void> put(const std::vector<uint8_t>& partition_key,

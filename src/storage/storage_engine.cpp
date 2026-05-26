@@ -52,7 +52,7 @@ std::string StorageEngine::sst_path(uint64_t seq) {
 }
 
 Result<StorageEngine> StorageEngine::open(io::IOEngine& engine,
-                                          std::string& data_dir,
+                                          const std::string& data_dir,
                                           const uint64_t memtable_size) {
     /* create dirs if they don't exist */
     fs::path wal_dir_path = data_dir + "/wal";
@@ -219,7 +219,7 @@ Result<void> StorageEngine::flush() {
     for (auto it = active_memtable_.begin(); it != active_memtable_.end();
          it++) {
         auto add_result = writer.add(it->first, it->second);
-        if (!add_result.has_value()) add_result.err();
+        if (!add_result.has_value()) return add_result.err();
     }
 
     if (auto finish_result = writer.finish(); !finish_result.has_value()) {
@@ -233,7 +233,7 @@ Result<void> StorageEngine::flush() {
     /* create new wal sequence */
     auto new_wal_seq = next_wal_seq_ + 1;
     auto walwrr = WalWriter::create(engine_, wal_path(new_wal_seq));
-    if (!walwrr.has_value()) walwrr.err();
+    if (!walwrr.has_value()) return walwrr.err();
 
     sst_readers_.emplace_back(std::move(sstrr.value()));
     wal_writer_.emplace(std::move(walwrr.value()));

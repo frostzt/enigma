@@ -38,4 +38,4 @@ class TimestampGenerator {
 
 }  // namespace enigmadb::common
 
-#endif  // ENIGMA_DB_HLC_H#endif  // ENIGMA_DB_HLC_H
+#endif  // ENIGMA_DB_HLC_H
