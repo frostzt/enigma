@@ -25,10 +25,10 @@ TEST(MemTable, put_then_get) {
     /* fetch these records */
     auto age = memtable.get(string_to_bytes(partition_key),
                             string_to_bytes(clustering_key), "age");
-    ASSERT_EQ(bytes_to_string(age.value()), "26");
+    ASSERT_EQ(bytes_to_string(age.value().data), "26");
     auto name = memtable.get(string_to_bytes(partition_key),
                              string_to_bytes(clustering_key), "name");
-    ASSERT_EQ(bytes_to_string(name.value()), "sourav");
+    ASSERT_EQ(bytes_to_string(name.value().data), "sourav");
 }
 
 TEST(MemTable, put_remove_get) {
@@ -49,8 +49,8 @@ TEST(MemTable, put_remove_get) {
     /* fetch record */
     auto name = memtable.get(string_to_bytes(partition_key),
                              string_to_bytes(clustering_key), "name");
-    ASSERT_FALSE(name.has_value());
-    ASSERT_EQ(name, std::nullopt);
+    ASSERT_TRUE(name.has_value());
+    ASSERT_TRUE(name.value().is_tombstone);
 }
 
 TEST(MemTable, remove_non_existant) {
@@ -66,7 +66,7 @@ TEST(MemTable, remove_non_existant) {
     /* fetch record */
     auto name = memtable.get(string_to_bytes(partition_key),
                              string_to_bytes(clustering_key), "name");
-    ASSERT_EQ(name, std::nullopt);
+    ASSERT_TRUE(name.value().is_tombstone);
     ASSERT_GT(memtable.approximate_size(), 0);
     ASSERT_EQ(memtable.count(), 1);
 }
@@ -85,7 +85,7 @@ TEST(MemTable, value_overwrites) {
     /* fetch these records */
     auto artyom = memtable.get(string_to_bytes(partition_key),
                                string_to_bytes(clustering_key), "name");
-    ASSERT_EQ(bytes_to_string(artyom.value()), "artyom");
+    ASSERT_EQ(bytes_to_string(artyom.value().data), "artyom");
 
     /* overwrite these recods */
     memtable.put(string_to_bytes(partition_key),
@@ -95,7 +95,7 @@ TEST(MemTable, value_overwrites) {
     /* fetch these records */
     auto nowanna = memtable.get(string_to_bytes(partition_key),
                                 string_to_bytes(clustering_key), "name");
-    ASSERT_EQ(bytes_to_string(nowanna.value()), "anna");
+    ASSERT_EQ(bytes_to_string(nowanna.value().data), "anna");
 }
 
 TEST(MemTable, flush_uses_count) {
@@ -112,7 +112,7 @@ TEST(MemTable, flush_uses_count) {
     /* fetch these records */
     auto artyom = memtable.get(string_to_bytes(partition_key),
                                string_to_bytes(clustering_key), "name");
-    ASSERT_EQ(bytes_to_string(artyom.value()), "artyom");
+    ASSERT_EQ(bytes_to_string(artyom.value().data), "artyom");
 
     ASSERT_FALSE(memtable.should_flush());
 

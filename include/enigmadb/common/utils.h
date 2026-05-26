@@ -10,6 +10,7 @@
 
 #include <stdint.h>
 
+#include <filesystem>
 #include <vector>
 
 namespace enigmadb::common {
@@ -20,6 +21,12 @@ inline std::vector<uint8_t> string_to_bytes(std::string_view str) {
 
 inline std::string bytes_to_string(const std::vector<uint8_t>& vec) {
     return std::string(vec.begin(), vec.end());
+}
+
+inline void clear_dir(const std::filesystem::path& p) {
+    for (const auto& entry : std::filesystem::directory_iterator(p)) {
+        std::filesystem::remove_all(entry.path());
+    }
 }
 
 }  // namespace enigmadb::common

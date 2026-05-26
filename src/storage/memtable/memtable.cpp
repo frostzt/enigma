@@ -38,22 +38,16 @@ void Memtable::remove(const std::vector<uint8_t>& partition_key,
     bytes_ += key.size() - to_remove;
 }
 
-std::optional<std::vector<uint8_t>> Memtable::get(
+std::optional<MemtableValue> Memtable::get(
     const std::vector<uint8_t>& partition_key,
     const std::vector<uint8_t>& clustering_key,
     const std::string& column_name) {
     auto key = encode_composite_key(partition_key, clustering_key, column_name);
-
     auto it = entries_.find(key);
     if (it == entries_.end()) {
         return std::nullopt;
     }
-
-    if (it->second.is_tombstone) {
-        return std::nullopt;
-    }
-
-    return it->second.data;
+    return it->second;
 }
 
 size_t Memtable::approximate_size() const { return bytes_; };
