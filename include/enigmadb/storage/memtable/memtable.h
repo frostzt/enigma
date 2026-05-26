@@ -109,10 +109,9 @@ class Memtable {
      * @return The column value if present and not tombstoned,
      *         or std::nullopt if the key is absent or deleted.
      */
-    std::optional<MemtableValue> get(
-        const std::vector<uint8_t>& partition_key,
-        const std::vector<uint8_t>& clustering_key,
-        const std::string& column_name);
+    std::optional<MemtableValue> get(const std::vector<uint8_t>& partition_key,
+                                     const std::vector<uint8_t>& clustering_key,
+                                     const std::string& column_name);
 
     /**
      * @brief Returns a rough estimate of the memory consumed by this memtable.
