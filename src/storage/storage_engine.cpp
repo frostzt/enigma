@@ -132,7 +132,7 @@ Result<StorageEngine> StorageEngine::open(io::IOEngine& engine,
     }
 
     StorageEngine storage_engine{engine,
-                                 std::move(data_dir),
+                                 data_dir,
                                  std::move(wal_writer_res.value()),
                                  memtable_size,
                                  std::move(mtable),
