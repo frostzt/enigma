@@ -140,7 +140,12 @@ Result<StorageEngine> StorageEngine::open(io::IOEngine& engine,
                                  std::move(sst_readers),
                                  highest_wal_seq + 1,
                                  highest_sst_seq + 1};
-    storage_engine.recover();
+
+    /* try and recover */
+    auto recover_result = storage_engine.recover();
+    if (!recover_result.has_value()) {
+        return Result<StorageEngine>::err(recover_result.err());
+    }
 
     return Result<StorageEngine>::ok(std::move(storage_engine));
 }
@@ -206,20 +211,15 @@ Result<void> StorageEngine::flush() {
     }
 
     /* create a new sstable writer */
-    auto create_writer =
-        SSTableWriter::create(engine_, sst_path(next_sst_seq_));
-    if (!create_writer.has_value()) {
-        return Result<void>::err(create_writer.err());
-    }
+    auto sstwrr = SSTableWriter::create(engine_, sst_path(next_sst_seq_));
+    if (!sstwrr.has_value()) return sstwrr.err();
 
     /* itr memtable and add entry to the sstable */
-    auto& writer = create_writer.value();
+    auto& writer = sstwrr.value();
     for (auto it = active_memtable_.begin(); it != active_memtable_.end();
          it++) {
         auto add_result = writer.add(it->first, it->second);
-        if (!add_result.has_value()) {
-            return Result<void>::err(add_result.err());
-        }
+        if (!add_result.has_value()) add_result.err();
     }
 
     if (auto finish_result = writer.finish(); !finish_result.has_value()) {
@@ -227,32 +227,28 @@ Result<void> StorageEngine::flush() {
     }
 
     /* open an sstable reader */
-    auto create_reader =
-        SSTableReader::create(engine_, sst_path(next_sst_seq_));
-    if (!create_reader.has_value()) {
-        return Result<void>::err(create_reader.err());
-    }
-    sst_readers_.emplace_back(std::move(create_reader.value()));
+    auto sstrr = SSTableReader::create(engine_, sst_path(next_sst_seq_));
+    if (!sstrr.has_value()) return sstrr.err();
+
+    /* create new wal sequence */
+    auto new_wal_seq = next_wal_seq_ + 1;
+    auto walwrr = WalWriter::create(engine_, wal_path(new_wal_seq));
+    if (!walwrr.has_value()) walwrr.err();
+
+    sst_readers_.emplace_back(std::move(sstrr.value()));
+    wal_writer_.emplace(std::move(walwrr.value()));
 
     /* replace with a new empty memtable */
     Memtable mtable{memtable_size_};
     active_memtable_ = std::move(mtable);
 
-    auto wal_to_delete = next_wal_seq_;
-    auto path = wal_path(++next_wal_seq_);
-    auto create_wal_writer =
-        WalWriter::create(engine_, path); /* wal increment here */
-    if (!create_wal_writer.has_value()) {
-        return Result<void>::err(create_wal_writer.err());
-    }
-    wal_writer_.emplace(std::move(create_wal_writer.value()));
-
-    if (!fs::remove(wal_path(wal_to_delete))) {
-        return Result<void>::err(
-            Error{ErrorCode::UNEXPECTED_ERR, "File not found!"});
-    }
-
+    auto old_wal_seq = next_wal_seq_;
+    next_wal_seq_ = new_wal_seq;
     next_sst_seq_++;
+
+    /* best effort del, deleting failure for old wals are not fatal */
+    fs::remove(wal_path(old_wal_seq));
+
     return Result<void>::ok();
 }
 
