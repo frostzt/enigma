@@ -94,9 +94,8 @@ Result<StorageEngine> StorageEngine::open(io::IOEngine& engine,
     for (const auto& entry : files) {
         /* open an sstable reader */
         auto reader = sstable::SSTableReader::create(engine, entry);
-        if (reader.has_value()) {
-            sst_readers.emplace_back(std::move(reader.value()));
-        }
+        if (!reader.has_value()) return reader.err();
+        sst_readers.emplace_back(std::move(reader.value()));
     }
 
     /* if wal files exist recover */
