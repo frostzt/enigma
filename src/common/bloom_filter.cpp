@@ -1,4 +1,3 @@
-
 #include "enigmadb/common/bloom_filter.h"
 
 #include <algorithm>
@@ -20,7 +19,8 @@ BloomFilter::BloomFilter(size_t expected_keys, double false_positive_rate) {
     auto m =
         -(static_cast<double>(expected_keys) * std::log(false_positive_rate)) /
         (ln2 * ln2);
-    bit_count_ = m;
+    bit_count_ =
+        ((static_cast<size_t>(m) + 7) / 8) * 8;  // round up to byte boundary
 
     // num_hashes = (bit_count / expected_key) * ln(2)
     auto k = static_cast<size_t>(
