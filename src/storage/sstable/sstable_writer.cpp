@@ -135,6 +135,11 @@ SSTExpectResult<void> SSTableWriter::finish() {
         return SSTExpectResult<void>::err(write_filter_block_result.err());
     }
 
+    if (write_filter_block_result.value() != filter_buffer.size()) {
+        return SSTExpectResult<void>::err(common::Error{
+            common::ErrorCode::UNEXPECTED_ERR, "failed to write filter block"});
+    }
+
     /* construct the footer block */
     std::vector<uint8_t> footer_buffer;
     footer_buffer.resize(48);
