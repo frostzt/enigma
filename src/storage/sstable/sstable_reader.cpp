@@ -5,6 +5,7 @@
 #include <optional>
 #include <vector>
 
+#include "enigmadb/common/bloom_filter.h"
 #include "enigmadb/common/crc32.h"
 #include "enigmadb/common/encoding.h"
 #include "enigmadb/common/error.h"
@@ -26,29 +27,29 @@ SSTExpectResult<SSTableReader> SSTableReader::create(io::IOEngine& engine,
         return SSTExpectResult<SSTableReader>::err(size_result.err());
     }
     auto file_size = size_result.value();
-    if (file_size < 32) {
+    if (file_size < 48) {
         return SSTExpectResult<SSTableReader>::err(common::Error{
             common::ErrorCode::BAD_CONFIG, "file too small for SSTable"});
     }
 
     std::vector<uint8_t> footer_buffer;
-    footer_buffer.resize(32);
+    footer_buffer.resize(48);
 
     /* read footer */
     auto read_footer_result =
-        engine.read(fh, 32, footer_buffer.data(), file_size - 32);
+        engine.read(fh, 48, footer_buffer.data(), file_size - 48);
     if (!read_footer_result.has_value()) {
         return SSTExpectResult<SSTableReader>::err(read_footer_result.err());
     }
 
     /* read and validate magic */
-    if (std::memcmp(footer_buffer.data() + 22, MAGIC.data(), MAGIC_SIZE)) {
+    if (std::memcmp(footer_buffer.data() + 34, MAGIC.data(), MAGIC_SIZE)) {
         return SSTExpectResult<SSTableReader>::err(
             common::Error{common::ErrorCode::BAD_MAGIC, "invalid magic"});
     }
 
-    auto stored_checksum = common::decode_uint32(footer_buffer.data(), 18);
-    auto computed_checksum = common::compute_crc_32(footer_buffer.data(), 18);
+    auto stored_checksum = common::decode_uint32(footer_buffer.data(), 30);
+    auto computed_checksum = common::compute_crc_32(footer_buffer.data(), 30);
     if (stored_checksum != computed_checksum) {
         return SSTExpectResult<SSTableReader>::err(
             common::Error{common::ErrorCode::BAD_CONFIG, "invalid checksum"});
@@ -58,13 +59,16 @@ SSTExpectResult<SSTableReader> SSTableReader::create(io::IOEngine& engine,
     auto index_block_offset = common::decode_uint64(footer_buffer.data(), 0);
     auto index_block_size = common::decode_uint32(footer_buffer.data(), 8);
 
-    std::vector<uint8_t> index_buffer;
-    index_buffer.resize(index_block_size);
+    /* extract details for filter and filter block */
+    auto filter_block_size = common::decode_uint32(footer_buffer.data(), 20);
 
-    auto read_index_result = engine.read(
-        fh, index_block_size, index_buffer.data(), index_block_offset);
-    if (!read_index_result.has_value()) {
-        return SSTExpectResult<SSTableReader>::err(read_index_result.err());
+    std::vector<uint8_t> buffer;
+    buffer.resize(index_block_size + filter_block_size);
+
+    auto read_result = engine.read(fh, index_block_size + filter_block_size,
+                                   buffer.data(), index_block_offset);
+    if (!read_result.has_value()) {
+        return SSTExpectResult<SSTableReader>::err(read_result.err());
     }
 
     /* build the index entries */
@@ -76,24 +80,36 @@ SSTExpectResult<SSTableReader> SSTableReader::create(io::IOEngine& engine,
             return SSTExpectResult<SSTableReader>::err(common::Error{
                 common::ErrorCode::READ_OUT_OF_RANGE, "key read out of range"});
         }
-        auto key_len = common::decode_uint32(index_buffer.data(), offset);
+        auto key_len = common::decode_uint32(buffer.data(), offset);
         offset += 4;
         if (offset + key_len + 8 + 4 > index_block_size) {
             return SSTExpectResult<SSTableReader>::err(
                 common::Error{common::ErrorCode::READ_OUT_OF_RANGE,
                               "index entry out of range"});
         }
-        entry.first_key.assign(index_buffer.data() + offset,
-                               index_buffer.data() + offset + key_len);
+        entry.first_key.assign(buffer.data() + offset,
+                               buffer.data() + offset + key_len);
         offset += key_len;
-        entry.block_offset = common::decode_uint64(index_buffer.data(), offset);
+        entry.block_offset = common::decode_uint64(buffer.data(), offset);
         offset += 8;
-        entry.block_size = common::decode_uint32(index_buffer.data(), offset);
+        entry.block_size = common::decode_uint32(buffer.data(), offset);
         offset += 4;
         index_entries.push_back(std::move(entry));
     }
 
-    SSTableReader reader(engine, std::move(fh), path, std::move(index_entries));
+    /* extract details for the bloom filter */
+    std::vector<uint8_t> bit_array;
+    auto num_hashes = common::decode_uint8(buffer.data(), offset);
+    /* NOTE: We are NOT increasing the offset (commented out) if we do we have
+     * to account for the filter_block_size increment down below which is simple
+     * as subtracting 1*/
+    // offset += 1;
+    bit_array.assign(buffer.data() + offset,
+                     buffer.data() + offset + filter_block_size);
+
+    common::BloomFilter filter{bit_array, num_hashes};
+    SSTableReader reader(engine, std::move(fh), path, std::move(index_entries),
+                         filter);
     return SSTExpectResult<SSTableReader>::ok(std::move(reader));
 }
 

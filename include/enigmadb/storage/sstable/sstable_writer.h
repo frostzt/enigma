@@ -57,6 +57,7 @@
 #include <utility>
 #include <vector>
 
+#include "enigmadb/common/bloom_filter.h"
 #include "enigmadb/io/io_engine.h"
 #include "enigmadb/storage/memtable/memtable.h"
 #include "enigmadb/storage/sstable/sstable_common.h"
@@ -89,6 +90,8 @@ class SSTableWriter {
     size_t current_file_offset_;         ///< Bytes written to disk so far.
     size_t current_block_start_offset_;  ///< File offset where the current
                                          ///< block starts.
+    common::BloomFilter bloom_filter_;
+
     std::vector<IndexEntry>
         index_entries_;   ///< Accumulated index for all flushed blocks.
     size_t entry_count_;  ///< Total entries added across all blocks.
@@ -101,12 +104,13 @@ class SSTableWriter {
      * @param fh      Open file handle (ownership is moved in).
      */
     SSTableWriter(io::IOEngine& engine, const std::string& path,
-                  io::FileHandle fh)
+                  io::FileHandle fh, size_t estimated_keys)
         : engine_(engine),
           fh_(std::move(fh)),
           path_(path),
           current_file_offset_(0),
           current_block_start_offset_(0),
+          bloom_filter_(estimated_keys, 0.01),
           entry_count_(0) {
         buffer_.reserve(MAX_PAGING_SIZE_BYTES);
     }
@@ -129,13 +133,16 @@ class SSTableWriter {
      *
      * The file is opened in write mode via @p engine.
      *
-     * @param engine  IOEngine to use for all I/O on this file.
-     * @param path    Filesystem path for the SSTable file.
+     * @param engine         IOEngine to use for all I/O on this file.
+     * @param path           Filesystem path for the SSTable file.
+     * @param estimated_keys Pre-emptive approximate amount of keys in this
+     * SSTable.
      * @return An SSTableWriter on success, or an error if the file
      *         cannot be opened.
      */
     static SSTExpectResult<SSTableWriter> create(io::IOEngine& engine,
-                                                 const std::string& path);
+                                                 const std::string& path,
+                                                 size_t estimated_keys);
 
     /**
      * @brief Appends a key-value entry to the SSTable.
