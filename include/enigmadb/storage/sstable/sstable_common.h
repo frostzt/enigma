@@ -14,7 +14,7 @@ namespace enigmadb::storage::sstable {
 constexpr size_t MAX_PAGING_SIZE_BYTES = 4096;
 
 /// @brief Current SSTable on-disk format version.
-constexpr size_t SSTABLE_FORMAT_VERSION = 1;
+constexpr size_t SSTABLE_FORMAT_VERSION = 2;
 
 /// @brief Size of the magic identifier in the footer, in bytes.
 static constexpr size_t MAGIC_SIZE = 8;

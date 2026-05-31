@@ -12,11 +12,12 @@
 namespace enigmadb::storage::sstable {
 
 SSTExpectResult<SSTableWriter> SSTableWriter::create(io::IOEngine& engine,
-                                                     const std::string& path) {
+                                                     const std::string& path,
+                                                     size_t estimated_keys) {
     auto open_result = engine.open(path, io::Mode::Write);
     if (!open_result.has_value()) return open_result.err();
     auto& fh = open_result.value();
-    SSTableWriter writer(engine, path, std::move(fh));
+    SSTableWriter writer(engine, path, std::move(fh), estimated_keys);
     return SSTExpectResult<SSTableWriter>::ok(std::move(writer));
 }
 
@@ -52,6 +53,9 @@ SSTExpectResult<void> SSTableWriter::add(const std::vector<uint8_t>& key,
     offset = common::encode_bytes(value.data.data(), value_len, buffer_.data(),
                                   offset);
     offset = common::encode_uint8(value.is_tombstone, buffer_.data(), offset);
+
+    /* add this key in the bloom filter */
+    bloom_filter_.add(key);
 
     entry_count_++;
     return SSTExpectResult<void>::ok();
@@ -118,14 +122,37 @@ SSTExpectResult<void> SSTableWriter::finish() {
             common::ErrorCode::UNEXPECTED_ERR, "failed to write index block"});
     }
 
+    /* construct the filter block */
+    size_t filter_size = bloom_filter_.size_bytes();
+    std::vector<uint8_t> filter_buffer(filter_size + 1);
+    common::encode_uint8(bloom_filter_.num_hashes(), filter_buffer.data(), 0);
+    common::encode_bytes(bloom_filter_.data().data(), filter_size,
+                         filter_buffer.data(), 1);
+
+    auto write_filter_block_result =
+        engine_.append(fh_, filter_buffer.data(), filter_buffer.size());
+    if (!write_filter_block_result.has_value()) {
+        return SSTExpectResult<void>::err(write_filter_block_result.err());
+    }
+
+    if (write_filter_block_result.value() != filter_buffer.size()) {
+        return SSTExpectResult<void>::err(common::Error{
+            common::ErrorCode::UNEXPECTED_ERR, "failed to write filter block"});
+    }
+
     /* construct the footer block */
     std::vector<uint8_t> footer_buffer;
-    footer_buffer.resize(32);
+    footer_buffer.resize(48);
     size_t footer_offset = 0;
 
     footer_offset = common::encode_uint64(index_block_start,
                                           footer_buffer.data(), footer_offset);
     footer_offset = common::encode_uint32(index_buffer.size(),
+                                          footer_buffer.data(), footer_offset);
+    footer_offset =
+        common::encode_uint64(index_block_start + index_buffer.size(),
+                              footer_buffer.data(), footer_offset);
+    footer_offset = common::encode_uint32(filter_buffer.size(),
                                           footer_buffer.data(), footer_offset);
     footer_offset = common::encode_uint32(entry_count_, footer_buffer.data(),
                                           footer_offset);
@@ -133,14 +160,17 @@ SSTExpectResult<void> SSTableWriter::finish() {
                                           footer_buffer.data(), footer_offset);
 
     /* calculate checksum */
-    auto checksum = common::compute_crc_32(footer_buffer.data(), 18);
+    auto checksum = common::compute_crc_32(footer_buffer.data(), 30);
     footer_offset = common::encode_uint32(checksum, footer_buffer.data(),
                                           footer_offset); /* checksum */
     footer_offset =
         common::encode_bytes(MAGIC.data(), MAGIC_SIZE, footer_buffer.data(),
                              footer_offset); /* magic */
-    footer_offset = common::encode_uint16(0, footer_buffer.data(),
-                                          footer_offset); /* pad with 2 bytes */
+    /* pad with 6 bytes */
+    footer_offset =
+        common::encode_uint32(0, footer_buffer.data(), footer_offset);
+    footer_offset =
+        common::encode_uint16(0, footer_buffer.data(), footer_offset);
 
     auto write_footer_block_result =
         engine_.append(fh_, footer_buffer.data(), footer_buffer.size());

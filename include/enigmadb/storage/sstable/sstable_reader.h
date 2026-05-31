@@ -18,6 +18,7 @@
 
 #include <vector>
 
+#include "enigmadb/common/bloom_filter.h"
 #include "enigmadb/io/io_engine.h"
 #include "enigmadb/storage/memtable/memtable.h"
 #include "enigmadb/storage/sstable/sstable_common.h"
@@ -42,6 +43,7 @@ class SSTableReader {
     std::string path_;
     std::vector<IndexEntry>
         index_entries_;  ///< In-memory copy of the index block.
+    common::BloomFilter bloom_filter_;
 
     /**
      * @brief Private constructor; use SSTableReader::create() instead.
@@ -52,11 +54,13 @@ class SSTableReader {
      * @param idx_entries  Decoded index entries (ownership is moved in).
      */
     SSTableReader(io::IOEngine& engine, io::FileHandle fh,
-                  const std::string& path, std::vector<IndexEntry> idx_entries)
+                  const std::string& path, std::vector<IndexEntry> idx_entries,
+                  common::BloomFilter blf)
         : engine_(engine),
           fh_(std::move(fh)),
           path_(path),
-          index_entries_(std::move(idx_entries)) {}
+          index_entries_(std::move(idx_entries)),
+          bloom_filter_(std::move(blf)) {}
 
    public:
     /**

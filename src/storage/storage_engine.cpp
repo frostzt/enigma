@@ -210,7 +210,8 @@ Result<void> StorageEngine::flush() {
     }
 
     /* create a new sstable writer */
-    auto sstwrr = SSTableWriter::create(engine_, sst_path(next_sst_seq_));
+    auto sstwrr = SSTableWriter::create(engine_, sst_path(next_sst_seq_),
+                                        active_memtable_.count());
     if (!sstwrr.has_value()) return sstwrr.err();
 
     /* itr memtable and add entry to the sstable */

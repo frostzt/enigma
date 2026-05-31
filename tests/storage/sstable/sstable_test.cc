@@ -23,7 +23,7 @@ TEST(SSTableWriter, add_finish_verify) {
     auto prev_size = std::filesystem::file_size(testfile.path);
 
     /* write flow */
-    auto crewriter_result = SSTableWriter::create(engine, testfile.path);
+    auto crewriter_result = SSTableWriter::create(engine, testfile.path, 50);
     ASSERT_TRUE(crewriter_result.has_value());
 
     auto& writer = crewriter_result.value();
@@ -90,7 +90,7 @@ TEST(SSTableWriter, single_entry_finish) {
 
     auto prev_size = std::filesystem::file_size(testfile.path);
 
-    auto crewriter_result = SSTableWriter::create(engine, testfile.path);
+    auto crewriter_result = SSTableWriter::create(engine, testfile.path, 50);
     ASSERT_TRUE(crewriter_result.has_value());
 
     auto& writer = crewriter_result.value();
@@ -123,7 +123,7 @@ TEST(SSTableWriter, multiple_records) {
 
     auto prev_size = std::filesystem::file_size(testfile.path);
 
-    auto crewriter_result = SSTableWriter::create(engine, testfile.path);
+    auto crewriter_result = SSTableWriter::create(engine, testfile.path, 250);
     ASSERT_TRUE(crewriter_result.has_value());
 
     auto& writer = crewriter_result.value();
@@ -164,7 +164,7 @@ TEST(SSTableWriter, tombstone_record) {
     PosixIOEngine engine;
     Tempfile testfile("tempfile-XXXXXX");
 
-    auto crewriter_result = SSTableWriter::create(engine, testfile.path);
+    auto crewriter_result = SSTableWriter::create(engine, testfile.path, 10);
     ASSERT_TRUE(crewriter_result.has_value());
 
     auto& writer = crewriter_result.value();
