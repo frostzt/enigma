@@ -64,7 +64,7 @@ SSTExpectResult<SSTableReader> SSTableReader::create(io::IOEngine& engine,
     // filter block
     auto filter_block_size = common::decode_uint32(footer_buffer.data(), 20);
 
-    if (filter_block_size < 1) {
+    if (filter_block_size < 2) {
         return SSTExpectResult<SSTableReader>::err(common::Error{
             common::ErrorCode::BAD_CONFIG, "invalid filter block size"});
     }
