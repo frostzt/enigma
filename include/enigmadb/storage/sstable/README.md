@@ -62,14 +62,20 @@ Here is how I am thinking my SSTable to be:
   Entry: first_key_len(4) | first_key | block_offset(8) | block_size(4)
   Entry: ...
 
-[Footer — fixed 32 bytes]
-  index_block_offset (8)
-  index_block_size   (4)
-  entry_count        (4)
-  format_version     (2)
-  footer_checksum    (4)
-  magic "ENIGSSTB"   (8)
-  padding            (2)
+[Filter Block]
+  num_hashes    (1)
+  bit_array     (remaining bytes)
+
+[Footer — fixed 48 bytes]
+  index_block_offset  (8)
+  index_block_size    (4)
+  filter_block_offset (8)
+  filter_block_size   (4)
+  entry_count         (4)
+  format_version      (2)
+  footer_checksum     (4)
+  magic "ENIGSSTB"    (8)
+  padding             (6)
 
 ```
 
