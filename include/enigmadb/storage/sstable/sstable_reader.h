@@ -43,7 +43,7 @@ class SSTableReader {
     std::string path_;
     std::vector<IndexEntry>
         index_entries_;  ///< In-memory copy of the index block.
-    common::BloomFilter bloom_filter;
+    common::BloomFilter bloom_filter_;
 
     /**
      * @brief Private constructor; use SSTableReader::create() instead.
@@ -60,7 +60,7 @@ class SSTableReader {
           fh_(std::move(fh)),
           path_(path),
           index_entries_(std::move(idx_entries)),
-          bloom_filter(blf) {}
+          bloom_filter_(blf) {}
 
    public:
     /**

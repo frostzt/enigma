@@ -100,12 +100,9 @@ SSTExpectResult<SSTableReader> SSTableReader::create(io::IOEngine& engine,
     /* extract details for the bloom filter */
     std::vector<uint8_t> bit_array;
     auto num_hashes = common::decode_uint8(buffer.data(), offset);
-    /* NOTE: We are NOT increasing the offset (commented out) if we do we have
-     * to account for the filter_block_size increment down below which is simple
-     * as subtracting 1*/
-    // offset += 1;
+    offset += 1;
     bit_array.assign(buffer.data() + offset,
-                     buffer.data() + offset + filter_block_size);
+                     buffer.data() + offset + filter_block_size - 1);
 
     common::BloomFilter filter{bit_array, num_hashes};
     SSTableReader reader(engine, std::move(fh), path, std::move(index_entries),
@@ -115,6 +112,12 @@ SSTExpectResult<SSTableReader> SSTableReader::create(io::IOEngine& engine,
 
 SSTExpectResult<std::optional<memtable::MemtableValue>> SSTableReader::get(
     const std::vector<uint8_t>& key) {
+    /* use the filter to determine if this key exists */
+    if (!bloom_filter_.may_contain(key)) {
+        return SSTExpectResult<std::optional<memtable::MemtableValue>>::ok(
+            std::nullopt);
+    }
+
     /* binary search index to find the data block */
     CompositeKeyComparator cmp;
     auto it =
