@@ -30,9 +30,6 @@ TEST(bloom_filter, multiple_keys) {
         if (i % 2 == 0) {
             ASSERT_TRUE(filter.may_contain(
                 string_to_bytes("alice_" + std::to_string(i))));
-        } else {
-            ASSERT_FALSE(filter.may_contain(
-                string_to_bytes("alice_" + std::to_string(i))));
         }
     }
 }

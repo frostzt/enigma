@@ -39,7 +39,7 @@ void BloomFilter::add(const std::vector<uint8_t>& key) {
     auto h2 = Hash(key.data(), key.size(), SEED_2);
 
     for (size_t i = 0; i < num_hashes_; i++) {
-        size_t bit_pos = (h1 + i * h2) % bit_count_;
+        size_t bit_pos = (h1 + i * (h2 | 1)) % bit_count_;
         size_t byte_idx = bit_pos / 8;
         size_t bit_offset = bit_pos % 8;
         bit_array_[byte_idx] |= (1 << bit_offset);
@@ -51,7 +51,7 @@ bool BloomFilter::may_contain(const std::vector<uint8_t>& key) const {
     auto h2 = Hash(key.data(), key.size(), SEED_2);
 
     for (size_t i = 0; i < num_hashes_; i++) {
-        size_t bit_pos = (h1 + i * h2) % bit_count_;
+        size_t bit_pos = (h1 + i * (h2 | 1)) % bit_count_;
         size_t byte_idx = bit_pos / 8;
         size_t bit_offset = bit_pos % 8;
         if (!(bit_array_[byte_idx] & (1 << bit_offset))) {

@@ -60,7 +60,7 @@ class SSTableReader {
           fh_(std::move(fh)),
           path_(path),
           index_entries_(std::move(idx_entries)),
-          bloom_filter_(blf) {}
+          bloom_filter_(std::move(blf)) {}
 
    public:
     /**

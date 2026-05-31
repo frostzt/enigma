@@ -60,6 +60,8 @@ SSTExpectResult<SSTableReader> SSTableReader::create(io::IOEngine& engine,
     auto index_block_size = common::decode_uint32(footer_buffer.data(), 8);
 
     /* extract details for filter and filter block */
+    // TODO: Should create a two separate path here to validate offset for
+    // filter block
     auto filter_block_size = common::decode_uint32(footer_buffer.data(), 20);
 
     std::vector<uint8_t> buffer;
