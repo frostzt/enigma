@@ -22,6 +22,7 @@
 #include "enigmadb/io/io_engine.h"
 #include "enigmadb/storage/memtable/memtable.h"
 #include "enigmadb/storage/sstable/sstable_common.h"
+#include "enigmadb/storage/sstable/sstable_iterator.h"
 
 namespace enigmadb::storage::sstable {
 
@@ -99,6 +100,10 @@ class SSTableReader {
      */
     SSTExpectResult<std::optional<memtable::MemtableValue>> get(
         const std::vector<uint8_t>& key);
+
+    SSTableIterator iterator() const {
+        return SSTableIterator(engine_, fh_, index_entries_);
+    }
 };
 
 }  // namespace enigmadb::storage::sstable
