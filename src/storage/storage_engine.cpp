@@ -176,8 +176,9 @@ Result<void> StorageEngine::put_record(
     if (!remove) {
         columns.push_back(WalColumn{column_name, value.value()});
     }
-    WalRecord record{op,     hlc_.next(), lsn_++, partition_key, clustering_key,
-                     columns};
+    auto sequence = lsn_++;
+    WalRecord record{
+        op, hlc_.next(), sequence, partition_key, clustering_key, columns};
 
     /* write and sync WAL */
     auto& writer = wal_writer_.value();
@@ -188,10 +189,11 @@ Result<void> StorageEngine::put_record(
 
     /* update memtable */
     if (remove) {
-        active_memtable_.remove(partition_key, clustering_key, column_name);
+        active_memtable_.remove(partition_key, clustering_key, column_name,
+                                sequence);
     } else {
         active_memtable_.put(partition_key, clustering_key, column_name,
-                             value.value());
+                             value.value(), sequence);
     }
 
     if (active_memtable_.should_flush()) {
@@ -336,14 +338,14 @@ Result<void> StorageEngine::recover() {
                 wal_record.op_type == WalOpType::DELETE_PARTITION) {
                 for (const auto& col : wal_record.columns) {
                     active_memtable_.remove(wal_record.partition_key,
-                                            wal_record.clustering_key,
-                                            col.name);
+                                            wal_record.clustering_key, col.name,
+                                            wal_record.sequence);
                 }
             } else {
                 for (const auto& col : wal_record.columns) {
                     active_memtable_.put(wal_record.partition_key,
                                          wal_record.clustering_key, col.name,
-                                         col.value);
+                                         col.value, wal_record.sequence);
                 }
             }
         }

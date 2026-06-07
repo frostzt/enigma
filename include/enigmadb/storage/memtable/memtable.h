@@ -43,6 +43,7 @@ struct MemtableValue {
     std::vector<uint8_t>
         data;           ///< Raw column value; empty when is_tombstone is true.
     bool is_tombstone;  ///< True if this entry represents a deletion.
+    uint64_t sequence;  ///< Unique sequence number for this record.
 };
 
 /**
@@ -80,10 +81,12 @@ class Memtable {
      * @param[in] clustering_key  Raw bytes of the clustering key.
      * @param[in] column_name     Column being written.
      * @param[in] value           Raw column value bytes.
+     * @param[in] sequence        Sequence number for this entry.
      */
     void put(const std::vector<uint8_t>& partition_key,
              const std::vector<uint8_t>& clustering_key,
-             const std::string& column_name, const std::vector<uint8_t>& value);
+             const std::string& column_name, const std::vector<uint8_t>& value,
+             uint64_t sequence);
 
     /**
      * @brief Marks a column as deleted by writing a tombstone.
@@ -95,10 +98,11 @@ class Memtable {
      * @param[in] partition_key   Raw bytes of the partition key.
      * @param[in] clustering_key  Raw bytes of the clustering key.
      * @param[in] column_name     Column to delete.
+     * @param[in] sequence        Sequence number for this entry.
      */
     void remove(const std::vector<uint8_t>& partition_key,
                 const std::vector<uint8_t>& clustering_key,
-                const std::string& column_name);
+                const std::string& column_name, uint64_t sequence);
 
     /**
      * @brief Point lookup for a single column value.

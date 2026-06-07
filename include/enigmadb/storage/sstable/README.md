@@ -51,7 +51,7 @@ Here is how I am thinking my SSTable to be:
 
 ```plaintext
 [Data Block 0]
-  Entry: key_len(4) | key | value_len(4) | value | is_tombstone(1)
+  Entry: key_len(4) | key | value_len(4) | value | is_tombstone(1) | sequence(8)
   Entry: ...
   Block size target: ~4KB (configurable)
 

@@ -27,7 +27,7 @@ SSTExpectResult<void> SSTableWriter::add(const std::vector<uint8_t>& key,
     auto value_len = value.data.size();
     auto required_size = /* key len */ 4 + /* key */ key_len +
                          /* value len */ 4 + /* value */ value_len +
-                         /* is_tombstone */ 1;
+                         /* is_tombstone */ 1 + /* sequence */ 8;
 
     /* check if we need to flush and create a new one */
     if (buffer_.size() + required_size > MAX_PAGING_SIZE_BYTES) {
@@ -53,6 +53,7 @@ SSTExpectResult<void> SSTableWriter::add(const std::vector<uint8_t>& key,
     offset = common::encode_bytes(value.data.data(), value_len, buffer_.data(),
                                   offset);
     offset = common::encode_uint8(value.is_tombstone, buffer_.data(), offset);
+    offset = common::encode_uint64(value.sequence, buffer_.data(), offset);
 
     /* add this key in the bloom filter */
     bloom_filter_.add(key);

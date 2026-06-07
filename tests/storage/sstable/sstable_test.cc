@@ -35,20 +35,22 @@ TEST(SSTableWriter, add_finish_verify) {
     auto bob_name_key = encode_composite_key(
         string_to_bytes("bob"), string_to_bytes("2026-01"), "name");
 
-    ASSERT_TRUE(writer
-                    .add(alice_age_key,
-                         memtable::MemtableValue{string_to_bytes("30"), false})
-                    .has_value());
+    ASSERT_TRUE(
+        writer
+            .add(alice_age_key,
+                 memtable::MemtableValue{string_to_bytes("30"), false, 1})
+            .has_value());
     ASSERT_TRUE(
         writer
             .add(alice_name_key,
-                 memtable::MemtableValue{string_to_bytes("Alice"), false})
+                 memtable::MemtableValue{string_to_bytes("Alice"), false, 2})
             .has_value());
 
-    ASSERT_TRUE(writer
-                    .add(bob_name_key,
-                         memtable::MemtableValue{string_to_bytes("Bob"), false})
-                    .has_value());
+    ASSERT_TRUE(
+        writer
+            .add(bob_name_key,
+                 memtable::MemtableValue{string_to_bytes("Bob"), false, 3})
+            .has_value());
 
     auto finish_result = writer.finish();
     ASSERT_TRUE(finish_result.has_value());
@@ -98,7 +100,8 @@ TEST(SSTableWriter, single_entry_finish) {
                                     string_to_bytes("2026-01"), "age");
 
     ASSERT_TRUE(
-        writer.add(key, memtable::MemtableValue{string_to_bytes("30"), false})
+        writer
+            .add(key, memtable::MemtableValue{string_to_bytes("30"), false, 1})
             .has_value());
 
     auto finish_result = writer.finish();
@@ -129,14 +132,14 @@ TEST(SSTableWriter, multiple_records) {
     auto& writer = crewriter_result.value();
 
     for (size_t i = 10; i < 60; i++) {
-        ASSERT_TRUE(
-            writer
-                .add(encode_composite_key(
-                         string_to_bytes("user:" + std::to_string(i)),
-                         string_to_bytes("2026-01"), "age"),
-                     memtable::MemtableValue{
-                         string_to_bytes("value_" + std::to_string(i)), false})
-                .has_value());
+        ASSERT_TRUE(writer
+                        .add(encode_composite_key(
+                                 string_to_bytes("user:" + std::to_string(i)),
+                                 string_to_bytes("2026-01"), "age"),
+                             memtable::MemtableValue{
+                                 string_to_bytes("value_" + std::to_string(i)),
+                                 false, i})
+                        .has_value());
     }
 
     auto finish_result = writer.finish();
@@ -173,7 +176,7 @@ TEST(SSTableWriter, tombstone_record) {
         writer
             .add(encode_composite_key(string_to_bytes("alice"),
                                       string_to_bytes("2026-01"), "age"),
-                 memtable::MemtableValue{string_to_bytes("30"), true})
+                 memtable::MemtableValue{string_to_bytes("30"), true, 1})
             .has_value());
 
     auto finish_result = writer.finish();

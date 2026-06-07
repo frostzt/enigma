@@ -52,14 +52,14 @@ TEST(sstable_iterator, simple_loop) {
     auto& writer = crewriter_result.value();
 
     for (size_t i = 10; i < 60; i++) {
-        ASSERT_TRUE(
-            writer
-                .add(encode_composite_key(
-                         string_to_bytes("user:" + std::to_string(i)),
-                         string_to_bytes("2026-01"), "age"),
-                     memtable::MemtableValue{
-                         string_to_bytes("value_" + std::to_string(i)), false})
-                .has_value());
+        ASSERT_TRUE(writer
+                        .add(encode_composite_key(
+                                 string_to_bytes("user:" + std::to_string(i)),
+                                 string_to_bytes("2026-01"), "age"),
+                             memtable::MemtableValue{
+                                 string_to_bytes("value_" + std::to_string(i)),
+                                 false, i})
+                        .has_value());
     }
 
     auto finish_result = writer.finish();
@@ -93,9 +93,10 @@ TEST(sstable_iterator, exhaustion) {
 
     ASSERT_TRUE(
         writer
-            .add(encode_composite_key(string_to_bytes("user:sourav"),
-                                      string_to_bytes("2026-01"), "age"),
-                 memtable::MemtableValue{string_to_bytes("value_123"), false})
+            .add(
+                encode_composite_key(string_to_bytes("user:sourav"),
+                                     string_to_bytes("2026-01"), "age"),
+                memtable::MemtableValue{string_to_bytes("value_123"), false, 1})
             .has_value());
 
     auto finish_result = writer.finish();
@@ -131,14 +132,14 @@ TEST(sstable_iterator, large_key_value_pairs) {
     auto& writer = crewriter_result.value();
 
     for (size_t i = 10; i < 50000; i++) {
-        ASSERT_TRUE(
-            writer
-                .add(encode_composite_key(
-                         string_to_bytes("user:" + std::to_string(i)),
-                         string_to_bytes("2026-01"), "age"),
-                     memtable::MemtableValue{
-                         string_to_bytes("value_" + std::to_string(i)), false})
-                .has_value());
+        ASSERT_TRUE(writer
+                        .add(encode_composite_key(
+                                 string_to_bytes("user:" + std::to_string(i)),
+                                 string_to_bytes("2026-01"), "age"),
+                             memtable::MemtableValue{
+                                 string_to_bytes("value_" + std::to_string(i)),
+                                 false, 1})
+                        .has_value());
     }
 
     auto finish_result = writer.finish();

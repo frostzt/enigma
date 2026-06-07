@@ -196,10 +196,19 @@ SSTExpectResult<std::optional<memtable::MemtableValue>> SSTableReader::get(
             common::decode_uint8(block_buffer.data(), block_offset);
         block_offset += 1;
 
+        if (block_offset + 8 > it->block_size) {
+            return SSTExpectResult<std::optional<memtable::MemtableValue>>::err(
+                common::Error{common::ErrorCode::BAD_FILE,
+                              "out of range read for sequence"});
+        }
+        auto sequence =
+            common::decode_uint64(block_buffer.data(), block_offset);
+        block_offset += 8;
+
         /* eqality: neither a < b nor b < a which means a == b */
         if (!cmp(key, current_key) && !cmp(current_key, key)) {
-            memtable::MemtableValue value{current_value,
-                                          static_cast<bool>(tombstone)};
+            memtable::MemtableValue value{
+                current_value, static_cast<bool>(tombstone), sequence};
             return SSTExpectResult<std::optional<memtable::MemtableValue>>::ok(
                 value);
         } else if (cmp(key, current_key)) {

@@ -148,6 +148,16 @@ void SSTableIterator::next() {
         decode_uint8(block_buffer_.data(), block_offset_);
     block_offset_ += 1;
 
+    /* decode sequence */
+    if (block_offset_ + 8 > block_size) {
+        set_error(Error{ErrorCode::BAD_FILE, "out of range read for sequence"});
+        return;
+    }
+
+    current_value_.sequence =
+        decode_uint64(block_buffer_.data(), block_offset_);
+    block_offset_ += 8;
+
     valid_ = true;
 }
 
