@@ -27,29 +27,29 @@ SSTExpectResult<SSTableReader> SSTableReader::create(io::IOEngine& engine,
         return SSTExpectResult<SSTableReader>::err(size_result.err());
     }
     auto file_size = size_result.value();
-    if (file_size < 48) {
+    if (file_size < 56) {
         return SSTExpectResult<SSTableReader>::err(common::Error{
             common::ErrorCode::BAD_CONFIG, "file too small for SSTable"});
     }
 
     std::vector<uint8_t> footer_buffer;
-    footer_buffer.resize(48);
+    footer_buffer.resize(56);
 
     /* read footer */
     auto read_footer_result =
-        engine.read(fh, 48, footer_buffer.data(), file_size - 48);
+        engine.read(fh, 56, footer_buffer.data(), file_size - 56);
     if (!read_footer_result.has_value()) {
         return SSTExpectResult<SSTableReader>::err(read_footer_result.err());
     }
 
     /* read and validate magic */
-    if (std::memcmp(footer_buffer.data() + 34, MAGIC.data(), MAGIC_SIZE)) {
+    if (std::memcmp(footer_buffer.data() + 42, MAGIC.data(), MAGIC_SIZE)) {
         return SSTExpectResult<SSTableReader>::err(
             common::Error{common::ErrorCode::BAD_MAGIC, "invalid magic"});
     }
 
-    auto stored_checksum = common::decode_uint32(footer_buffer.data(), 30);
-    auto computed_checksum = common::compute_crc_32(footer_buffer.data(), 30);
+    auto stored_checksum = common::decode_uint32(footer_buffer.data(), 38);
+    auto computed_checksum = common::compute_crc_32(footer_buffer.data(), 38);
     if (stored_checksum != computed_checksum) {
         return SSTExpectResult<SSTableReader>::err(
             common::Error{common::ErrorCode::BAD_CONFIG, "invalid checksum"});
@@ -63,7 +63,6 @@ SSTExpectResult<SSTableReader> SSTableReader::create(io::IOEngine& engine,
     // TODO: Should create a two separate path here to validate offset for
     // filter block
     auto filter_block_size = common::decode_uint32(footer_buffer.data(), 20);
-
     if (filter_block_size < 2) {
         return SSTExpectResult<SSTableReader>::err(common::Error{
             common::ErrorCode::BAD_CONFIG, "invalid filter block size"});

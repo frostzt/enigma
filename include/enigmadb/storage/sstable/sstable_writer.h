@@ -91,6 +91,7 @@ class SSTableWriter {
     size_t current_block_start_offset_;  ///< File offset where the current
                                          ///< block starts.
     common::BloomFilter bloom_filter_;
+    uint64_t highest_sequence_;
 
     std::vector<IndexEntry>
         index_entries_;   ///< Accumulated index for all flushed blocks.
@@ -111,6 +112,7 @@ class SSTableWriter {
           current_file_offset_(0),
           current_block_start_offset_(0),
           bloom_filter_(estimated_keys, 0.01),
+          highest_sequence_(0),
           entry_count_(0) {
         buffer_.reserve(MAX_PAGING_SIZE_BYTES);
     }

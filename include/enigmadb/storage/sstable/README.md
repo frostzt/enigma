@@ -66,13 +66,14 @@ Here is how I am thinking my SSTable to be:
   num_hashes    (1)
   bit_array     (remaining bytes)
 
-[Footer — fixed 48 bytes]
+[Footer — fixed 56 bytes]
   index_block_offset  (8)
   index_block_size    (4)
   filter_block_offset (8)
   filter_block_size   (4)
   entry_count         (4)
   format_version      (2)
+  highest_sequence    (8)
   footer_checksum     (4)
   magic "ENIGSSTB"    (8)
   padding             (6)
