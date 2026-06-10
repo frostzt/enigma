@@ -7,9 +7,11 @@
 #ifndef ENIGMA_DB_MERGE_ITERATOR_H
 #define ENIGMA_DB_MERGE_ITERATOR_H
 
+#include <optional>
 #include <queue>
 #include <vector>
 
+#include "enigmadb/common/error.h"
 #include "enigmadb/storage/iterator.h"
 #include "enigmadb/storage/key_encoding.h"
 #include "enigmadb/storage/memtable/memtable.h"
@@ -43,7 +45,8 @@ struct HeapCompare {
 
 class MergeIterator : public Iterator {
    public:
-    explicit MergeIterator(std::vector<Iterator*> sources);
+    explicit MergeIterator(std::vector<Iterator*> sources)
+        : sources_(std::move(sources)), error_(std::nullopt), valid_(false) {}
 
     bool valid() const override;
     void seek_to_first() override;
@@ -53,9 +56,20 @@ class MergeIterator : public Iterator {
     common::ExpectResult<void, common::Error> status() const override;
 
    private:
+    std::vector<Iterator*> sources_;
+
     std::priority_queue<HeapEntry, std::vector<HeapEntry>, HeapCompare> heap_;
+
+    std::optional<common::Error> error_;
+
+    std::vector<uint8_t> current_key_;
+    memtable::MemtableValue current_value_;
+    bool valid_;
+
+    void advance_to_winner();
+    void advance_and_repush(Iterator* src);
 };
 
 }  // namespace enigmadb::storage
 
-#endif  // ENIGMA_DB_BLOOM_FILTER_H
+#endif  // ENIGMA_DB_MERGE_ITERATOR_H
