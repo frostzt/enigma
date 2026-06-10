@@ -172,3 +172,363 @@ TEST(StorageEngine, handle_empty_memtable_flush) {
                                std::filesystem::directory_iterator{});
     ASSERT_TRUE(count == 0);
 }
+
+TEST(StorageEngine, high_water_mark_from_sstable) {
+    std::string data_dir_path = "./storage_engine_tests";
+    Tempdir testdir(data_dir_path);
+
+    {
+        PosixIOEngine engine;
+        auto storage_engine_result =
+            StorageEngine::open(engine, "./storage_engine_tests", 512);
+        ASSERT_TRUE(storage_engine_result.has_value());
+
+        auto& storage_engine = storage_engine_result.value();
+
+        ASSERT_TRUE(storage_engine
+                        .put(string_to_bytes("alice"),
+                             string_to_bytes("2026-05"), "age",
+                             string_to_bytes("32"))
+                        .has_value());
+        ASSERT_TRUE(storage_engine
+                        .put(string_to_bytes("john"),
+                             string_to_bytes("2026-05"), "age",
+                             string_to_bytes("30"))
+                        .has_value());
+        ASSERT_TRUE(storage_engine
+                        .put(string_to_bytes("sourav"),
+                             string_to_bytes("2026-05"), "age",
+                             string_to_bytes("26"))
+                        .has_value());
+
+        ASSERT_TRUE(storage_engine.flush().has_value());
+    }
+
+    {
+        PosixIOEngine engine;
+        auto storage_engine_result =
+            StorageEngine::open(engine, "./storage_engine_tests", 512);
+        ASSERT_TRUE(storage_engine_result.has_value());
+
+        auto& storage_engine = storage_engine_result.value();
+
+        ASSERT_EQ(storage_engine.latest_lsn(), 3);
+
+        ASSERT_TRUE(storage_engine
+                        .put(string_to_bytes("bob"), string_to_bytes("2025-05"),
+                             "name", string_to_bytes("Bob the Builder"))
+                        .has_value());
+
+        ASSERT_EQ(storage_engine.latest_lsn(), 4);
+
+        /* assert counters */
+        auto alice_record = storage_engine
+                                .get(string_to_bytes("alice"),
+                                     string_to_bytes("2026-05"), "age")
+                                .value()
+                                .value();
+        ASSERT_EQ(alice_record.sequence, 0);
+        ASSERT_EQ(bytes_to_string(alice_record.data), "32");
+
+        auto john_record =
+            storage_engine
+                .get(string_to_bytes("john"), string_to_bytes("2026-05"), "age")
+                .value()
+                .value();
+        ASSERT_EQ(john_record.sequence, 1);
+        ASSERT_EQ(bytes_to_string(john_record.data), "30");
+
+        auto sourav_record = storage_engine
+                                 .get(string_to_bytes("sourav"),
+                                      string_to_bytes("2026-05"), "age")
+                                 .value()
+                                 .value();
+        ASSERT_EQ(sourav_record.sequence, 2);
+        ASSERT_EQ(bytes_to_string(sourav_record.data), "26");
+    }
+}
+
+TEST(StorageEngine, high_water_mark_from_wal_replay) {
+    std::string data_dir_path = "./storage_engine_tests";
+    Tempdir testdir(data_dir_path);
+
+    {
+        PosixIOEngine engine;
+        auto storage_engine_result =
+            StorageEngine::open(engine, "./storage_engine_tests", 512);
+        ASSERT_TRUE(storage_engine_result.has_value());
+
+        auto& storage_engine = storage_engine_result.value();
+
+        ASSERT_TRUE(storage_engine
+                        .put(string_to_bytes("alice"),
+                             string_to_bytes("2026-05"), "age",
+                             string_to_bytes("32"))
+                        .has_value());
+        ASSERT_TRUE(storage_engine
+                        .put(string_to_bytes("john"),
+                             string_to_bytes("2026-05"), "age",
+                             string_to_bytes("30"))
+                        .has_value());
+        ASSERT_TRUE(storage_engine
+                        .put(string_to_bytes("sourav"),
+                             string_to_bytes("2026-05"), "age",
+                             string_to_bytes("26"))
+                        .has_value());
+    }
+
+    {
+        PosixIOEngine engine;
+        auto storage_engine_result =
+            StorageEngine::open(engine, "./storage_engine_tests", 512);
+        ASSERT_TRUE(storage_engine_result.has_value());
+
+        auto& storage_engine = storage_engine_result.value();
+
+        ASSERT_EQ(storage_engine.latest_lsn(), 3);
+
+        ASSERT_TRUE(storage_engine
+                        .put(string_to_bytes("bob"), string_to_bytes("2025-05"),
+                             "name", string_to_bytes("Bob the Builder"))
+                        .has_value());
+
+        ASSERT_EQ(storage_engine.latest_lsn(), 4);
+
+        /* assert counters */
+        auto alice_record = storage_engine
+                                .get(string_to_bytes("alice"),
+                                     string_to_bytes("2026-05"), "age")
+                                .value()
+                                .value();
+        ASSERT_EQ(alice_record.sequence, 0);
+        ASSERT_EQ(bytes_to_string(alice_record.data), "32");
+
+        auto john_record =
+            storage_engine
+                .get(string_to_bytes("john"), string_to_bytes("2026-05"), "age")
+                .value()
+                .value();
+        ASSERT_EQ(john_record.sequence, 1);
+        ASSERT_EQ(bytes_to_string(john_record.data), "30");
+
+        auto sourav_record = storage_engine
+                                 .get(string_to_bytes("sourav"),
+                                      string_to_bytes("2026-05"), "age")
+                                 .value()
+                                 .value();
+        ASSERT_EQ(sourav_record.sequence, 2);
+        ASSERT_EQ(bytes_to_string(sourav_record.data), "26");
+    }
+}
+
+TEST(StorageEngine, high_water_mark_from_sstable_and_wal_replay) {
+    std::string data_dir_path = "./storage_engine_tests";
+    Tempdir testdir(data_dir_path);
+
+    {
+        PosixIOEngine engine;
+        auto storage_engine_result =
+            StorageEngine::open(engine, "./storage_engine_tests", 512);
+        ASSERT_TRUE(storage_engine_result.has_value());
+
+        auto& storage_engine = storage_engine_result.value();
+
+        ASSERT_TRUE(storage_engine
+                        .put(string_to_bytes("alice"),
+                             string_to_bytes("2026-05"), "age",
+                             string_to_bytes("32"))
+                        .has_value());
+        ASSERT_TRUE(storage_engine
+                        .put(string_to_bytes("john"),
+                             string_to_bytes("2026-05"), "age",
+                             string_to_bytes("30"))
+                        .has_value());
+        ASSERT_TRUE(storage_engine
+                        .put(string_to_bytes("sourav"),
+                             string_to_bytes("2026-05"), "age",
+                             string_to_bytes("26"))
+                        .has_value());
+
+        ASSERT_TRUE(storage_engine.flush().has_value());
+
+        ASSERT_TRUE(storage_engine
+                        .put(string_to_bytes("gourav"),
+                             string_to_bytes("2026-05"), "age",
+                             string_to_bytes("24"))
+                        .has_value());
+
+        ASSERT_TRUE(storage_engine
+                        .put(string_to_bytes("tuffy"),
+                             string_to_bytes("2026-05"), "age",
+                             string_to_bytes("5"))
+                        .has_value());
+    }
+
+    {
+        PosixIOEngine engine;
+        auto storage_engine_result =
+            StorageEngine::open(engine, "./storage_engine_tests", 512);
+        ASSERT_TRUE(storage_engine_result.has_value());
+
+        auto& storage_engine = storage_engine_result.value();
+
+        ASSERT_EQ(storage_engine.latest_lsn(), 5);
+
+        ASSERT_TRUE(storage_engine
+                        .put(string_to_bytes("bob"), string_to_bytes("2025-05"),
+                             "name", string_to_bytes("Bob the Builder"))
+                        .has_value());
+
+        ASSERT_EQ(storage_engine.latest_lsn(), 6);
+
+        /* assert counters */
+        auto alice_record = storage_engine
+                                .get(string_to_bytes("alice"),
+                                     string_to_bytes("2026-05"), "age")
+                                .value()
+                                .value();
+        ASSERT_EQ(alice_record.sequence, 0);
+        ASSERT_EQ(bytes_to_string(alice_record.data), "32");
+
+        auto john_record =
+            storage_engine
+                .get(string_to_bytes("john"), string_to_bytes("2026-05"), "age")
+                .value()
+                .value();
+        ASSERT_EQ(john_record.sequence, 1);
+        ASSERT_EQ(bytes_to_string(john_record.data), "30");
+
+        auto sourav_record = storage_engine
+                                 .get(string_to_bytes("sourav"),
+                                      string_to_bytes("2026-05"), "age")
+                                 .value()
+                                 .value();
+        ASSERT_EQ(sourav_record.sequence, 2);
+        ASSERT_EQ(bytes_to_string(sourav_record.data), "26");
+
+        auto gourav_record = storage_engine
+                                 .get(string_to_bytes("gourav"),
+                                      string_to_bytes("2026-05"), "age")
+                                 .value()
+                                 .value();
+        ASSERT_EQ(gourav_record.sequence, 3);
+        ASSERT_EQ(bytes_to_string(gourav_record.data), "24");
+
+        auto tuffy_record = storage_engine
+                                .get(string_to_bytes("tuffy"),
+                                     string_to_bytes("2026-05"), "age")
+                                .value()
+                                .value();
+        ASSERT_EQ(tuffy_record.sequence, 4);
+        ASSERT_EQ(bytes_to_string(tuffy_record.data), "5");
+    }
+}
+
+TEST(StorageEngine,
+     high_water_mark_from_sstable_and_wal_replay_with_tombstone) {
+    std::string data_dir_path = "./storage_engine_tests";
+    Tempdir testdir(data_dir_path);
+
+    {
+        PosixIOEngine engine;
+        auto storage_engine_result =
+            StorageEngine::open(engine, "./storage_engine_tests", 512);
+        ASSERT_TRUE(storage_engine_result.has_value());
+
+        auto& storage_engine = storage_engine_result.value();
+
+        ASSERT_TRUE(storage_engine
+                        .put(string_to_bytes("alice"),
+                             string_to_bytes("2026-05"), "age",
+                             string_to_bytes("32"))
+                        .has_value());
+        ASSERT_TRUE(storage_engine
+                        .put(string_to_bytes("john"),
+                             string_to_bytes("2026-05"), "age",
+                             string_to_bytes("30"))
+                        .has_value());
+        ASSERT_TRUE(storage_engine
+                        .put(string_to_bytes("sourav"),
+                             string_to_bytes("2026-05"), "age",
+                             string_to_bytes("26"))
+                        .has_value());
+
+        ASSERT_TRUE(storage_engine.flush().has_value());
+
+        ASSERT_TRUE(storage_engine
+                        .put(string_to_bytes("gourav"),
+                             string_to_bytes("2026-05"), "age",
+                             string_to_bytes("24"))
+                        .has_value());
+
+        ASSERT_TRUE(storage_engine
+                        .put(string_to_bytes("tuffy"),
+                             string_to_bytes("2026-05"), "age",
+                             string_to_bytes("5"))
+                        .has_value());
+
+        ASSERT_TRUE(storage_engine
+                        .remove(string_to_bytes("tuffy"),
+                                string_to_bytes("2026-05"), "age")
+                        .has_value());
+    }
+
+    {
+        PosixIOEngine engine;
+        auto storage_engine_result =
+            StorageEngine::open(engine, "./storage_engine_tests", 512);
+        ASSERT_TRUE(storage_engine_result.has_value());
+
+        auto& storage_engine = storage_engine_result.value();
+
+        ASSERT_EQ(storage_engine.latest_lsn(), 6);
+
+        ASSERT_TRUE(storage_engine
+                        .put(string_to_bytes("bob"), string_to_bytes("2025-05"),
+                             "name", string_to_bytes("Bob the Builder"))
+                        .has_value());
+
+        ASSERT_EQ(storage_engine.latest_lsn(), 7);
+
+        /* assert counters */
+        auto alice_record = storage_engine
+                                .get(string_to_bytes("alice"),
+                                     string_to_bytes("2026-05"), "age")
+                                .value()
+                                .value();
+        ASSERT_EQ(alice_record.sequence, 0);
+        ASSERT_EQ(bytes_to_string(alice_record.data), "32");
+
+        auto john_record =
+            storage_engine
+                .get(string_to_bytes("john"), string_to_bytes("2026-05"), "age")
+                .value()
+                .value();
+        ASSERT_EQ(john_record.sequence, 1);
+        ASSERT_EQ(bytes_to_string(john_record.data), "30");
+
+        auto sourav_record = storage_engine
+                                 .get(string_to_bytes("sourav"),
+                                      string_to_bytes("2026-05"), "age")
+                                 .value()
+                                 .value();
+        ASSERT_EQ(sourav_record.sequence, 2);
+        ASSERT_EQ(bytes_to_string(sourav_record.data), "26");
+
+        auto gourav_record = storage_engine
+                                 .get(string_to_bytes("gourav"),
+                                      string_to_bytes("2026-05"), "age")
+                                 .value()
+                                 .value();
+        ASSERT_EQ(gourav_record.sequence, 3);
+        ASSERT_EQ(bytes_to_string(gourav_record.data), "24");
+
+        auto tuffy_record = storage_engine
+                                .get(string_to_bytes("tuffy"),
+                                     string_to_bytes("2026-05"), "age")
+                                .value()
+                                .value();
+        ASSERT_EQ(tuffy_record.sequence, 4);
+        ASSERT_EQ(bytes_to_string(tuffy_record.data), "5");
+    }
+}

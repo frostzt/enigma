@@ -84,14 +84,15 @@ class StorageEngine {
                   wal::WalWriter wal_writer, uint64_t memtable_size,
                   memtable::Memtable active_memtable,
                   std::vector<sstable::SSTableReader> sst_readers,
-                  uint64_t next_wal_seq, uint64_t next_sst_seq)
+                  uint64_t next_wal_seq, uint64_t next_sst_seq,
+                  uint64_t highest_sequence = 0)
         : engine_(engine),
           data_dir_(std::move(data_dir)),
           wal_writer_(std::move(wal_writer)),
           memtable_size_(memtable_size),
           active_memtable_(std::move(active_memtable)),
           sst_readers_(std::move(sst_readers)),
-          lsn_(0),
+          lsn_(highest_sequence),
           next_wal_seq_(next_wal_seq),
           next_sst_seq_(next_sst_seq) {}
 
@@ -148,7 +149,7 @@ class StorageEngine {
      * @return Success, or an error if a WAL cannot be read or the
      *         flush fails.
      */
-    Result<void> recover();
+    Result<uint64_t> recover();
 
    public:
     /**
@@ -240,6 +241,8 @@ class StorageEngine {
      *         or sync fails.
      */
     Result<void> flush();
+
+    uint64_t latest_lsn() const { return lsn_; };
 };
 
 }  // namespace enigmadb::storage

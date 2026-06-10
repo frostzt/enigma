@@ -45,6 +45,7 @@ class SSTableReader {
     std::vector<IndexEntry>
         index_entries_;  ///< In-memory copy of the index block.
     common::BloomFilter bloom_filter_;
+    MinimalSSTableFooter footer_;
 
     /**
      * @brief Private constructor; use SSTableReader::create() instead.
@@ -56,12 +57,13 @@ class SSTableReader {
      */
     SSTableReader(io::IOEngine& engine, io::FileHandle fh,
                   const std::string& path, std::vector<IndexEntry> idx_entries,
-                  common::BloomFilter blf)
+                  common::BloomFilter blf, MinimalSSTableFooter footer_)
         : engine_(engine),
           fh_(std::move(fh)),
           path_(path),
           index_entries_(std::move(idx_entries)),
-          bloom_filter_(std::move(blf)) {}
+          bloom_filter_(std::move(blf)),
+          footer_(std::move(footer_)) {}
 
    public:
     /**
@@ -100,6 +102,10 @@ class SSTableReader {
      */
     SSTExpectResult<std::optional<memtable::MemtableValue>> get(
         const std::vector<uint8_t>& key);
+
+    SSTExpectResult<MinimalSSTableFooter> get_footer() const {
+        return footer_;
+    };
 
     SSTableIterator iterator() const {
         return SSTableIterator(engine_, fh_, index_entries_);

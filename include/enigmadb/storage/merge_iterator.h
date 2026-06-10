@@ -23,8 +23,8 @@ struct HeapEntry {
 struct HeapCompare {
     CompositeKeyComparator key_cmp;
     bool operator()(const HeapEntry& a, const HeapEntry& b) const {
-        auto akey = a.source_->key();
-        auto bkey = b.source_->key();
+        const auto& akey = a.source_->key();
+        const auto& bkey = b.source_->key();
 
         // if a's key < b's key  → a is HIGHER priority → return false
         if (key_cmp(akey, bkey)) return false;
@@ -33,6 +33,11 @@ struct HeapCompare {
         if (key_cmp(bkey, akey)) return true;
 
         // keys equal → newer (higher seq) wins the top → a lower if older
+        if (a.source_->value().sequence < b.source_->value().sequence) {
+            return true;
+        }
+
+        return false;
     }
 };
 

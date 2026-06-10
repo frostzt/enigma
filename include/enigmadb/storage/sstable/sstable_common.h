@@ -48,7 +48,6 @@ struct MinimalSSTableFooter {
     uint32_t filter_block_size;
     uint32_t entry_count;
     uint16_t format_version;  ///< Footer format stored as 2 bytes
-    uint32_t footer_checksum;
     uint64_t highest_sequence;
 };
 
