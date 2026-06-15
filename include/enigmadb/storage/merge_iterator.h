@@ -65,7 +65,6 @@ class MergeIterator : public Iterator {
     std::vector<uint8_t> current_key_;
     memtable::MemtableValue current_value_;
     bool valid_;
-    bool is_errored_;
 
     void advance_to_winner();
     void advance_and_repush(Iterator* src);

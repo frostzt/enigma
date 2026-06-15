@@ -27,13 +27,16 @@ const memtable::MemtableValue& MergeIterator::value() const {
 
 void MergeIterator::set_error(Error err) {
     error_ = std::move(err);
-    is_errored_ = true;
     valid_ = false;
 }
 
-bool MergeIterator::is_error() const { return is_errored_; }
+bool MergeIterator::is_error() const { return error_.has_value(); }
 
 void MergeIterator::seek_to_first() {
+    /* clear the heap */
+    heap_ =
+        std::priority_queue<HeapEntry, std::vector<HeapEntry>, HeapCompare>();
+
     /* advance all sources */
     for (auto source : sources_) {
         source->seek_to_first();
@@ -75,8 +78,10 @@ void MergeIterator::advance_to_winner() {
     /* advance the iterator */
     advance_and_repush(heap_entry.source_);
 
-    /* deduplicate entries
-     * TODO: This needs to use cmp */
+    /* deduplicate entries based on the current key and the key
+     * on the top of the heap.
+     *
+     * TODO: For future for more resiliency can be switched to cmp */
     while (!heap_.empty() && heap_.top().source_->key() == current_key_) {
         auto top = heap_.top();
         heap_.pop();
