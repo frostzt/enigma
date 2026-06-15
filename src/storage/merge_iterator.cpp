@@ -25,17 +25,30 @@ const memtable::MemtableValue& MergeIterator::value() const {
     return current_value_;
 }
 
+void MergeIterator::set_error(Error err) {
+    error_ = std::move(err);
+    is_errored_ = true;
+    valid_ = false;
+}
+
+bool MergeIterator::is_error() const { return is_errored_; }
+
 void MergeIterator::seek_to_first() {
     /* advance all sources */
     for (auto source : sources_) {
         source->seek_to_first();
         if (source->valid()) {
             heap_.push(HeapEntry{source});
+        } else if (!source->status().has_value()) {
+            set_error(source->status().err());
+            valid_ = false;
         }
     }
 
     /* get the latest and copy over */
-    advance_to_winner();
+    if (is_error()) {
+        advance_to_winner();
+    }
 }
 
 ExpectResult<void, common::Error> MergeIterator::status() const {
@@ -51,6 +64,8 @@ void MergeIterator::advance_to_winner() {
         return;
     }
 
+    valid_ = true;
+
     /* get value from top and copy */
     auto heap_entry = heap_.top();
     current_key_ = heap_entry.source_->key();
@@ -60,7 +75,8 @@ void MergeIterator::advance_to_winner() {
     /* advance the iterator */
     advance_and_repush(heap_entry.source_);
 
-    /* deduplicate entries */
+    /* deduplicate entries
+     * TODO: This needs to use cmp */
     while (!heap_.empty() && heap_.top().source_->key() == current_key_) {
         auto top = heap_.top();
         heap_.pop();
@@ -72,12 +88,12 @@ void MergeIterator::advance_and_repush(Iterator* src) {
     src->next();
     if (src->valid()) {
         heap_.push(HeapEntry{src});
+    } else if (is_error()) { /* we have an actual error */
+        valid_ = false;
+        return;
     }
 }
 
-void MergeIterator::next() {
-    advance_to_winner();
-    valid_ = true;
-}
+void MergeIterator::next() { advance_to_winner(); }
 
-};  // namespace enigmadb::storage
+}  // namespace enigmadb::storage
