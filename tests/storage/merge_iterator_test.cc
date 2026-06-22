@@ -3,6 +3,8 @@
 #include "enigmadb/common/tempdir.h"
 #include "enigmadb/common/utils.h"
 #include "enigmadb/io/posix_io_engine.h"
+#include "enigmadb/storage/fake_iterator.h"
+#include "enigmadb/storage/key_encoding.h"
 #include "enigmadb/storage/sstable/sstable_reader.h"
 #include "enigmadb/storage/storage_engine.h"
 #include "gtest/gtest.h"
@@ -64,4 +66,20 @@ TEST(merge_iterator, same_key_in_two_sources) {
 
     HeapCompare cmp;
     ASSERT_TRUE(cmp(he1, he2));
+}
+
+TEST(merge_iterator, iterator_compare) {
+    FakeIterator older(
+        encode_composite_key(string_to_bytes("partition"),
+                             string_to_bytes("cluster"), "column"),
+        MemtableValue{string_to_bytes("value"), false, 1});
+    FakeIterator newer(
+        encode_composite_key(string_to_bytes("partition"),
+                             string_to_bytes("cluster"), "column"),
+        MemtableValue{string_to_bytes("value"), false, 2});
+
+    HeapCompare cmp;
+
+    EXPECT_TRUE(cmp(HeapEntry{&older}, HeapEntry{&newer}));
+    EXPECT_FALSE(cmp(HeapEntry{&newer}, HeapEntry{&older}));
 }

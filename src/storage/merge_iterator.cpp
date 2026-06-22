@@ -36,6 +36,12 @@ void MergeIterator::seek_to_first() {
     /* clear the heap */
     heap_ =
         std::priority_queue<HeapEntry, std::vector<HeapEntry>, HeapCompare>();
+    error_ = std::nullopt;
+    valid_ = false;
+    current_key_.clear();
+    current_value_.data.clear();
+    current_value_.is_tombstone = false;
+    current_value_.sequence = 0;
 
     /* advance all sources */
     for (auto source : sources_) {
@@ -44,12 +50,11 @@ void MergeIterator::seek_to_first() {
             heap_.push(HeapEntry{source});
         } else if (!source->status().has_value()) {
             set_error(source->status().err());
-            valid_ = false;
         }
     }
 
     /* get the latest and copy over */
-    if (is_error()) {
+    if (!is_error()) {
         advance_to_winner();
     }
 }
@@ -81,7 +86,14 @@ void MergeIterator::advance_to_winner() {
     /* deduplicate entries based on the current key and the key
      * on the top of the heap.
      *
-     * TODO: For future for more resiliency can be switched to cmp */
+     * WHY IS THIS SAFE? Deterministic encoding.
+     * The key encoding is quite trivial which is
+     * partition key + clustering key + column name
+     *
+     * In every case no matter insert/update/delete those three
+     * will always be present which makes the keys identical and
+     * therefore quite trivial to match.
+     */
     while (!heap_.empty() && heap_.top().source_->key() == current_key_) {
         auto top = heap_.top();
         heap_.pop();
@@ -93,9 +105,8 @@ void MergeIterator::advance_and_repush(Iterator* src) {
     src->next();
     if (src->valid()) {
         heap_.push(HeapEntry{src});
-    } else if (is_error()) { /* we have an actual error */
-        valid_ = false;
-        return;
+    } else if (!src->status().has_value()) { /* we have an actual error */
+        set_error(src->status().err());
     }
 }
 

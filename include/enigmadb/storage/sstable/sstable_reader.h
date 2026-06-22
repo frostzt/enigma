@@ -99,6 +99,10 @@ class SSTableReader {
      *         in std::optional, or std::nullopt if the key is not found.
      *         Returns an error if the data block read fails or the block
      *         is malformed.
+     *
+     * TODO: We need to move this either to use `SSTExpectResult` or
+     * simply use `std::optional` - this makes it pretty weird when
+     * reading this value.
      */
     SSTExpectResult<std::optional<memtable::MemtableValue>> get(
         const std::vector<uint8_t>& key);
