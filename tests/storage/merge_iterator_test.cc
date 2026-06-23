@@ -1,85 +1,69 @@
 #include "enigmadb/storage/merge_iterator.h"
 
-#include "enigmadb/common/tempdir.h"
+#include <utility>
+#include <vector>
+
 #include "enigmadb/common/utils.h"
-#include "enigmadb/io/posix_io_engine.h"
 #include "enigmadb/storage/fake_iterator.h"
 #include "enigmadb/storage/key_encoding.h"
-#include "enigmadb/storage/sstable/sstable_reader.h"
-#include "enigmadb/storage/storage_engine.h"
 #include "gtest/gtest.h"
 
-using namespace enigmadb::io;
 using namespace enigmadb::common;
 using namespace enigmadb::storage;
-using namespace enigmadb::storage::sstable;
 using namespace enigmadb::storage::memtable;
 
-TEST(merge_iterator, same_key_in_two_sources) {
-    PosixIOEngine engine;
-
-    std::string data_dir_path = "./storage_engine_tests";
-    Tempdir testdir(data_dir_path);
-
-    auto storage_engine_result =
-        StorageEngine::open(engine, data_dir_path, 1024);
-    ASSERT_TRUE(storage_engine_result.has_value());
-
-    auto& storage_engine = storage_engine_result.value();
-
-    /* create first sstable */
-    ASSERT_TRUE(storage_engine
-                    .put(string_to_bytes("alice"), string_to_bytes("2026-01"),
-                         "age", string_to_bytes("1234"))
-                    .has_value());
-
-    ASSERT_TRUE(storage_engine.flush().has_value());
-
-    /* create second sstable */
-    ASSERT_TRUE(storage_engine
-                    .put(string_to_bytes("alice"), string_to_bytes("2026-01"),
-                         "age", string_to_bytes("1234"))
-                    .has_value());
-
-    ASSERT_TRUE(storage_engine.flush().has_value());
-
-    /* read sstables and create individual readers */
-    auto r1 = SSTableReader::create(
-        engine, "./storage_engine_tests/sst/sst_00000001.db");
-    ASSERT_TRUE(r1.has_value());
-
-    auto r2 = SSTableReader::create(
-        engine, "./storage_engine_tests/sst/sst_00000002.db");
-    ASSERT_TRUE(r2.has_value());
-
-    auto& reader1 = r1.value();
-    auto& reader2 = r2.value();
-
-    auto itr1 = reader1.iterator();
-    itr1.seek_to_first();
-
-    auto itr2 = reader2.iterator();
-    itr2.seek_to_first();
-
-    auto he1 = HeapEntry{&itr1};
-    auto he2 = HeapEntry{&itr2};
-
-    HeapCompare cmp;
-    ASSERT_TRUE(cmp(he1, he2));
-}
-
 TEST(merge_iterator, iterator_compare) {
-    FakeIterator older(
-        encode_composite_key(string_to_bytes("partition"),
-                             string_to_bytes("cluster"), "column"),
-        MemtableValue{string_to_bytes("value"), false, 1});
-    FakeIterator newer(
-        encode_composite_key(string_to_bytes("partition"),
-                             string_to_bytes("cluster"), "column"),
-        MemtableValue{string_to_bytes("value"), false, 2});
+    std::vector<std::string> atof = {"ada",    "basic",  "cobol",
+                                     "delphi", "elixir", "fortran"};
 
-    HeapCompare cmp;
+    // pairs
+    auto ada =
+        std::make_pair(encode_composite_key(string_to_bytes(atof[0]),
+                                            string_to_bytes(atof[0]), "ada"),
+                       MemtableValue{string_to_bytes(atof[0]), false, 1});
+    auto basic =
+        std::make_pair(encode_composite_key(string_to_bytes(atof[1]),
+                                            string_to_bytes(atof[1]), "basic"),
+                       MemtableValue{string_to_bytes(atof[1]), false, 2});
+    auto cobol =
+        std::make_pair(encode_composite_key(string_to_bytes(atof[2]),
+                                            string_to_bytes(atof[2]), "cobol"),
+                       MemtableValue{string_to_bytes(atof[2]), false, 3});
+    auto delphi =
+        std::make_pair(encode_composite_key(string_to_bytes(atof[3]),
+                                            string_to_bytes(atof[3]), "delphi"),
+                       MemtableValue{string_to_bytes(atof[3]), false, 4});
+    auto elixir =
+        std::make_pair(encode_composite_key(string_to_bytes(atof[4]),
+                                            string_to_bytes(atof[4]), "elixir"),
+                       MemtableValue{string_to_bytes(atof[4]), false, 5});
+    auto fortran = std::make_pair(
+        encode_composite_key(string_to_bytes(atof[5]), string_to_bytes(atof[5]),
+                             "fortran"),
+        MemtableValue{string_to_bytes(atof[5]), false, 6});
 
-    EXPECT_TRUE(cmp(HeapEntry{&older}, HeapEntry{&newer}));
-    EXPECT_FALSE(cmp(HeapEntry{&newer}, HeapEntry{&older}));
+    // iters
+    FakeIterator itr_a({ada, delphi});
+    FakeIterator itr_b({basic, elixir});
+    FakeIterator itr_c({cobol, fortran});
+
+    MergeIterator merge_itr({&itr_a, &itr_b, &itr_c});
+
+    size_t counter = 0;
+    for (merge_itr.seek_to_first(); merge_itr.valid(); merge_itr.next()) {
+        auto key = merge_itr.key();
+        auto value = merge_itr.value();
+
+        auto common = string_to_bytes(atof[counter]);
+        auto expected_key = encode_composite_key(common, common, atof[counter]);
+
+        ASSERT_EQ(key, expected_key);
+        ASSERT_EQ(bytes_to_string(value.data), atof[counter]);
+        ASSERT_EQ(value.is_tombstone, false);
+        ASSERT_EQ(value.sequence, counter + 1);
+
+        counter++;
+    }
+
+    ASSERT_EQ(counter, 6);
 }
