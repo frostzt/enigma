@@ -1,4 +1,4 @@
-file(GLOB_RECURSE LIB_SOURCES "*.cpp")
+file(GLOB_RECURSE LIB_SOURCES CONFIGURE_DEPENDS "*.cpp")
 list(FILTER LIB_SOURCES EXCLUDE REGEX "main\\.cpp$")
 
 add_library(enigmadb_lib ${LIB_SOURCES})
