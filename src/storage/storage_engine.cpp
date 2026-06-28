@@ -150,7 +150,7 @@ Result<StorageEngine> StorageEngine::open(io::IOEngine& engine,
                                  std::move(sst_readers),
                                  highest_wal_seq + 1,
                                  highest_sst_seq + 1,
-                                 max_sst_sequence_found};
+                                 max_sst_sequence_found + 1};
 
     /* try and recover */
     auto recover_result = storage_engine.recover();
