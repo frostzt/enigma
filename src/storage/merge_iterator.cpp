@@ -28,6 +28,7 @@ const memtable::MemtableValue& MergeIterator::value() const {
 void MergeIterator::set_error(Error err) {
     error_ = std::move(err);
     valid_ = false;
+    reset_heap();
 }
 
 bool MergeIterator::is_error() const { return error_.has_value(); }
@@ -54,8 +55,7 @@ void MergeIterator::seek_to_first() {
             heap_.push(HeapEntry{source});
         } else if (!source->status().has_value()) {
             set_error(source->status().err());
-            reset_heap();
-            return;
+            break;
         }
     }
 
