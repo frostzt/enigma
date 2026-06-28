@@ -2,7 +2,13 @@
 #define ENIGMA_DB_SSTABLE_COMMON_H
 
 #include <array>
+#include <charconv>
 #include <cstdint>
+#include <iomanip>
+#include <iostream>
+#include <sstream>
+#include <string>
+#include <string_view>
 #include <vector>
 
 #include "enigmadb/common/error.h"
@@ -27,6 +33,36 @@ static constexpr std::array<char, 8> MAGIC = {'E', 'N', 'I', 'G',
 /// @brief Convenience alias for result types used throughout the SSTable layer.
 template <typename T>
 using SSTExpectResult = common::ExpectResult<T, common::Error>;
+
+/**
+ * @brief An 8 byte struct that tracks an SSTable independently via an
+ *        auto-incrementing id.
+ */
+struct SSTableId {
+    uint64_t value;  ///< Id of the sstable
+};
+
+inline std::string sstable_filename(SSTableId id) {
+    std::stringstream ss;
+    ss << "sst_" << std::setfill('0') << std::setw(8) << id.value << ".db";
+    return ss.str();
+}
+
+inline SSTableId parse_sstable_filename(std::string_view filename) {
+    auto part = filename.substr(5, 8);
+    uint64_t value = 0;
+    auto [ptr, ec] =
+        std::from_chars(part.data(), part.data() + part.size(), value);
+
+    /* TODO: Server logger and need to replace these */
+    if (ec == std::errc::invalid_argument) {
+        std::cout << "This is not a number.\n";
+    } else if (ec == std::errc::result_out_of_range) {
+        std::cout << "This number is larger than an int.\n";
+    }
+
+    return SSTableId{value};
+}
 
 /**
  * @brief An entry in the SSTable's in-memory index, mapping a data

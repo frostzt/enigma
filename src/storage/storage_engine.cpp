@@ -14,6 +14,7 @@
 #include "enigmadb/common/error.h"
 #include "enigmadb/storage/key_encoding.h"
 #include "enigmadb/storage/memtable/memtable.h"
+#include "enigmadb/storage/sstable/sstable_common.h"
 #include "enigmadb/storage/sstable/sstable_reader.h"
 #include "enigmadb/storage/sstable/sstable_writer.h"
 #include "enigmadb/storage/wal/wal_reader.h"
@@ -46,8 +47,7 @@ std::string StorageEngine::wal_path(uint64_t seq) {
 
 std::string StorageEngine::sst_path(uint64_t seq) {
     std::stringstream ss;
-    ss << data_dir_ << "/sst/sst_" << std::setfill('0') << std::setw(8) << seq
-       << ".db";
+    ss << data_dir_ << "/sst/" << sstable_filename(SSTableId{seq});
     return ss.str();
 }
 
