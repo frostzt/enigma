@@ -49,10 +49,23 @@ inline std::string sstable_filename(SSTableId id) {
 }
 
 inline SSTableId parse_sstable_filename(std::string_view filename) {
-    auto part = filename.substr(5, 8);
+    constexpr std::string_view prefix = "sst_";
+    constexpr std::string_view suffix = ".db";
     uint64_t value = 0;
+
+    if (filename.size() <= prefix.size() + suffix.size() ||
+        filename.substr(0, prefix.size()) != prefix ||
+        filename.substr(filename.size() - suffix.size()) != suffix) {
+        return SSTableId{value};
+    }
+
+    auto part = filename.substr(
+        prefix.size(), filename.size() - prefix.size() - suffix.size());
     auto [ptr, ec] =
         std::from_chars(part.data(), part.data() + part.size(), value);
+    if (ptr != part.data() + part.size()) {
+        return SSTableId{0};
+    }
 
     /* TODO: Server logger and need to replace these */
     if (ec == std::errc::invalid_argument) {
