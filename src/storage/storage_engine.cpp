@@ -91,11 +91,22 @@ Result<StorageEngine> StorageEngine::open(io::IOEngine& engine,
         highest_sst_seq = extract_num(files.back().filename().string());
     }
 
+    uint64_t max_sst_sequence_found = 0;
+
     for (const auto& entry : files) {
         /* open an sstable reader */
-        auto reader = sstable::SSTableReader::create(engine, entry);
-        if (!reader.has_value()) return reader.err();
-        sst_readers.emplace_back(std::move(reader.value()));
+        auto sstr = sstable::SSTableReader::create(engine, entry);
+        if (!sstr.has_value()) return sstr.err();
+        auto& reader = sstr.value();
+        auto sstfooter = reader.get_footer();
+        assert(sstfooter.has_value());
+
+        auto& footer = sstfooter.value();
+        if (footer.highest_sequence > max_sst_sequence_found) {
+            max_sst_sequence_found = footer.highest_sequence;
+        }
+
+        sst_readers.emplace_back(std::move(reader));
     }
 
     /* if wal files exist recover */
@@ -138,7 +149,8 @@ Result<StorageEngine> StorageEngine::open(io::IOEngine& engine,
                                  std::move(mtable),
                                  std::move(sst_readers),
                                  highest_wal_seq + 1,
-                                 highest_sst_seq + 1};
+                                 highest_sst_seq + 1,
+                                 max_sst_sequence_found + 1};
 
     /* try and recover */
     auto recover_result = storage_engine.recover();
@@ -176,8 +188,9 @@ Result<void> StorageEngine::put_record(
     if (!remove) {
         columns.push_back(WalColumn{column_name, value.value()});
     }
-    WalRecord record{op,     hlc_.next(), lsn_++, partition_key, clustering_key,
-                     columns};
+    auto sequence = lsn_++;
+    WalRecord record{
+        op, hlc_.next(), sequence, partition_key, clustering_key, columns};
 
     /* write and sync WAL */
     auto& writer = wal_writer_.value();
@@ -188,10 +201,11 @@ Result<void> StorageEngine::put_record(
 
     /* update memtable */
     if (remove) {
-        active_memtable_.remove(partition_key, clustering_key, column_name);
+        active_memtable_.remove(partition_key, clustering_key, column_name,
+                                sequence);
     } else {
         active_memtable_.put(partition_key, clustering_key, column_name,
-                             value.value());
+                             value.value(), sequence);
     }
 
     if (active_memtable_.should_flush()) {
@@ -288,10 +302,10 @@ Result<std::optional<MemtableValue>> StorageEngine::get(
     return Result<std::optional<MemtableValue>>::ok(std::nullopt);
 }
 
-Result<void> StorageEngine::recover() {
+Result<uint64_t> StorageEngine::recover() {
     fs::path wal_dir_path = data_dir_ + "/wal";
     if (!fs::is_directory(wal_dir_path)) {
-        return Result<void>::err(
+        return Result<uint64_t>::err(
             Error{ErrorCode::UNEXPECTED_ERR, "wal directory does not exist"});
     }
 
@@ -307,7 +321,7 @@ Result<void> StorageEngine::recover() {
     }
 
     if (old_wal_files.empty()) {
-        return Result<void>::ok();
+        return Result<uint64_t>::ok(0);
     }
 
     std::sort(old_wal_files.begin(), old_wal_files.end(),
@@ -316,11 +330,13 @@ Result<void> StorageEngine::recover() {
                          extract_num(b.filename().string());
               });
 
+    uint64_t highest_wal_lsn_sequence = 0;
+
     /* replay old WAL records into the active memtable */
     for (const auto& entry : old_wal_files) {
         auto wal_reader_res = wal::WalReader::create(engine_, entry);
         if (!wal_reader_res.has_value()) {
-            return Result<void>::err(wal_reader_res.err());
+            return Result<uint64_t>::err(wal_reader_res.err());
         }
 
         auto& wal_reader = wal_reader_res.value();
@@ -331,19 +347,25 @@ Result<void> StorageEngine::recover() {
             }
 
             auto wal_record = possible_next.value();
+
+            /* check for wal sequence */
+            if (highest_wal_lsn_sequence < wal_record.sequence) {
+                highest_wal_lsn_sequence = wal_record.sequence;
+            }
+
             if (wal_record.op_type == WalOpType::DELETE_COLUMN ||
                 wal_record.op_type == WalOpType::DELETE_ROW ||
                 wal_record.op_type == WalOpType::DELETE_PARTITION) {
                 for (const auto& col : wal_record.columns) {
                     active_memtable_.remove(wal_record.partition_key,
-                                            wal_record.clustering_key,
-                                            col.name);
+                                            wal_record.clustering_key, col.name,
+                                            wal_record.sequence);
                 }
             } else {
                 for (const auto& col : wal_record.columns) {
                     active_memtable_.put(wal_record.partition_key,
                                          wal_record.clustering_key, col.name,
-                                         col.value);
+                                         col.value, wal_record.sequence);
                 }
             }
         }
@@ -353,7 +375,7 @@ Result<void> StorageEngine::recover() {
     if (active_memtable_.approximate_size() > 0) {
         auto flush_result = flush();
         if (!flush_result.has_value()) {
-            return Result<void>::err(flush_result.err());
+            return Result<uint64_t>::err(flush_result.err());
         }
     }
 
@@ -362,7 +384,10 @@ Result<void> StorageEngine::recover() {
         fs::remove(f);
     }
 
-    return Result<void>::ok();
+    /* reconcile */
+    lsn_ = std::max(lsn_, highest_wal_lsn_sequence) + 1;
+
+    return Result<uint64_t>::ok(highest_wal_lsn_sequence);
 }
 
 }  // namespace enigmadb::storage

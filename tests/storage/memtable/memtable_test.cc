@@ -17,10 +17,11 @@ TEST(MemTable, put_then_get) {
 
     /* add a bunch of records */
     memtable.put(string_to_bytes(partition_key),
-                 string_to_bytes(clustering_key), "age", string_to_bytes("26"));
+                 string_to_bytes(clustering_key), "age", string_to_bytes("26"),
+                 1);
     memtable.put(string_to_bytes(partition_key),
                  string_to_bytes(clustering_key), "name",
-                 string_to_bytes("sourav"));
+                 string_to_bytes("sourav"), 2);
 
     /* fetch these records */
     auto age = memtable.get(string_to_bytes(partition_key),
@@ -40,11 +41,11 @@ TEST(MemTable, put_remove_get) {
     /* add a record */
     memtable.put(string_to_bytes(partition_key),
                  string_to_bytes(clustering_key), "name",
-                 string_to_bytes("sourav"));
+                 string_to_bytes("sourav"), 1);
 
     /* remove that record */
     memtable.remove(string_to_bytes(partition_key),
-                    string_to_bytes(clustering_key), "name");
+                    string_to_bytes(clustering_key), "name", 2);
 
     /* fetch record */
     auto name = memtable.get(string_to_bytes(partition_key),
@@ -61,7 +62,7 @@ TEST(MemTable, remove_non_existant) {
 
     /* remove a record */
     memtable.remove(string_to_bytes(partition_key),
-                    string_to_bytes(clustering_key), "name");
+                    string_to_bytes(clustering_key), "name", 1);
 
     /* fetch record */
     auto name = memtable.get(string_to_bytes(partition_key),
@@ -80,7 +81,7 @@ TEST(MemTable, value_overwrites) {
     /* add a bunch of records */
     memtable.put(string_to_bytes(partition_key),
                  string_to_bytes(clustering_key), "name",
-                 string_to_bytes("artyom"));
+                 string_to_bytes("artyom"), 1);
 
     /* fetch these records */
     auto artyom = memtable.get(string_to_bytes(partition_key),
@@ -90,7 +91,7 @@ TEST(MemTable, value_overwrites) {
     /* overwrite these recods */
     memtable.put(string_to_bytes(partition_key),
                  string_to_bytes(clustering_key), "name",
-                 string_to_bytes("anna"));
+                 string_to_bytes("anna"), 2);
 
     /* fetch these records */
     auto nowanna = memtable.get(string_to_bytes(partition_key),
@@ -107,7 +108,7 @@ TEST(MemTable, flush_uses_count) {
     /* add a bunch of records */
     memtable.put(string_to_bytes(partition_key),
                  string_to_bytes(clustering_key), "name",
-                 string_to_bytes("artyom"));
+                 string_to_bytes("artyom"), 1);
 
     /* fetch these records */
     auto artyom = memtable.get(string_to_bytes(partition_key),
@@ -119,7 +120,7 @@ TEST(MemTable, flush_uses_count) {
     for (size_t i = 0; i < 5; i++) {
         memtable.put(string_to_bytes("random_" + std::to_string(i)),
                      string_to_bytes("random_clus_" + std::to_string(i)),
-                     "name", string_to_bytes("artyom"));
+                     "name", string_to_bytes("artyom"), 2);
     }
 
     ASSERT_TRUE(memtable.should_flush());

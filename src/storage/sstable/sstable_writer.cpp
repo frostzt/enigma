@@ -27,7 +27,7 @@ SSTExpectResult<void> SSTableWriter::add(const std::vector<uint8_t>& key,
     auto value_len = value.data.size();
     auto required_size = /* key len */ 4 + /* key */ key_len +
                          /* value len */ 4 + /* value */ value_len +
-                         /* is_tombstone */ 1;
+                         /* is_tombstone */ 1 + /* sequence */ 8;
 
     /* check if we need to flush and create a new one */
     if (buffer_.size() + required_size > MAX_PAGING_SIZE_BYTES) {
@@ -53,9 +53,15 @@ SSTExpectResult<void> SSTableWriter::add(const std::vector<uint8_t>& key,
     offset = common::encode_bytes(value.data.data(), value_len, buffer_.data(),
                                   offset);
     offset = common::encode_uint8(value.is_tombstone, buffer_.data(), offset);
+    offset = common::encode_uint64(value.sequence, buffer_.data(), offset);
 
     /* add this key in the bloom filter */
     bloom_filter_.add(key);
+
+    /* update the highest sequence stored */
+    if (highest_sequence_ < value.sequence) {
+        highest_sequence_ = value.sequence;
+    }
 
     entry_count_++;
     return SSTExpectResult<void>::ok();
@@ -142,7 +148,7 @@ SSTExpectResult<void> SSTableWriter::finish() {
 
     /* construct the footer block */
     std::vector<uint8_t> footer_buffer;
-    footer_buffer.resize(48);
+    footer_buffer.resize(56);
     size_t footer_offset = 0;
 
     footer_offset = common::encode_uint64(index_block_start,
@@ -158,9 +164,11 @@ SSTExpectResult<void> SSTableWriter::finish() {
                                           footer_offset);
     footer_offset = common::encode_uint16(SSTABLE_FORMAT_VERSION,
                                           footer_buffer.data(), footer_offset);
+    footer_offset = common::encode_uint64(highest_sequence_,
+                                          footer_buffer.data(), footer_offset);
 
     /* calculate checksum */
-    auto checksum = common::compute_crc_32(footer_buffer.data(), 30);
+    auto checksum = common::compute_crc_32(footer_buffer.data(), 38);
     footer_offset = common::encode_uint32(checksum, footer_buffer.data(),
                                           footer_offset); /* checksum */
     footer_offset =

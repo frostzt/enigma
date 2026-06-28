@@ -22,6 +22,7 @@
 #include "enigmadb/io/io_engine.h"
 #include "enigmadb/storage/memtable/memtable.h"
 #include "enigmadb/storage/sstable/sstable_common.h"
+#include "enigmadb/storage/sstable/sstable_iterator.h"
 
 namespace enigmadb::storage::sstable {
 
@@ -44,6 +45,7 @@ class SSTableReader {
     std::vector<IndexEntry>
         index_entries_;  ///< In-memory copy of the index block.
     common::BloomFilter bloom_filter_;
+    MinimalSSTableFooter footer_;
 
     /**
      * @brief Private constructor; use SSTableReader::create() instead.
@@ -55,12 +57,13 @@ class SSTableReader {
      */
     SSTableReader(io::IOEngine& engine, io::FileHandle fh,
                   const std::string& path, std::vector<IndexEntry> idx_entries,
-                  common::BloomFilter blf)
+                  common::BloomFilter blf, MinimalSSTableFooter footer)
         : engine_(engine),
           fh_(std::move(fh)),
           path_(path),
           index_entries_(std::move(idx_entries)),
-          bloom_filter_(std::move(blf)) {}
+          bloom_filter_(std::move(blf)),
+          footer_(std::move(footer)) {}
 
    public:
     /**
@@ -96,9 +99,21 @@ class SSTableReader {
      *         in std::optional, or std::nullopt if the key is not found.
      *         Returns an error if the data block read fails or the block
      *         is malformed.
+     *
+     * TODO: We need to move this either to use `SSTExpectResult` or
+     * simply use `std::optional` - this makes it pretty weird when
+     * reading this value.
      */
     SSTExpectResult<std::optional<memtable::MemtableValue>> get(
         const std::vector<uint8_t>& key);
+
+    SSTExpectResult<MinimalSSTableFooter> get_footer() const {
+        return footer_;
+    };
+
+    SSTableIterator iterator() const {
+        return SSTableIterator(engine_, fh_, index_entries_);
+    }
 };
 
 }  // namespace enigmadb::storage::sstable

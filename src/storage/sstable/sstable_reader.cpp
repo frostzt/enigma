@@ -27,29 +27,29 @@ SSTExpectResult<SSTableReader> SSTableReader::create(io::IOEngine& engine,
         return SSTExpectResult<SSTableReader>::err(size_result.err());
     }
     auto file_size = size_result.value();
-    if (file_size < 48) {
+    if (file_size < 56) {
         return SSTExpectResult<SSTableReader>::err(common::Error{
             common::ErrorCode::BAD_CONFIG, "file too small for SSTable"});
     }
 
     std::vector<uint8_t> footer_buffer;
-    footer_buffer.resize(48);
+    footer_buffer.resize(56);
 
     /* read footer */
     auto read_footer_result =
-        engine.read(fh, 48, footer_buffer.data(), file_size - 48);
+        engine.read(fh, 56, footer_buffer.data(), file_size - 56);
     if (!read_footer_result.has_value()) {
         return SSTExpectResult<SSTableReader>::err(read_footer_result.err());
     }
 
     /* read and validate magic */
-    if (std::memcmp(footer_buffer.data() + 34, MAGIC.data(), MAGIC_SIZE)) {
+    if (std::memcmp(footer_buffer.data() + 42, MAGIC.data(), MAGIC_SIZE)) {
         return SSTExpectResult<SSTableReader>::err(
             common::Error{common::ErrorCode::BAD_MAGIC, "invalid magic"});
     }
 
-    auto stored_checksum = common::decode_uint32(footer_buffer.data(), 30);
-    auto computed_checksum = common::compute_crc_32(footer_buffer.data(), 30);
+    auto stored_checksum = common::decode_uint32(footer_buffer.data(), 38);
+    auto computed_checksum = common::compute_crc_32(footer_buffer.data(), 38);
     if (stored_checksum != computed_checksum) {
         return SSTExpectResult<SSTableReader>::err(
             common::Error{common::ErrorCode::BAD_CONFIG, "invalid checksum"});
@@ -62,12 +62,22 @@ SSTExpectResult<SSTableReader> SSTableReader::create(io::IOEngine& engine,
     /* extract details for filter and filter block */
     // TODO: Should create a two separate path here to validate offset for
     // filter block
+    auto filter_block_offset = common::decode_uint64(footer_buffer.data(), 12);
     auto filter_block_size = common::decode_uint32(footer_buffer.data(), 20);
-
     if (filter_block_size < 2) {
         return SSTExpectResult<SSTableReader>::err(common::Error{
             common::ErrorCode::BAD_CONFIG, "invalid filter block size"});
     }
+
+    auto entry_count = common::decode_uint32(footer_buffer.data(), 24);
+    auto format_version = common::decode_uint16(footer_buffer.data(), 28);
+    auto highest_sequence = common::decode_uint64(footer_buffer.data(), 30);
+
+    /* construct footer */
+    MinimalSSTableFooter footer{index_block_offset,  index_block_size,
+                                filter_block_offset, filter_block_size,
+                                entry_count,         format_version,
+                                highest_sequence};
 
     std::vector<uint8_t> buffer;
     buffer.resize(index_block_size + filter_block_size);
@@ -113,7 +123,7 @@ SSTExpectResult<SSTableReader> SSTableReader::create(io::IOEngine& engine,
 
     common::BloomFilter filter{bit_array, num_hashes};
     SSTableReader reader(engine, std::move(fh), path, std::move(index_entries),
-                         filter);
+                         filter, footer);
     return SSTExpectResult<SSTableReader>::ok(std::move(reader));
 }
 
@@ -196,10 +206,19 @@ SSTExpectResult<std::optional<memtable::MemtableValue>> SSTableReader::get(
             common::decode_uint8(block_buffer.data(), block_offset);
         block_offset += 1;
 
+        if (block_offset + 8 > it->block_size) {
+            return SSTExpectResult<std::optional<memtable::MemtableValue>>::err(
+                common::Error{common::ErrorCode::BAD_FILE,
+                              "out of range read for sequence"});
+        }
+        auto sequence =
+            common::decode_uint64(block_buffer.data(), block_offset);
+        block_offset += 8;
+
         /* eqality: neither a < b nor b < a which means a == b */
         if (!cmp(key, current_key) && !cmp(current_key, key)) {
-            memtable::MemtableValue value{current_value,
-                                          static_cast<bool>(tombstone)};
+            memtable::MemtableValue value{
+                current_value, static_cast<bool>(tombstone), sequence};
             return SSTExpectResult<std::optional<memtable::MemtableValue>>::ok(
                 value);
         } else if (cmp(key, current_key)) {

@@ -27,6 +27,7 @@ enum class ErrorCode {
     FSTAT_ERR = 9,
     BAD_MAGIC = 10,
     BAD_FILE = 11,
+    STRUCTURE_EMPTY = 12,
 };
 
 struct Error {
