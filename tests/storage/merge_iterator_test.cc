@@ -1,5 +1,6 @@
 #include "enigmadb/storage/merge_iterator.h"
 
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -12,35 +13,23 @@ using namespace enigmadb::common;
 using namespace enigmadb::storage;
 using namespace enigmadb::storage::memtable;
 
+auto make_entry(std::string name, size_t sequence, bool is_tombstone = false) {
+    return std::make_pair(
+        encode_composite_key(string_to_bytes(name), string_to_bytes(name),
+                             name),
+        MemtableValue{string_to_bytes(name), is_tombstone, sequence});
+}
+
 TEST(merge_iterator, iterator_compare) {
     std::vector<std::string> a_to_f = {"ada",    "basic",  "cobol",
                                        "delphi", "elixir", "fortran"};
 
-    // pairs
-    auto ada =
-        std::make_pair(encode_composite_key(string_to_bytes(a_to_f[0]),
-                                            string_to_bytes(a_to_f[0]), "ada"),
-                       MemtableValue{string_to_bytes(a_to_f[0]), false, 1});
-    auto basic = std::make_pair(
-        encode_composite_key(string_to_bytes(a_to_f[1]),
-                             string_to_bytes(a_to_f[1]), "basic"),
-        MemtableValue{string_to_bytes(a_to_f[1]), false, 2});
-    auto cobol = std::make_pair(
-        encode_composite_key(string_to_bytes(a_to_f[2]),
-                             string_to_bytes(a_to_f[2]), "cobol"),
-        MemtableValue{string_to_bytes(a_to_f[2]), false, 3});
-    auto delphi = std::make_pair(
-        encode_composite_key(string_to_bytes(a_to_f[3]),
-                             string_to_bytes(a_to_f[3]), "delphi"),
-        MemtableValue{string_to_bytes(a_to_f[3]), false, 4});
-    auto elixir = std::make_pair(
-        encode_composite_key(string_to_bytes(a_to_f[4]),
-                             string_to_bytes(a_to_f[4]), "elixir"),
-        MemtableValue{string_to_bytes(a_to_f[4]), false, 5});
-    auto fortran = std::make_pair(
-        encode_composite_key(string_to_bytes(a_to_f[5]),
-                             string_to_bytes(a_to_f[5]), "fortran"),
-        MemtableValue{string_to_bytes(a_to_f[5]), false, 6});
+    auto ada = make_entry("ada", 1);
+    auto basic = make_entry("basic", 2);
+    auto cobol = make_entry("cobol", 3);
+    auto delphi = make_entry("delphi", 4);
+    auto elixir = make_entry("elixir", 5);
+    auto fortran = make_entry("fortran", 6);
 
     FakeIterator itr_a({ada, delphi});
     FakeIterator itr_b({basic, elixir});
@@ -72,31 +61,12 @@ TEST(merge_iterator, uneven_lengths) {
     std::vector<std::string> a_to_f = {"ada",    "basic",  "cobol",
                                        "delphi", "elixir", "fortran"};
 
-    // pairs
-    auto ada =
-        std::make_pair(encode_composite_key(string_to_bytes(a_to_f[0]),
-                                            string_to_bytes(a_to_f[0]), "ada"),
-                       MemtableValue{string_to_bytes(a_to_f[0]), false, 1});
-    auto basic = std::make_pair(
-        encode_composite_key(string_to_bytes(a_to_f[1]),
-                             string_to_bytes(a_to_f[1]), "basic"),
-        MemtableValue{string_to_bytes(a_to_f[1]), false, 2});
-    auto cobol = std::make_pair(
-        encode_composite_key(string_to_bytes(a_to_f[2]),
-                             string_to_bytes(a_to_f[2]), "cobol"),
-        MemtableValue{string_to_bytes(a_to_f[2]), false, 3});
-    auto delphi = std::make_pair(
-        encode_composite_key(string_to_bytes(a_to_f[3]),
-                             string_to_bytes(a_to_f[3]), "delphi"),
-        MemtableValue{string_to_bytes(a_to_f[3]), false, 4});
-    auto elixir = std::make_pair(
-        encode_composite_key(string_to_bytes(a_to_f[4]),
-                             string_to_bytes(a_to_f[4]), "elixir"),
-        MemtableValue{string_to_bytes(a_to_f[4]), false, 5});
-    auto fortran = std::make_pair(
-        encode_composite_key(string_to_bytes(a_to_f[5]),
-                             string_to_bytes(a_to_f[5]), "fortran"),
-        MemtableValue{string_to_bytes(a_to_f[5]), false, 6});
+    auto ada = make_entry("ada", 1);
+    auto basic = make_entry("basic", 2);
+    auto cobol = make_entry("cobol", 3);
+    auto delphi = make_entry("delphi", 4);
+    auto elixir = make_entry("elixir", 5);
+    auto fortran = make_entry("fortran", 6);
 
     FakeIterator itr_a({ada});
     FakeIterator itr_b({basic, delphi, elixir});
@@ -130,43 +100,15 @@ TEST(merge_iterator, deduplication) {
     std::vector<std::string> a_to_f = {"ada",    "basic",  "cobol",
                                        "delphi", "elixir", "fortran"};
 
-    // pairs
-    auto ada =
-        std::make_pair(encode_composite_key(string_to_bytes(a_to_f[0]),
-                                            string_to_bytes(a_to_f[0]), "ada"),
-                       MemtableValue{string_to_bytes(a_to_f[0]), false, 1});
-    auto basic = std::make_pair(
-        encode_composite_key(string_to_bytes(a_to_f[1]),
-                             string_to_bytes(a_to_f[1]), "basic"),
-        MemtableValue{string_to_bytes(a_to_f[1]), false, 2});
-    auto cobol = std::make_pair(
-        encode_composite_key(string_to_bytes(a_to_f[2]),
-                             string_to_bytes(a_to_f[2]), "cobol"),
-        MemtableValue{string_to_bytes(a_to_f[2]), false, 3});
-    auto delphi = std::make_pair(
-        encode_composite_key(string_to_bytes(a_to_f[3]),
-                             string_to_bytes(a_to_f[3]), "delphi"),
-        MemtableValue{string_to_bytes(a_to_f[3]), false, 4});
-    auto elixir_zero = std::make_pair(
-        encode_composite_key(string_to_bytes(a_to_f[4]),
-                             string_to_bytes(a_to_f[4]), "elixir"),
-        MemtableValue{string_to_bytes(a_to_f[4]), false, 5});
-    auto elixir_one = std::make_pair(
-        encode_composite_key(string_to_bytes(a_to_f[4]),
-                             string_to_bytes(a_to_f[4]), "elixir"),
-        MemtableValue{string_to_bytes(a_to_f[4]), false, 6});
-    auto elixir_second = std::make_pair(
-        encode_composite_key(string_to_bytes(a_to_f[4]),
-                             string_to_bytes(a_to_f[4]), "elixir"),
-        MemtableValue{string_to_bytes(a_to_f[4]), false, 7});
-    auto fortran = std::make_pair(
-        encode_composite_key(string_to_bytes(a_to_f[5]),
-                             string_to_bytes(a_to_f[5]), "fortran"),
-        MemtableValue{string_to_bytes(a_to_f[5]), false, 8});
-    auto elixir_third = std::make_pair(
-        encode_composite_key(string_to_bytes(a_to_f[4]),
-                             string_to_bytes(a_to_f[4]), "elixir"),
-        MemtableValue{string_to_bytes(a_to_f[4]), false, 9});
+    auto ada = make_entry("ada", 1);
+    auto basic = make_entry("basic", 2);
+    auto cobol = make_entry("cobol", 3);
+    auto delphi = make_entry("delphi", 4);
+    auto elixir_zero = make_entry("elixir", 5);
+    auto elixir_one = make_entry("elixir", 6);
+    auto elixir_second = make_entry("elixir", 7);
+    auto fortran = make_entry("fortran", 8);
+    auto elixir_third = make_entry("elixir", 9);
 
     FakeIterator itr_a({ada, elixir_zero});
     FakeIterator itr_b({basic, delphi, elixir_one});
@@ -202,36 +144,13 @@ TEST(merge_iterator, tombstone) {
     std::vector<std::string> a_to_f = {"ada",    "basic",  "cobol",
                                        "delphi", "elixir", "fortran"};
 
-    // pairs
-    auto ada =
-        std::make_pair(encode_composite_key(string_to_bytes(a_to_f[0]),
-                                            string_to_bytes(a_to_f[0]), "ada"),
-                       MemtableValue{string_to_bytes(a_to_f[0]), false, 1});
-    auto basic = std::make_pair(
-        encode_composite_key(string_to_bytes(a_to_f[1]),
-                             string_to_bytes(a_to_f[1]), "basic"),
-        MemtableValue{string_to_bytes(a_to_f[1]), false, 2});
-    auto cobol = std::make_pair(
-        encode_composite_key(string_to_bytes(a_to_f[2]),
-                             string_to_bytes(a_to_f[2]), "cobol"),
-        MemtableValue{string_to_bytes(a_to_f[2]), false, 3});
-    auto delphi = std::make_pair(
-        encode_composite_key(string_to_bytes(a_to_f[3]),
-                             string_to_bytes(a_to_f[3]), "delphi"),
-        MemtableValue{string_to_bytes(a_to_f[3]), false, 4});
-    auto elixir = std::make_pair(
-        encode_composite_key(string_to_bytes(a_to_f[4]),
-                             string_to_bytes(a_to_f[4]), "elixir"),
-        MemtableValue{string_to_bytes(a_to_f[4]), false, 5});
-    auto fortran = std::make_pair(
-        encode_composite_key(string_to_bytes(a_to_f[5]),
-                             string_to_bytes(a_to_f[5]), "fortran"),
-        MemtableValue{string_to_bytes(a_to_f[5]), false, 6});
-
-    auto delphi_is_gone = std::make_pair(
-        encode_composite_key(string_to_bytes(a_to_f[3]),
-                             string_to_bytes(a_to_f[3]), "delphi"),
-        MemtableValue{string_to_bytes(a_to_f[3]), true, 7});
+    auto ada = make_entry("ada", 1);
+    auto basic = make_entry("basic", 2);
+    auto cobol = make_entry("cobol", 3);
+    auto delphi = make_entry("delphi", 4);
+    auto elixir = make_entry("elixir", 5);
+    auto fortran = make_entry("fortran", 6);
+    auto delphi_is_gone = make_entry("delphi", 7, true);
 
     FakeIterator itr_a({ada});
     FakeIterator itr_b({basic, delphi, elixir});
@@ -271,41 +190,14 @@ TEST(merge_iterator, insert_beats_tombstone) {
     std::vector<std::string> a_to_f = {"ada",    "basic",  "cobol",
                                        "delphi", "elixir", "fortran"};
 
-    // pairs
-    auto ada =
-        std::make_pair(encode_composite_key(string_to_bytes(a_to_f[0]),
-                                            string_to_bytes(a_to_f[0]), "ada"),
-                       MemtableValue{string_to_bytes(a_to_f[0]), false, 1});
-    auto basic = std::make_pair(
-        encode_composite_key(string_to_bytes(a_to_f[1]),
-                             string_to_bytes(a_to_f[1]), "basic"),
-        MemtableValue{string_to_bytes(a_to_f[1]), false, 2});
-    auto cobol = std::make_pair(
-        encode_composite_key(string_to_bytes(a_to_f[2]),
-                             string_to_bytes(a_to_f[2]), "cobol"),
-        MemtableValue{string_to_bytes(a_to_f[2]), false, 3});
-    auto delphi = std::make_pair(
-        encode_composite_key(string_to_bytes(a_to_f[3]),
-                             string_to_bytes(a_to_f[3]), "delphi"),
-        MemtableValue{string_to_bytes(a_to_f[3]), false, 4});
-    auto elixir = std::make_pair(
-        encode_composite_key(string_to_bytes(a_to_f[4]),
-                             string_to_bytes(a_to_f[4]), "elixir"),
-        MemtableValue{string_to_bytes(a_to_f[4]), false, 5});
-    auto fortran = std::make_pair(
-        encode_composite_key(string_to_bytes(a_to_f[5]),
-                             string_to_bytes(a_to_f[5]), "fortran"),
-        MemtableValue{string_to_bytes(a_to_f[5]), false, 6});
-
-    auto delphi_is_gone = std::make_pair(
-        encode_composite_key(string_to_bytes(a_to_f[3]),
-                             string_to_bytes(a_to_f[3]), "delphi"),
-        MemtableValue{string_to_bytes(a_to_f[3]), true, 7});
-
-    auto delphi_is_back = std::make_pair(
-        encode_composite_key(string_to_bytes(a_to_f[3]),
-                             string_to_bytes(a_to_f[3]), "delphi"),
-        MemtableValue{string_to_bytes(a_to_f[3]), false, 8});
+    auto ada = make_entry("ada", 1);
+    auto basic = make_entry("basic", 2);
+    auto cobol = make_entry("cobol", 3);
+    auto delphi = make_entry("delphi", 4);
+    auto elixir = make_entry("elixir", 5);
+    auto fortran = make_entry("fortran", 6);
+    auto delphi_is_gone = make_entry("delphi", 7, true);
+    auto delphi_is_back = make_entry("delphi", 8);
 
     FakeIterator itr_a({ada});
     FakeIterator itr_b({basic, delphi, elixir});
