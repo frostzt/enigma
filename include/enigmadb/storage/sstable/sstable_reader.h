@@ -57,13 +57,13 @@ class SSTableReader {
      */
     SSTableReader(io::IOEngine& engine, io::FileHandle fh,
                   const std::string& path, std::vector<IndexEntry> idx_entries,
-                  common::BloomFilter blf, MinimalSSTableFooter footer_)
+                  common::BloomFilter blf, MinimalSSTableFooter footer)
         : engine_(engine),
           fh_(std::move(fh)),
           path_(path),
           index_entries_(std::move(idx_entries)),
           bloom_filter_(std::move(blf)),
-          footer_(std::move(footer_)) {}
+          footer_(std::move(footer)) {}
 
    public:
     /**

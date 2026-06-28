@@ -173,6 +173,11 @@ class MergeIterator : public Iterator {
     void advance_to_winner();
 
     /**
+     * @brief Resets the heap to empty.
+     */
+    void reset_heap();
+
+    /**
      * @brief Advances a source iterator and re-pushes it onto the
      *        heap if it remains valid.
      *
