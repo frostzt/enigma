@@ -40,6 +40,9 @@ using SSTExpectResult = common::ExpectResult<T, common::Error>;
  */
 struct SSTableId {
     uint64_t value;  ///< Id of the sstable
+
+    bool operator==(const SSTableId& oth) const { return value == oth.value; }
+    bool operator<(const SSTableId& oth) const { return value < oth.value; }
 };
 
 inline std::string sstable_filename(SSTableId id) {
