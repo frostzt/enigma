@@ -47,6 +47,10 @@ std::vector<uint8_t> encode_composite_key(
     const std::vector<uint8_t>& partition_key,
     const std::vector<uint8_t>& clustering_key, const std::string& column_name);
 
+void decode_composite_key(const std::vector<uint8_t>& compkey,
+                          std::vector<uint8_t>& pkey,
+                          std::vector<uint8_t>& ckey, std::string& cname);
+
 /**
  * @brief Strict weak ordering comparator for encoded composite keys.
  *

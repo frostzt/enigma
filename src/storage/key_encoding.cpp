@@ -33,6 +33,34 @@ std::vector<uint8_t> encode_composite_key(
     return out;
 }
 
+void decode_composite_key(const std::vector<uint8_t>& compkey,
+                          std::vector<uint8_t>& pkey,
+                          std::vector<uint8_t>& ckey, std::string& cname) {
+    if (compkey.size() <= 12) {
+        return;
+    }
+
+    size_t offset = 0;
+
+    /* decode partition key */
+    auto plen = common::decode_uint32(compkey.data(), offset);
+    offset += 4;
+    pkey.assign(compkey.data() + offset, compkey.data() + offset + plen);
+    offset += plen;
+
+    /* decode clustering key */
+    auto clen = common::decode_uint32(compkey.data(), offset);
+    offset += 4;
+    ckey.assign(compkey.data() + offset, compkey.data() + offset + clen);
+    offset += clen;
+
+    /* decode column name */
+    auto collen = common::decode_uint32(compkey.data(), offset);
+    offset += 4;
+    cname.assign(compkey.data() + offset, compkey.data() + offset + collen);
+    offset += collen;
+}
+
 // TODO: Could short-circuit by comparing the raw encoded bytes
 // directly with a single memcmp first (if the entire encoded
 // key is identical, they're equal no decoding needed), and
