@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.20)
 project(enigmadb)
 
+# --- Options ---
+
+option(ENIGMADB_BUILD_TOOLS "build developer/debug tools" OFF)
+
 # --- CMake Flags ---
 
 set(CMAKE_CXX_STANDARD 17)
@@ -41,5 +45,9 @@ add_subdirectory(docs)
 
 # Test files
 add_subdirectory(tests)
+
+if (ENIGMADB_BUILD_TOOLS)
+  add_subdirectory(tools)
+endif()
 
 # --- Project Targets ---

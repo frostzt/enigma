@@ -30,6 +30,16 @@ enigmadb/
 └── third_party/                (vendored dependencies)
 ```
 
+## Debugging and tols
+
+Have created a bunch of tools to help debug and understand stuff inside tools dir
+
+```shell
+cmake -B build -DCMAKE_BUILD_TYPE=Debug -DENIGMADB_BUILD_TOOLS=ON
+cmake --build build --target sstable_dump
+./build/tools/sstable_dump path/to/sst_00000001.db
+```
+
 ## Platform
 
 Note that this *WILL NOT* compile on Windows machines.
