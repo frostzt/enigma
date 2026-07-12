@@ -1,7 +1,6 @@
 /**
  * @file compaction.h
  * @brief
- * @note Test-only — do not use in production code.
  *
  * @author frostzt
  * @date 2026-06-03
@@ -19,7 +18,7 @@
 
 namespace enigmadb::storage::compaction {
 
-using DoCompactResult = common::ExpectResult<void, common::Error>;
+using DoCompactResult = common::ExpectResult<sstable::SSTableId, common::Error>;
 
 class Compactor {
    private:
@@ -36,6 +35,7 @@ class Compactor {
     static Compactor create(io::IOEngine& engine, const std::string& data_dir);
 
     DoCompactResult do_compact(const std::vector<sstable::SSTableId>& inputs,
+                               const uint64_t next_sst_seq,
                                bool is_full_compaction);
 };
 

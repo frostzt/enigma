@@ -243,6 +243,10 @@ class StorageEngine {
     Result<void> flush();
 
     uint64_t latest_lsn() const { return lsn_; };
+
+    uint64_t get_next_wal_sequence() const { return next_wal_seq_; };
+
+    uint64_t get_next_sst_sequence() const { return next_sst_seq_; };
 };
 
 }  // namespace enigmadb::storage

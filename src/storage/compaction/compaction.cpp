@@ -1,7 +1,6 @@
 #include "enigmadb/storage/compaction/compaction.h"
 
-#include <algorithm>
-#include <iostream>
+#include <filesystem>
 #include <vector>
 
 #include "enigmadb/io/io_engine.h"
@@ -11,6 +10,8 @@
 #include "enigmadb/storage/sstable/sstable_common.h"
 #include "enigmadb/storage/sstable/sstable_reader.h"
 #include "enigmadb/storage/sstable/sstable_writer.h"
+
+namespace fs = std::filesystem;
 
 using namespace enigmadb::io;
 using namespace enigmadb::storage::sstable;
@@ -22,9 +23,8 @@ Compactor Compactor::create(IOEngine& engine, const std::string& data_dir) {
 }
 
 DoCompactResult Compactor::do_compact(const std::vector<SSTableId>& inputs,
+                                      const uint64_t next_sst_seq,
                                       bool is_full_compaction) {
-    std::cout << is_full_compaction;
-    auto next_seq = (*std::max_element(inputs.begin(), inputs.end())).value + 1;
     uint64_t possible_keys = 0;
 
     /* open readers for all the sstable id inputs */
@@ -57,7 +57,7 @@ DoCompactResult Compactor::do_compact(const std::vector<SSTableId>& inputs,
     }
 
     /* new sst writer */
-    auto w = SSTableWriter::create(engine_, sst_path(data_dir_, next_seq),
+    auto w = SSTableWriter::create(engine_, sst_path(data_dir_, next_sst_seq),
                                    possible_keys);
     if (!w.has_value()) return DoCompactResult::err(w.err());
     auto& writer = w.value();
@@ -65,18 +65,40 @@ DoCompactResult Compactor::do_compact(const std::vector<SSTableId>& inputs,
     /* construct a merge iterator over itrs and add to writer */
     MergeIterator m_itr(iterators);
     for (m_itr.seek_to_first(); m_itr.valid(); m_itr.next()) {
-        auto key = m_itr.key();
+        auto& key = m_itr.key();
         auto value = m_itr.value();
+
+        /* skip tombstoned records */
+        if (value.is_tombstone && is_full_compaction) continue;
+
         auto ar = writer.add(key, value);
         if (!ar.has_value()) return DoCompactResult::err(ar.err());
     }
 
-    /* flush and create this new file */
+    /* flush and create this new file; writer.finish calls fsync on the file and
+     * directory */
     if (auto f = writer.finish(); !f.has_value()) {
         return DoCompactResult::err(f.err());
     }
 
-    return DoCompactResult::ok();
+    /* delete the old files */
+    for (auto sst_id : inputs) {
+        auto path = sst_path(data_dir_, sst_id.value);
+        if (fs::exists(path)) {
+            if (fs::remove(path)) {
+                // @TODO: log this
+            }
+        } else {
+            // @TODO: log this
+        }
+    }
+
+    /* commit the deletes */
+    if (auto sr = engine_.sync_directory(data_dir_ + "/sst"); !sr.has_value()) {
+        return DoCompactResult::err(sr.err());
+    }
+
+    return DoCompactResult::ok(SSTableId{next_sst_seq});
 }
 
 }  // namespace enigmadb::storage::compaction

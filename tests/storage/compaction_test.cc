@@ -1,7 +1,6 @@
 #include "enigmadb/storage/compaction/compaction.h"
 
 #include <filesystem>
-#include <iostream>
 #include <string>
 #include <vector>
 
@@ -47,6 +46,12 @@ TEST(compaction, basic_compaction) {
         storage_engine.flush();
     }
 
+    auto count = std::count_if(
+        fs::directory_iterator(testdir.path + "/sst"), fs::directory_iterator{},
+        [](const auto& entry) { return fs::is_regular_file(entry); });
+
+    ASSERT_EQ(count, 8);
+
     std::vector<SSTableId> inputs;
     for (const auto& entry : fs::directory_iterator(testdir.path + "/sst")) {
         auto filename = entry.path().filename();
@@ -54,8 +59,28 @@ TEST(compaction, basic_compaction) {
         inputs.push_back(parsed_filename);
     }
 
-    /* compact */
-    ASSERT_TRUE(compactor.do_compact(inputs, false).has_value());
+    /* explicitly compact - logically owned by storage engine */
+    ASSERT_TRUE(
+        compactor
+            .do_compact(inputs, storage_engine.get_next_sst_sequence(), false)
+            .has_value());
 
-    std::cout << "Hey there done" << std::endl;
+    count = std::count_if(
+        fs::directory_iterator(testdir.path + "/sst"), fs::directory_iterator{},
+        [](const auto& entry) { return fs::is_regular_file(entry); });
+
+    ASSERT_EQ(count, 1);
+
+    /* should get all entries back post deletes */
+    for (size_t i = 0; i < 8; i++) {
+        for (size_t k = 0; k < 1000; k++) {
+            auto vr = storage_engine.get(
+                string_to_bytes("alice__" + std::to_string(i) + "__" +
+                                std::to_string(k)),
+                string_to_bytes("2026-01"), "age");
+            ASSERT_TRUE(vr.has_value());
+            ASSERT_EQ(bytes_to_string(vr.value().value().data),
+                      "1234" + std::to_string(i) + "__" + std::to_string(k));
+        }
+    }
 }
