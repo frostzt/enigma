@@ -1,6 +1,6 @@
 include(GoogleTest)
 
-file(GLOB_RECURSE TEST_SOURCES "*.cc")
+file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS "*.cc")
 
 add_executable(unit_tests ${TEST_SOURCES})
 
