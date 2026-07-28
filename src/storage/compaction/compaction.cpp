@@ -1,6 +1,7 @@
 #include "enigmadb/storage/compaction/compaction.h"
 
 #include <filesystem>
+#include <memory>
 #include <vector>
 
 #include "enigmadb/io/io_engine.h"
@@ -28,7 +29,7 @@ DoCompactResult Compactor::do_compact(const std::vector<SSTableId>& inputs,
     uint64_t possible_keys = 0;
 
     /* open readers for all the sstable id inputs */
-    std::vector<SSTableReader> readers;
+    std::vector<std::unique_ptr<SSTableReader>> readers;
     for (const auto i : inputs) {
         auto r = SSTableReader::create(engine_, sst_path(data_dir_, i.value));
         if (!r.has_value()) return DoCompactResult::err(r.err());
@@ -39,21 +40,22 @@ DoCompactResult Compactor::do_compact(const std::vector<SSTableId>& inputs,
         if (!f.has_value()) return DoCompactResult::err(f.err());
         possible_keys += f.value().entry_count;
 
-        readers.emplace_back(std::move(reader));
+        readers.emplace_back(
+            std::make_unique<SSTableReader>(std::move(reader)));
     }
 
-    std::vector<SSTableIterator> owned_itrs;
+    std::vector<std::unique_ptr<SSTableIterator>> owned_itrs;
     owned_itrs.reserve(readers.size());
     for (const auto& reader : readers) {
-        owned_itrs.push_back(reader.iterator());
+        owned_itrs.push_back(
+            std::make_unique<SSTableIterator>(reader->iterator()));
     }
 
-    /* collect all the iterators over readers,
-     * this borrows from readers above */
+    /* borrows from readers above, heap stable tho */
     std::vector<Iterator*> iterators;
     iterators.reserve(owned_itrs.size());
     for (auto& it : owned_itrs) {
-        iterators.push_back(&it);
+        iterators.push_back(it.get());
     }
 
     /* new sst writer */
@@ -66,9 +68,9 @@ DoCompactResult Compactor::do_compact(const std::vector<SSTableId>& inputs,
     MergeIterator m_itr(iterators);
     for (m_itr.seek_to_first(); m_itr.valid(); m_itr.next()) {
         auto& key = m_itr.key();
-        auto value = m_itr.value();
+        const auto value = m_itr.value();
 
-        /* skip tombstoned records */
+        /* skip tombstoned records if in full compaction */
         if (value.is_tombstone && is_full_compaction) continue;
 
         auto ar = writer.add(key, value);
