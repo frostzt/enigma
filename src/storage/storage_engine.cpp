@@ -267,6 +267,8 @@ Result<void> StorageEngine::flush() {
     return Result<void>::ok();
 }
 
+// @FIXME: `Result` is already an optional type need to fix this - physically
+// painful
 Result<std::optional<MemtableValue>> StorageEngine::get(
     const std::vector<uint8_t>& partition_key,
     const std::vector<uint8_t>& clustering_key,
