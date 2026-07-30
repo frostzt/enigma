@@ -1,6 +1,5 @@
 #include "enigmadb/storage/compaction/compaction.h"
 
-#include <filesystem>
 #include <memory>
 #include <vector>
 
@@ -12,8 +11,6 @@
 #include "enigmadb/storage/sstable/sstable_reader.h"
 #include "enigmadb/storage/sstable/sstable_writer.h"
 
-namespace fs = std::filesystem;
-
 using namespace enigmadb::io;
 using namespace enigmadb::storage::sstable;
 
@@ -23,9 +20,9 @@ Compactor Compactor::create(IOEngine& engine, const std::string& data_dir) {
     return Compactor{engine, data_dir};
 }
 
-DoCompactResult Compactor::do_compact(const std::vector<SSTableId>& inputs,
-                                      const uint64_t next_sst_seq,
-                                      bool is_full_compaction) {
+DoCompactResult Compactor::do_size_tiered_compact(
+    const std::vector<SSTableId>& inputs, const uint64_t next_sst_seq,
+    bool is_full_compaction) {
     uint64_t possible_keys = 0;
 
     /* open readers for all the sstable id inputs */
@@ -81,23 +78,6 @@ DoCompactResult Compactor::do_compact(const std::vector<SSTableId>& inputs,
      * directory */
     if (auto f = writer.finish(); !f.has_value()) {
         return DoCompactResult::err(f.err());
-    }
-
-    /* delete the old files */
-    for (auto sst_id : inputs) {
-        auto path = sst_path(data_dir_, sst_id.value);
-        if (fs::exists(path)) {
-            if (fs::remove(path)) {
-                // @TODO: log this
-            }
-        } else {
-            // @TODO: log this
-        }
-    }
-
-    /* commit the deletes */
-    if (auto sr = engine_.sync_directory(data_dir_ + "/sst"); !sr.has_value()) {
-        return DoCompactResult::err(sr.err());
     }
 
     return DoCompactResult::ok(SSTableId{next_sst_seq});

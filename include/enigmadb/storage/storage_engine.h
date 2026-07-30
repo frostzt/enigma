@@ -38,13 +38,17 @@
 #define ENIGMA_DB_STORAGE_ENGINE_H
 
 #include <cstdint>
+#include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
 
 #include "enigmadb/common/hlc.h"
 #include "enigmadb/io/io_engine.h"
+#include "enigmadb/storage/compaction/compaction.h"
 #include "enigmadb/storage/memtable/memtable.h"
+#include "enigmadb/storage/sstable/sstable_common.h"
 #include "enigmadb/storage/sstable/sstable_reader.h"
 #include "enigmadb/storage/wal/wal_writer.h"
 
@@ -66,35 +70,64 @@ class StorageEngine {
     io::IOEngine& engine_;
     const std::string data_dir_;
 
+    std::map<sstable::SSTableId, std::unique_ptr<sstable::SSTableReader>,
+             sstable::SSTableIdComparator>
+        sst_readers_;  ///< SSTable readers
+
     std::optional<wal::WalWriter> wal_writer_;  ///< Active WAL segment writer.
     uint64_t memtable_size_;                    ///< Flush threshold in bytes.
     memtable::Memtable active_memtable_;        ///< Current mutable memtable.
-    std::vector<sstable::SSTableReader>
-        sst_readers_;  ///< SSTable readers, oldest first.
     common::TimestampGenerator
-        hlc_;                ///< Hybrid logical clock for record timestamps.
-    uint64_t lsn_;           ///< Monotonically increasing log sequence number.
-    uint64_t next_wal_seq_;  ///< Sequence number for the next WAL segment.
-    uint64_t next_sst_seq_;  ///< Sequence number for the next SSTable file.
+        hlc_;  ///< Hybrid logical clock for record timestamps.
+
+    /* --------------------------------------------------
+     * Sequences
+     * --------------------------------------------------*/
+    uint64_t lsn_{0};  ///< Monotonically increasing log sequence number.
+    uint64_t next_wal_seq_{0};  ///< Sequence number for the next WAL segment.
+    uint64_t next_sst_seq_{0};  ///< Sequence number for the next SSTable file.
+
+    /**
+     * @brief Bumps SST file sequence by one
+     */
+    uint64_t bump_sst_sequence() { return next_sst_seq_++; };
+
+    /**
+     * @brief Bumps SST file sequence by one
+     */
+    uint64_t bump_wal_sequence() { return next_wal_seq_++; };
+
+    /* --------------------------------------------------
+     * Compaction
+     * --------------------------------------------------*/
+    compaction::CompactionConfig
+        compaction_config_;            ///< Configuration for compaction
+    compaction::Compactor compactor_;  ///< Compactor compacts SSTable files
 
     /**
      * @brief Private constructor; use StorageEngine::open() instead.
      */
-    StorageEngine(io::IOEngine& engine, std::string data_dir,
-                  wal::WalWriter wal_writer, uint64_t memtable_size,
-                  memtable::Memtable active_memtable,
-                  std::vector<sstable::SSTableReader> sst_readers,
-                  uint64_t next_wal_seq, uint64_t next_sst_seq,
-                  uint64_t highest_sequence = 0)
+    StorageEngine(
+        io::IOEngine& engine, std::string data_dir, wal::WalWriter wal_writer,
+        uint64_t memtable_size, memtable::Memtable active_memtable,
+        std::map<sstable::SSTableId, std::unique_ptr<sstable::SSTableReader>,
+                 sstable::SSTableIdComparator>
+            sst_readers,
+        uint64_t next_wal_seq, uint64_t next_sst_seq,
+        uint64_t highest_sequence = 0,
+        compaction::CompactionConfig compaction_config =
+            compaction::SizeTieredConfig{2, 6})
         : engine_(engine),
-          data_dir_(std::move(data_dir)),
+          data_dir_(data_dir),
+          sst_readers_(std::move(sst_readers)),
           wal_writer_(std::move(wal_writer)),
           memtable_size_(memtable_size),
           active_memtable_(std::move(active_memtable)),
-          sst_readers_(std::move(sst_readers)),
           lsn_(highest_sequence),
           next_wal_seq_(next_wal_seq),
-          next_sst_seq_(next_sst_seq) {}
+          next_sst_seq_(next_sst_seq),
+          compaction_config_(std::move(compaction_config)),
+          compactor_(compaction::Compactor::create(engine, data_dir)) {}
 
     /**
      * @brief Returns the filesystem path for a WAL segment with the
@@ -131,11 +164,11 @@ class StorageEngine {
      * operation.
      * @return Success, or an error if the WAL write, sync, or flush fails.
      */
-    Result<void> put_record(const std::vector<uint8_t>& partition_key,
-                            const std::vector<uint8_t>& clustering_key,
-                            const std::string& column_name,
-                            const std::optional<std::vector<uint8_t>>& value,
-                            bool remove);
+    Result<void> put(const std::vector<uint8_t>& partition_key,
+                     const std::vector<uint8_t>& clustering_key,
+                     const std::string& column_name,
+                     const std::optional<std::vector<uint8_t>>& value,
+                     bool remove);
 
     /**
      * @brief Replays old WAL segments into the memtable and flushes
@@ -151,7 +184,38 @@ class StorageEngine {
      */
     Result<uint64_t> recover();
 
+    /**
+     * @brief Given the current configuration checks weather sstables
+     *        should be compacted or not.
+     */
+    bool should_compact() const;
+
+    /**
+     * @brief Returns weather we should run compaction for size tiered
+     *        compaction strategy.
+     */
+    bool should_compact_size_tiered(
+        const compaction::SizeTieredConfig& opts) const;
+
    public:
+    Result<void> do_compact_work();
+
+    /**
+     * @brief Overrides the current compaction config and sets it to the
+     *        config provided.
+     */
+    Result<void> set_compaction_config(compaction::CompactionConfig config);
+
+    /**
+     * @brief Returns the current directory where sstables files are stored
+     */
+    std::string get_sst_directory() const { return data_dir_ + "/sst"; };
+
+    /**
+     * @brief Returns the current directory where wal files are stored
+     */
+    std::string get_wal_directory() const { return data_dir_ + "/wal"; };
+
     /**
      * @brief Opens or bootstraps a StorageEngine rooted at @p data_dir.
      *
@@ -242,10 +306,19 @@ class StorageEngine {
      */
     Result<void> flush();
 
+    /**
+     * @brief Returns the latest LSN available
+     */
     uint64_t latest_lsn() const { return lsn_; };
 
+    /**
+     * @brief Returns the next wal sequence number available
+     */
     uint64_t get_next_wal_sequence() const { return next_wal_seq_; };
 
+    /**
+     * @brief Returns the next sstable sequence number available
+     */
     uint64_t get_next_sst_sequence() const { return next_sst_seq_; };
 };
 

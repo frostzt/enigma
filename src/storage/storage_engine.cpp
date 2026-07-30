@@ -6,12 +6,16 @@
 #include <cstdint>
 #include <filesystem>
 #include <iomanip>
+#include <memory>
 #include <optional>
 #include <sstream>
 #include <string>
+#include <utility>
+#include <variant>
 #include <vector>
 
 #include "enigmadb/common/error.h"
+#include "enigmadb/storage/compaction/compaction.h"
 #include "enigmadb/storage/key_encoding.h"
 #include "enigmadb/storage/memtable/memtable.h"
 #include "enigmadb/storage/sstable/sstable_common.h"
@@ -40,14 +44,14 @@ uint64_t extract_num(const std::string& filename) {
 
 std::string StorageEngine::wal_path(uint64_t seq) {
     std::stringstream ss;
-    ss << data_dir_ << "/wal/wal_" << std::setfill('0') << std::setw(8) << seq
-       << ".log";
+    ss << get_wal_directory() << "/wal_" << std::setfill('0') << std::setw(8)
+       << seq << ".log";
     return ss.str();
 }
 
 std::string StorageEngine::sst_path(uint64_t seq) {
     std::stringstream ss;
-    ss << data_dir_ << "/sst/" << sstable_filename(SSTableId{seq});
+    ss << get_sst_directory() << "/" << sstable_filename(SSTableId{seq});
     return ss.str();
 }
 
@@ -71,7 +75,7 @@ Result<StorageEngine> StorageEngine::open(io::IOEngine& engine,
         }
     }
 
-    /* sst files */
+    /* find all the sstable files */
     std::vector<fs::path> files;
     for (const auto& entry : fs::directory_iterator(sst_dir_path)) {
         if (entry.is_regular_file() && entry.path().extension() == ".db") {
@@ -79,13 +83,9 @@ Result<StorageEngine> StorageEngine::open(io::IOEngine& engine,
         }
     }
 
-    std::sort(files.begin(), files.end(),
-              [](const fs::path& a, const fs::path& b) {
-                  return extract_num(a.filename().string()) <
-                         extract_num(b.filename().string());
-              });
-
-    std::vector<sstable::SSTableReader> sst_readers;
+    std::map<sstable::SSTableId, std::unique_ptr<sstable::SSTableReader>,
+             SSTableIdComparator>
+        sst_readers;
     uint64_t highest_sst_seq = 0;
     if (!files.empty()) {
         highest_sst_seq = extract_num(files.back().filename().string());
@@ -106,7 +106,9 @@ Result<StorageEngine> StorageEngine::open(io::IOEngine& engine,
             max_sst_sequence_found = footer.highest_sequence;
         }
 
-        sst_readers.emplace_back(std::move(reader));
+        sst_readers.insert(std::make_pair(
+            SSTableId{extract_num(entry.filename().string())},
+            std::make_unique<sstable::SSTableReader>(std::move(reader))));
     }
 
     /* if wal files exist recover */
@@ -161,6 +163,24 @@ Result<StorageEngine> StorageEngine::open(io::IOEngine& engine,
     return Result<StorageEngine>::ok(std::move(storage_engine));
 }
 
+Result<void> StorageEngine::set_compaction_config(
+    compaction::CompactionConfig config) {
+    std::visit(
+        [this](auto& opts) {
+            using T = std::decay_t<decltype(opts)>;
+            if constexpr (std::is_same_v<T, compaction::SizeTieredConfig>) {
+                compaction_config_ = std::move(opts);
+            } else {
+                return Result<void>::err(
+                    Error{ErrorCode::BAD_CONFIG,
+                          "Invalid compaction configuration provided."});
+            }
+        },
+        config);
+
+    return Result<void>::ok();
+}
+
 Result<void> StorageEngine::put(const std::vector<uint8_t>& partition_key,
                                 const std::vector<uint8_t>& clustering_key,
                                 const std::string& column_name,
@@ -169,18 +189,16 @@ Result<void> StorageEngine::put(const std::vector<uint8_t>& partition_key,
         return Result<void>::err(
             Error{ErrorCode::BAD_CONFIG, "value is empty"});
     }
-    return put_record(partition_key, clustering_key, column_name, value, false);
+    return put(partition_key, clustering_key, column_name, value, false);
 }
 
 Result<void> StorageEngine::remove(const std::vector<uint8_t>& partition_key,
                                    const std::vector<uint8_t>& clustering_key,
                                    const std::string& column_name) {
-    return put_record(partition_key, clustering_key, column_name, std::nullopt,
-                      true);
+    return put(partition_key, clustering_key, column_name, std::nullopt, true);
 }
 
-// @TODO: Overload this function
-Result<void> StorageEngine::put_record(
+Result<void> StorageEngine::put(
     const std::vector<uint8_t>& partition_key,
     const std::vector<uint8_t>& clustering_key, const std::string& column_name,
     const std::optional<std::vector<uint8_t>>& value, bool remove) {
@@ -209,10 +227,86 @@ Result<void> StorageEngine::put_record(
                              value.value(), sequence);
     }
 
+    /* check if memtable needs to flush and create new sstable */
     if (active_memtable_.should_flush()) {
         auto flush_result = flush();
         if (!flush_result.has_value()) {
             return flush_result.err();
+        }
+    }
+
+    /* check if we need to compact */
+    if (should_compact()) {
+        auto cres = do_compact_work();
+        if (!cres.has_value()) {
+            server_panic(
+                "Enigma Server failed to perform compaction. This is a "
+                "critical system failure, cannot continue!");
+        }
+    }
+
+    return Result<void>::ok();
+}
+
+Result<void> StorageEngine::do_compact_work() {
+    std::vector<sstable::SSTableId> inputs;
+    inputs.reserve(sst_readers_.size());
+    for (const auto& [id, _] : sst_readers_) {
+        inputs.push_back(id);
+    }
+
+    SSTableId sstid;
+    Error err{ErrorCode::NONE, ""};
+
+    /* actual compaction */
+    std::visit(
+        [this, &inputs, &sstid, &err](const auto& opts) {
+            using T = std::decay_t<decltype(opts)>;
+            if constexpr (std::is_same_v<T, compaction::SizeTieredConfig>) {
+                auto new_sst_result = compactor_.do_size_tiered_compact(
+                    inputs, this->next_sst_seq_, true);
+                if (!new_sst_result.has_value()) {
+                    err = new_sst_result.err();
+                }
+
+                sstid = new_sst_result.value();
+
+            } else {
+                server_panic(
+                    "Unidentified or invalid option type for compaction!");
+            }
+        },
+        compaction_config_);
+
+    /* Check if we errored out above */
+    if (err.code != ErrorCode::NONE) {
+        return Result<void>::err(err);
+    }
+
+    assert(sstid.value == this->next_sst_seq_);
+
+    auto sstrr = SSTableReader::create(engine_, sst_path(sstid.value));
+    if (!sstrr.has_value()) err = sstrr.err();
+
+    /* Empty the sst_readers_ vector and update it to use the new
+     * sstable file */
+    sst_readers_.clear();
+    sst_readers_.emplace(sstid, std::make_unique<sstable::SSTableReader>(
+                                    std::move(sstrr.value())));
+
+    /* Bump sstable file sequence the newly generated one should have had the
+     * last one */
+    bump_sst_sequence();
+
+    /* delete the old files */
+    for (auto sst_id : inputs) {
+        auto path = sst_path(sst_id.value);
+        if (fs::exists(path)) {
+            if (auto res = engine_.remove(path); !res.has_value()) {
+                // @TODO: Handle this
+            }
+        } else {
+            // @TODO: Handle this
         }
     }
 
@@ -250,7 +344,10 @@ Result<void> StorageEngine::flush() {
     auto walwrr = WalWriter::create(engine_, wal_path(new_wal_seq));
     if (!walwrr.has_value()) return walwrr.err();
 
-    sst_readers_.emplace_back(std::move(sstrr.value()));
+    sst_readers_.insert(std::make_pair(
+        SSTableId{next_sst_seq_},
+        std::make_unique<sstable::SSTableReader>(std::move(sstrr.value()))));
+
     wal_writer_.emplace(std::move(walwrr.value()));
 
     /* replace with a new empty memtable */
@@ -267,8 +364,27 @@ Result<void> StorageEngine::flush() {
     return Result<void>::ok();
 }
 
-// @FIXME: `Result` is already an optional type need to fix this - physically
-// painful
+bool StorageEngine::should_compact() const {
+    return std::visit(
+        [this](const auto& opts) -> bool {
+            using T = std::decay_t<decltype(opts)>;
+            if constexpr (std::is_same_v<T, compaction::SizeTieredConfig>) {
+                return should_compact_size_tiered(opts);
+            } else {
+                server_panic(
+                    "Unidentified or invalid option type for compaction!");
+            }
+        },
+        compaction_config_);
+}
+
+bool StorageEngine::should_compact_size_tiered(
+    const compaction::SizeTieredConfig& opts) const {
+    return sst_readers_.size() >= opts.min_merge_width_;
+}
+
+// @FIXME: `Result` is already an optional type need to fix this - this results
+//          in very weird code checks
 Result<std::optional<MemtableValue>> StorageEngine::get(
     const std::vector<uint8_t>& partition_key,
     const std::vector<uint8_t>& clustering_key,
@@ -284,8 +400,8 @@ Result<std::optional<MemtableValue>> StorageEngine::get(
     }
 
     /* reverse lookup on every sstable */
-    for (auto it = sst_readers_.rbegin(); it != sst_readers_.rend(); ++it) {
-        auto lookup_result = it->get(
+    for (auto it = sst_readers_.begin(); it != sst_readers_.end(); ++it) {
+        auto lookup_result = it->second->get(
             encode_composite_key(partition_key, clustering_key, column_name));
         if (!lookup_result.has_value()) { /* result impl always errors out if
                                              has_value is false */
