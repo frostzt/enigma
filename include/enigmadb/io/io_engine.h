@@ -145,6 +145,15 @@ class IOEngine {
      * @return void is successful, or Error on failure.
      */
     virtual IOResult<void> sync_data(const FileHandle& fh) = 0;
+
+    /**
+     * @brief Cleanly unlinks the provided file and syncs the parent directory
+     *
+     *
+     * @param path       Path to the file to be removed
+     * @return void is successful, or Error on failure.
+     */
+    virtual IOResult<void> remove(const std::string& path) = 0;
 };
 
 }  // namespace enigmadb::io

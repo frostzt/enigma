@@ -39,6 +39,8 @@ class PosixIOEngine : public IOEngine {
     IOResult<void> sync_directory(const std::string& path) override;
 
     IOResult<void> sync_data(const FileHandle& fh) override;
+
+    IOResult<void> remove(const std::string& path) override;
 };
 
 }  // namespace enigmadb::io
