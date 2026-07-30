@@ -45,6 +45,12 @@ struct SSTableId {
     bool operator<(const SSTableId& oth) const { return value < oth.value; }
 };
 
+struct SSTableIdComparator {
+    bool operator()(const SSTableId& a, const SSTableId& b) const {
+        return a.value > b.value;
+    }
+};
+
 inline std::string sstable_filename(SSTableId id) {
     std::stringstream ss;
     ss << "sst_" << std::setfill('0') << std::setw(8) << id.value << ".db";
