@@ -8,11 +8,16 @@
 #ifndef ENIGMA_DB_ERROR_H
 #define ENIGMA_DB_ERROR_H
 
+#include <execinfo.h>
+
+#include <cstddef>
 #include <string>
 
 namespace enigmadb::common {
 
 enum class ErrorCode {
+    NONE = -1,
+
     UNEXPECTED_ERR = 0,
 
     /// Basic error types
@@ -39,6 +44,18 @@ struct Error {
         return Error{ErrorCode::UNEXPECTED_ERR, std::move(message)};
     }
 };
+
+[[noreturn]] void _server_panic_impl(const char* file, int line,
+                                     const std::string& msg);
+
+#define server_panic(msg) _server_panic_impl(__FILE__, __LINE__, msg)
+
+#define server_assert(condition)                           \
+    do {                                                   \
+        if (!(condition)) {                                \
+            server_panic("Assertion failed: " #condition); \
+        }                                                  \
+    } while (0)
 
 }  // namespace enigmadb::common
 
