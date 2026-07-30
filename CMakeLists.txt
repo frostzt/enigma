@@ -14,17 +14,25 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # --- Compile Flags ---
 
 add_compile_options(
-  -Wall -Wextra -Werror -Wpedantic
+  -Wall -Wextra -Werror -Wpedantic -Wreorder
 )
 add_compile_options(-Wno-gnu-zero-variadic-macro-arguments)
 
 # --- Build Flags and stuff ---
+
+# Default to Debug if CMAKE_BUILD_TYPE isn't specified
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Choose the type of build." FORCE)
+endif()
 
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
   add_compile_options(-O0 -g)
   add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
   add_link_options(-fsanitize=address,undefined)
   add_compile_definitions(DEBUG)
+else()
+  add_compile_definitions(NDEBUG)
+  add_compile_options(-O3)
 endif()
 
 # --- Testing ---
