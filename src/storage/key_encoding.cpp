@@ -45,18 +45,33 @@ void decode_composite_key(const std::vector<uint8_t>& compkey,
     /* decode partition key */
     auto plen = common::decode_uint32(compkey.data(), offset);
     offset += 4;
+    if (offset + plen > compkey.size()) {
+        return;
+    }
     pkey.assign(compkey.data() + offset, compkey.data() + offset + plen);
     offset += plen;
 
     /* decode clustering key */
+    if (offset + 4 > compkey.size()) {
+        return;
+    }
     auto clen = common::decode_uint32(compkey.data(), offset);
     offset += 4;
+    if (offset + clen > compkey.size()) {
+        return;
+    }
     ckey.assign(compkey.data() + offset, compkey.data() + offset + clen);
     offset += clen;
 
     /* decode column name */
+    if (offset + 4 > compkey.size()) {
+        return;
+    }
     auto collen = common::decode_uint32(compkey.data(), offset);
     offset += 4;
+    if (offset + collen > compkey.size()) {
+        return;
+    }
     cname.assign(compkey.data() + offset, compkey.data() + offset + collen);
     offset += collen;
 }

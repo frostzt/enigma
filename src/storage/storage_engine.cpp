@@ -267,10 +267,10 @@ Result<void> StorageEngine::do_compact_work() {
                     inputs, this->next_sst_seq_, true);
                 if (!new_sst_result.has_value()) {
                     err = new_sst_result.err();
+                    return;
                 }
 
                 sstid = new_sst_result.value();
-
             } else {
                 server_panic(
                     "Unidentified or invalid option type for compaction!");
@@ -286,7 +286,9 @@ Result<void> StorageEngine::do_compact_work() {
     assert(sstid.value == this->next_sst_seq_);
 
     auto sstrr = SSTableReader::create(engine_, sst_path(sstid.value));
-    if (!sstrr.has_value()) err = sstrr.err();
+    if (!sstrr.has_value()) {
+        return Result<void>::err(sstrr.err());
+    }
 
     /* Empty the sst_readers_ vector and update it to use the new
      * sstable file */
@@ -298,7 +300,8 @@ Result<void> StorageEngine::do_compact_work() {
      * last one */
     bump_sst_sequence();
 
-    /* delete the old files */
+    /* delete the old files - best effort rn later on obsolete sst files will be
+     * cleaned up by a Manifest driven GC */
     for (auto sst_id : inputs) {
         auto path = sst_path(sst_id.value);
         if (fs::exists(path)) {
