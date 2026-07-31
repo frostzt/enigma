@@ -65,7 +65,7 @@ DoCompactResult Compactor::do_size_tiered_compact(
     MergeIterator m_itr(iterators);
     for (m_itr.seek_to_first(); m_itr.valid(); m_itr.next()) {
         auto& key = m_itr.key();
-        const auto value = m_itr.value();
+        const auto& value = m_itr.value();
 
         /* skip tombstoned records if in full compaction */
         if (value.is_tombstone && is_full_compaction) continue;

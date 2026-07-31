@@ -1,11 +1,13 @@
 #include "enigmadb/storage/storage_engine.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <iomanip>
+#include <iostream>
 #include <memory>
 #include <optional>
 #include <sstream>
@@ -56,11 +58,11 @@ std::string StorageEngine::sst_path(uint64_t seq) {
     return ss.str();
 }
 
-Result<StorageEngine> StorageEngine::open(io::IOEngine& engine,
-                                          const std::string& data_dir,
-                                          const uint64_t memtable_size) {
+Result<std::unique_ptr<StorageEngine>> StorageEngine::open(
+    io::IOEngine& engine, const std::string& data_dir,
+    const uint64_t memtable_size) {
     if (trim_string(data_dir) == "") {
-        return Result<StorageEngine>::err(
+        return Result<std::unique_ptr<StorageEngine>>::err(
             Error{ErrorCode::BAD_CONFIG, "Data directory was not specified."});
     }
 
@@ -69,33 +71,33 @@ Result<StorageEngine> StorageEngine::open(io::IOEngine& engine,
     fs::path sst_dir_path = data_dir + "/sst";
     if (!fs::is_directory(wal_dir_path)) {
         if (!fs::create_directory(wal_dir_path)) {
-            return Result<StorageEngine>::err(common::Error{
+            return Result<std::unique_ptr<StorageEngine>>::err(common::Error{
                 common::ErrorCode::UNEXPECTED_ERR, "failed to create wal dir"});
         }
     }
 
     if (!fs::is_directory(sst_dir_path)) {
         if (!fs::create_directory(sst_dir_path)) {
-            return Result<StorageEngine>::err(common::Error{
+            return Result<std::unique_ptr<StorageEngine>>::err(common::Error{
                 common::ErrorCode::UNEXPECTED_ERR, "failed to create sst dir"});
         }
     }
 
     /* find all the sstable files */
     std::vector<fs::path> files;
+    uint64_t highest_sst_seq = 0;
     for (const auto& entry : fs::directory_iterator(sst_dir_path)) {
         if (entry.is_regular_file() && entry.path().extension() == ".db") {
             files.push_back(entry.path());
+
+            uint64_t seq = extract_num(entry.path().filename().string());
+            highest_sst_seq = std::max(highest_sst_seq, seq);
         }
     }
 
     std::map<sstable::SSTableId, std::unique_ptr<sstable::SSTableReader>,
              SSTableIdComparator>
         sst_readers;
-    uint64_t highest_sst_seq = 0;
-    if (!files.empty()) {
-        highest_sst_seq = extract_num(files.back().filename().string());
-    }
 
     uint64_t max_sst_sequence_found = 0;
 
@@ -147,35 +149,34 @@ Result<StorageEngine> StorageEngine::open(io::IOEngine& engine,
        << highest_wal_seq + 1 << ".log";
     auto wal_writer_res = wal::WalWriter::create(engine, ss.str());
     if (!wal_writer_res.has_value()) {
-        return Result<StorageEngine>::err(wal_writer_res.err());
+        return Result<std::unique_ptr<StorageEngine>>::err(
+            wal_writer_res.err());
     }
 
-    StorageEngine storage_engine{engine,
-                                 data_dir,
-                                 std::move(wal_writer_res.value()),
-                                 memtable_size,
-                                 std::move(mtable),
-                                 std::move(sst_readers),
-                                 highest_wal_seq + 1,
-                                 highest_sst_seq + 1,
-                                 max_sst_sequence_found + 1};
+    auto storage_engine = std::unique_ptr<StorageEngine>(new StorageEngine(
+        engine, data_dir, std::move(wal_writer_res.value()), memtable_size,
+        std::move(mtable), std::move(sst_readers), highest_wal_seq + 1,
+        highest_sst_seq + 1, max_sst_sequence_found + 1));
 
     /* try and recover */
-    auto recover_result = storage_engine.recover();
+    auto recover_result = storage_engine->recover();
     if (!recover_result.has_value()) {
-        return Result<StorageEngine>::err(recover_result.err());
+        return Result<std::unique_ptr<StorageEngine>>::err(
+            recover_result.err());
     }
 
-    return Result<StorageEngine>::ok(std::move(storage_engine));
+    return Result<std::unique_ptr<StorageEngine>>::ok(
+        std::move(storage_engine));
 }
 
 Result<void> StorageEngine::set_compaction_config(
     compaction::CompactionConfig config) {
-    std::visit(
+    return std::visit(
         [this](auto& opts) {
             using T = std::decay_t<decltype(opts)>;
             if constexpr (std::is_same_v<T, compaction::SizeTieredConfig>) {
                 compaction_config_ = std::move(opts);
+                return Result<void>::ok();
             } else {
                 return Result<void>::err(
                     Error{ErrorCode::BAD_CONFIG,
@@ -183,8 +184,6 @@ Result<void> StorageEngine::set_compaction_config(
             }
         },
         config);
-
-    return Result<void>::ok();
 }
 
 Result<void> StorageEngine::put(const std::vector<uint8_t>& partition_key,
@@ -213,7 +212,7 @@ Result<void> StorageEngine::put(
     if (!remove) {
         columns.push_back(WalColumn{column_name, value.value()});
     }
-    auto sequence = lsn_++;
+    auto sequence = bump_lsn_sequence();
     WalRecord record{
         op, hlc_.next(), sequence, partition_key, clustering_key, columns};
 
@@ -244,17 +243,18 @@ Result<void> StorageEngine::put(
     /* check if we need to compact */
     if (should_compact()) {
         auto cres = do_compact_work();
+        // @TODO: This should later move to a background thread right now
+        //        compaction sits on a HOT PATH
         if (!cres.has_value()) {
-            server_panic(
-                "Enigma Server failed to perform compaction. This is a "
-                "critical system failure, cannot continue!");
+            std::cerr << "[COMPACTION] Failed to compact file: "
+                      << cres.err().message << std::endl;
         }
     }
 
     return Result<void>::ok();
 }
 
-Result<void> StorageEngine::do_compact_work() {
+Result<SSTableId> StorageEngine::do_compact_work() {
     std::vector<sstable::SSTableId> inputs;
     inputs.reserve(sst_readers_.size());
     for (const auto& [id, _] : sst_readers_) {
@@ -269,8 +269,9 @@ Result<void> StorageEngine::do_compact_work() {
         [this, &inputs, &sstid, &err](const auto& opts) {
             using T = std::decay_t<decltype(opts)>;
             if constexpr (std::is_same_v<T, compaction::SizeTieredConfig>) {
+                bool is_full_compact = inputs.size() == sst_readers_.size();
                 auto new_sst_result = compactor_.do_size_tiered_compact(
-                    inputs, this->next_sst_seq_, true);
+                    inputs, this->get_next_sst_sequence(), is_full_compact);
                 if (!new_sst_result.has_value()) {
                     err = new_sst_result.err();
                     return;
@@ -286,10 +287,10 @@ Result<void> StorageEngine::do_compact_work() {
 
     /* Check if we errored out above */
     if (err.code != ErrorCode::NONE) {
-        return Result<void>::err(err);
+        return Result<SSTableId>::err(err);
     }
 
-    assert(sstid.value == this->next_sst_seq_);
+    assert(sstid.value == get_next_sst_sequence());
 
     auto sstrr = SSTableReader::create(engine_, sst_path(sstid.value));
     if (!sstrr.has_value()) {
@@ -297,7 +298,7 @@ Result<void> StorageEngine::do_compact_work() {
          * open this compaction didn't happen - best effort delete, Manifest
          * and recover should handle if anything goes wrong here */
         engine_.remove(sst_path(sstid.value));
-        return Result<void>::err(sstrr.err());
+        return Result<SSTableId>::err(sstrr.err());
     }
 
     /* Empty the sst_readers_ vector and update it to use the new
@@ -311,8 +312,9 @@ Result<void> StorageEngine::do_compact_work() {
     bump_sst_sequence();
 
     /* delete the old files - best effort rn later on obsolete sst files will be
-     * cleaned up by a Manifest driven GC */
-    for (auto sst_id : inputs) {
+     * cleaned up by a Manifest driven GC
+     * @TODO: Need a GC for the deleted file */
+    for (const auto& sst_id : inputs) {
         auto path = sst_path(sst_id.value);
         if (fs::exists(path)) {
             if (auto res = engine_.remove(path); !res.has_value()) {
@@ -323,7 +325,7 @@ Result<void> StorageEngine::do_compact_work() {
         }
     }
 
-    return Result<void>::ok();
+    return Result<SSTableId>::ok(sstid);
 }
 
 Result<void> StorageEngine::flush() {
@@ -332,8 +334,8 @@ Result<void> StorageEngine::flush() {
     }
 
     /* create a new sstable writer */
-    auto sstwrr = SSTableWriter::create(engine_, sst_path(next_sst_seq_),
-                                        active_memtable_.count());
+    auto sstwrr = SSTableWriter::create(
+        engine_, sst_path(get_next_sst_sequence()), active_memtable_.count());
     if (!sstwrr.has_value()) return sstwrr.err();
 
     /* itr memtable and add entry to the sstable */
@@ -349,16 +351,17 @@ Result<void> StorageEngine::flush() {
     }
 
     /* open an sstable reader */
-    auto sstrr = SSTableReader::create(engine_, sst_path(next_sst_seq_));
+    auto sstrr =
+        SSTableReader::create(engine_, sst_path(get_next_sst_sequence()));
     if (!sstrr.has_value()) return sstrr.err();
 
     /* create new wal sequence */
-    auto new_wal_seq = next_wal_seq_ + 1;
+    auto new_wal_seq = get_next_wal_sequence() + 1;
     auto walwrr = WalWriter::create(engine_, wal_path(new_wal_seq));
     if (!walwrr.has_value()) return walwrr.err();
 
     sst_readers_.insert(std::make_pair(
-        SSTableId{next_sst_seq_},
+        SSTableId{get_next_sst_sequence()},
         std::make_unique<sstable::SSTableReader>(std::move(sstrr.value()))));
 
     wal_writer_.emplace(std::move(walwrr.value()));
@@ -367,9 +370,9 @@ Result<void> StorageEngine::flush() {
     Memtable mtable{memtable_size_};
     active_memtable_ = std::move(mtable);
 
-    auto old_wal_seq = next_wal_seq_;
-    next_wal_seq_ = new_wal_seq;
-    next_sst_seq_++;
+    auto old_wal_seq = get_next_wal_sequence();
+    bump_wal_sequence();
+    bump_sst_sequence();
 
     /* best effort del, deleting failure for old wals are not fatal */
     fs::remove(wal_path(old_wal_seq));
@@ -435,19 +438,18 @@ Result<std::optional<MemtableValue>> StorageEngine::get(
 }
 
 Result<uint64_t> StorageEngine::recover() {
-    fs::path wal_dir_path = data_dir_ + "/wal";
-    if (!fs::is_directory(wal_dir_path)) {
+    if (!fs::is_directory(get_wal_directory())) {
         return Result<uint64_t>::err(
             Error{ErrorCode::UNEXPECTED_ERR, "wal directory does not exist"});
     }
 
     /* collect only OLD wal files (before the current active WAL) */
     std::vector<fs::path> old_wal_files;
-    for (const auto& entry : fs::directory_iterator(wal_dir_path)) {
+    for (const auto& entry : fs::directory_iterator(get_wal_directory())) {
         if (!entry.is_regular_file() || entry.path().extension() != ".log")
             continue;
         auto seq = extract_num(entry.path().filename().string());
-        if (seq < next_wal_seq_) {
+        if (seq < get_next_wal_sequence()) {
             old_wal_files.push_back(entry.path());
         }
     }
@@ -517,7 +519,13 @@ Result<uint64_t> StorageEngine::recover() {
     }
 
     /* reconcile */
-    lsn_ = std::max(lsn_, highest_wal_lsn_sequence) + 1;
+    auto current = lsn_.load(std::memory_order_relaxed);
+    auto target = std::max(current, highest_wal_lsn_sequence) + 1;
+    while (current < target &&
+           !lsn_.compare_exchange_weak(current, target,
+                                       std::memory_order_relaxed)) {
+        target = std::max(current, highest_wal_lsn_sequence) + 1;
+    }
 
     return Result<uint64_t>::ok(highest_wal_lsn_sequence);
 }

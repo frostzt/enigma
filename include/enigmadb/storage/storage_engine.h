@@ -37,6 +37,7 @@
 #ifndef ENIGMA_DB_STORAGE_ENGINE_H
 #define ENIGMA_DB_STORAGE_ENGINE_H
 
+#include <atomic>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -70,39 +71,57 @@ class StorageEngine {
     io::IOEngine& engine_;
     const std::string data_dir_;
 
+    /// SSTable readers
     std::map<sstable::SSTableId, std::unique_ptr<sstable::SSTableReader>,
              sstable::SSTableIdComparator>
-        sst_readers_;  ///< SSTable readers
-
-    std::optional<wal::WalWriter> wal_writer_;  ///< Active WAL segment writer.
-    uint64_t memtable_size_;                    ///< Flush threshold in bytes.
-    memtable::Memtable active_memtable_;        ///< Current mutable memtable.
-    common::TimestampGenerator
-        hlc_;  ///< Hybrid logical clock for record timestamps.
+        sst_readers_;
+    /// Active WAL segment writer.
+    std::optional<wal::WalWriter> wal_writer_;
+    /// Flush threshold in bytes.
+    uint64_t memtable_size_;
+    /// Current mutable memtable.
+    memtable::Memtable active_memtable_;
+    /// Hybrid logical clock for record timestamps.
+    common::TimestampGenerator hlc_;
 
     /* --------------------------------------------------
      * Sequences
      * --------------------------------------------------*/
-    uint64_t lsn_{0};  ///< Monotonically increasing log sequence number.
-    uint64_t next_wal_seq_{0};  ///< Sequence number for the next WAL segment.
-    uint64_t next_sst_seq_{0};  ///< Sequence number for the next SSTable file.
+    /// Monotonically increasing log sequence number.
+    std::atomic<uint64_t> lsn_{0};
+    /// Sequence number for the next WAL segment.
+    std::atomic<uint64_t> next_wal_seq_{0};
+    /// Sequence number for the next SSTable file.
+    std::atomic<uint64_t> next_sst_seq_{0};
+
+    /**
+     * @brief Bumps LSN sequence by one
+     */
+    uint64_t bump_lsn_sequence() {
+        return lsn_.fetch_add(1, std::memory_order_relaxed);
+    }
 
     /**
      * @brief Bumps SST file sequence by one
      */
-    uint64_t bump_sst_sequence() { return next_sst_seq_++; };
+    uint64_t bump_sst_sequence() {
+        return next_sst_seq_.fetch_add(1, std::memory_order_relaxed);
+    };
 
     /**
-     * @brief Bumps SST file sequence by one
+     * @brief Bumps WAL file sequence by one
      */
-    uint64_t bump_wal_sequence() { return next_wal_seq_++; };
+    uint64_t bump_wal_sequence() {
+        return next_wal_seq_.fetch_add(1, std::memory_order_relaxed);
+    };
 
     /* --------------------------------------------------
      * Compaction
      * --------------------------------------------------*/
-    compaction::CompactionConfig
-        compaction_config_;            ///< Configuration for compaction
-    compaction::Compactor compactor_;  ///< Compactor compacts SSTable files
+    /// Configuration for compaction
+    compaction::CompactionConfig compaction_config_;
+    /// Compactor compacts SSTable files
+    compaction::Compactor compactor_;
 
     /**
      * @brief Private constructor; use StorageEngine::open() instead.
@@ -123,9 +142,9 @@ class StorageEngine {
           wal_writer_(std::move(wal_writer)),
           memtable_size_(memtable_size),
           active_memtable_(std::move(active_memtable)),
-          lsn_(highest_sequence),
-          next_wal_seq_(next_wal_seq),
-          next_sst_seq_(next_sst_seq),
+          lsn_{highest_sequence},
+          next_wal_seq_{next_wal_seq},
+          next_sst_seq_{next_sst_seq},
           compaction_config_(std::move(compaction_config)),
           compactor_(compaction::Compactor::create(engine, data_dir)) {}
 
@@ -198,7 +217,31 @@ class StorageEngine {
         const compaction::SizeTieredConfig& opts) const;
 
    public:
-    Result<void> do_compact_work();
+    StorageEngine(const StorageEngine&) = delete;
+    StorageEngine& operator=(const StorageEngine&) = delete;
+    StorageEngine(StorageEngine&&) = delete;
+    StorageEngine& operator=(StorageEngine&&) = delete;
+
+    /**
+     * @brief Returns the latest LSN available
+     */
+    uint64_t latest_lsn() const { return lsn_.load(std::memory_order_relaxed); }
+
+    /**
+     * @brief Returns the next wal sequence number available
+     */
+    uint64_t get_next_wal_sequence() const {
+        return next_wal_seq_.load(std::memory_order_relaxed);
+    }
+
+    /**
+     * @brief Returns the next sstable sequence number available
+     */
+    uint64_t get_next_sst_sequence() const {
+        return next_sst_seq_.load(std::memory_order_relaxed);
+    }
+
+    Result<sstable::SSTableId> do_compact_work();
 
     /**
      * @brief Overrides the current compaction config and sets it to the
@@ -231,9 +274,9 @@ class StorageEngine {
      * @return A ready-to-use StorageEngine, or an error if directory
      *         creation, SSTable opening, WAL creation, or recovery fails.
      */
-    static Result<StorageEngine> open(io::IOEngine& engine,
-                                      const std::string& data_dir,
-                                      const uint64_t memtable_size);
+    static Result<std::unique_ptr<StorageEngine>> open(
+        io::IOEngine& engine, const std::string& data_dir,
+        const uint64_t memtable_size);
 
     /**
      * @brief Writes a column value.
@@ -305,21 +348,6 @@ class StorageEngine {
      *         or sync fails.
      */
     Result<void> flush();
-
-    /**
-     * @brief Returns the latest LSN available
-     */
-    uint64_t latest_lsn() const { return lsn_; };
-
-    /**
-     * @brief Returns the next wal sequence number available
-     */
-    uint64_t get_next_wal_sequence() const { return next_wal_seq_; };
-
-    /**
-     * @brief Returns the next sstable sequence number available
-     */
-    uint64_t get_next_sst_sequence() const { return next_sst_seq_; };
 };
 
 }  // namespace enigmadb::storage
