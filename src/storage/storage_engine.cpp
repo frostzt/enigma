@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "enigmadb/common/error.h"
+#include "enigmadb/common/utils.h"
 #include "enigmadb/storage/compaction/compaction.h"
 #include "enigmadb/storage/key_encoding.h"
 #include "enigmadb/storage/memtable/memtable.h"
@@ -58,6 +59,11 @@ std::string StorageEngine::sst_path(uint64_t seq) {
 Result<StorageEngine> StorageEngine::open(io::IOEngine& engine,
                                           const std::string& data_dir,
                                           const uint64_t memtable_size) {
+    if (trim_string(data_dir) == "") {
+        return Result<StorageEngine>::err(
+            Error{ErrorCode::BAD_CONFIG, "Data directory was not specified."});
+    }
+
     /* create dirs if they don't exist */
     fs::path wal_dir_path = data_dir + "/wal";
     fs::path sst_dir_path = data_dir + "/sst";
@@ -287,6 +293,10 @@ Result<void> StorageEngine::do_compact_work() {
 
     auto sstrr = SSTableReader::create(engine_, sst_path(sstid.value));
     if (!sstrr.has_value()) {
+        /* We need to delete this file on failure if the reader wasn't able to
+         * open this compaction didn't happen - best effort delete, Manifest
+         * and recover should handle if anything goes wrong here */
+        engine_.remove(sst_path(sstid.value));
         return Result<void>::err(sstrr.err());
     }
 
