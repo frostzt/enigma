@@ -10,11 +10,10 @@
 #include <filesystem>
 #include <vector>
 
-#include "enigmadb/common/error.h"
-#include "enigmadb/common/result.h"
+#include "enigmadb/base.h"
+#include "enigmadb/error.h"
 #include "enigmadb/io/io_engine.h"
-
-using namespace enigmadb::common;
+#include "enigmadb/result.h"
 
 namespace enigmadb::io {
 
@@ -97,7 +96,7 @@ static bool debug_has_open_fd_for_path(const std::string& target_path) {
 
 #endif  // NDEBUG
 
-IOResult<FileHandle> PosixIOEngine::open(const std::string& path, Mode mode) {
+Result<FileHandle> PosixIOEngine::open(const std::string& path, Mode mode) {
     // clang-format off
     int flags;
     switch (mode) {
@@ -123,7 +122,7 @@ IOResult<FileHandle> PosixIOEngine::open(const std::string& path, Mode mode) {
     return ExpectResult<FileHandle, Error>::ok(std::move(fh));
 };
 
-IOResult<void> PosixIOEngine::sync_data(const FileHandle& fh) {
+Result<void> PosixIOEngine::sync_data(const FileHandle& fh) {
     if (fh.fd() == -1) {
         return ExpectResult<void, Error>::err(
             Error{ErrorCode::FILE_DESCRIPTOR_ERR, "invalid file descriptor"});
@@ -143,7 +142,7 @@ IOResult<void> PosixIOEngine::sync_data(const FileHandle& fh) {
     return ExpectResult<void, Error>::ok();
 }
 
-IOResult<void> PosixIOEngine::sync_all(const FileHandle& fh) {
+Result<void> PosixIOEngine::sync_all(const FileHandle& fh) {
     if (fh.fd() == -1) {
         return ExpectResult<void, Error>::err(
             Error{ErrorCode::FILE_DESCRIPTOR_ERR, "invalid file descriptor"});
@@ -162,7 +161,7 @@ IOResult<void> PosixIOEngine::sync_all(const FileHandle& fh) {
     return ExpectResult<void, Error>::ok();
 }
 
-IOResult<void> PosixIOEngine::sync_directory(const std::string& path) {
+Result<void> PosixIOEngine::sync_directory(const std::string& path) {
     errno = 0;
     int fd = ::open(path.c_str(), O_RDONLY);
     if (fd == -1) {
@@ -179,8 +178,8 @@ IOResult<void> PosixIOEngine::sync_directory(const std::string& path) {
     return ExpectResult<void, Error>::ok();
 }
 
-IOResult<size_t> PosixIOEngine::append(const FileHandle& fh,
-                                       const uint8_t* buffer, size_t length) {
+Result<size_t> PosixIOEngine::append(const FileHandle& fh,
+                                     const uint8_t* buffer, size_t length) {
     errno = 0;
     if (fh.fd() == -1) {
         return ExpectResult<size_t, Error>::err(
@@ -201,11 +200,11 @@ IOResult<size_t> PosixIOEngine::append(const FileHandle& fh,
         }
         bytes_written += bytes;
     }
-    return bytes_written;
+    return Result<size_t>::ok(bytes_written);
 }
 
-IOResult<size_t> PosixIOEngine::read(const FileHandle& fh, size_t count,
-                                     uint8_t* buffer, size_t offset) {
+Result<size_t> PosixIOEngine::read(const FileHandle& fh, size_t count,
+                                   uint8_t* buffer, size_t offset) {
     if (fh.fd() == -1) {
         return ExpectResult<size_t, Error>::err(
             Error{ErrorCode::FILE_DESCRIPTOR_ERR, "invalid file descriptor"});
@@ -229,20 +228,20 @@ IOResult<size_t> PosixIOEngine::read(const FileHandle& fh, size_t count,
         bytes_read += bytes;
     }
 
-    return bytes_read;
+    return Result<size_t>::ok(bytes_read);
 }
 
-IOResult<size_t> PosixIOEngine::file_size(const FileHandle& fh) {
+Result<size_t> PosixIOEngine::file_size(const FileHandle& fh) {
     struct stat st;
     errno = 0;
     if (::fstat(fh.fd(), &st) == -1) {
         char* err_msg = strerror(errno);
-        return IOResult<size_t>::err(Error{ErrorCode::FSTAT_ERR, err_msg});
+        return Result<size_t>::err(Error{ErrorCode::FSTAT_ERR, err_msg});
     }
-    return IOResult<size_t>::ok(static_cast<size_t>(st.st_size));
+    return Result<size_t>::ok(static_cast<size_t>(st.st_size));
 }
 
-IOResult<void> PosixIOEngine::remove(const std::string& path) {
+Result<void> PosixIOEngine::remove(const std::string& path) {
     errno = 0;
 
     /* Remove the provided file */
@@ -272,7 +271,7 @@ IOResult<void> PosixIOEngine::remove(const std::string& path) {
            "open FileHandle/FD!");
 #endif
 #endif
-    return IOResult<void>::ok();
+    return Result<void>::ok();
 }
 
 }  // namespace enigmadb::io
