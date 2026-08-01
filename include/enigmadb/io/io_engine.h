@@ -16,13 +16,9 @@
 #include <cstddef>
 #include <string>
 
-#include "enigmadb/common/error.h"
-#include "enigmadb/common/result.h"
+#include "enigmadb/result.h"
 
 namespace enigmadb::io {
-
-template <typename T>
-using IOResult = common::ExpectResult<T, common::Error>;
 
 enum class Mode {
     Read,       /// O_RDONLY
@@ -87,7 +83,7 @@ class IOEngine {
      * @param mode Specifies the mode in which to open this file
      * @return A FileHandle which manages the file opened otherwise Error
      */
-    virtual IOResult<FileHandle> open(const std::string& path, Mode mode) = 0;
+    virtual Result<FileHandle> open(const std::string& path, Mode mode) = 0;
 
     /* @brief Tries to append data directly into the file handled by @p fh
      *
@@ -97,10 +93,10 @@ class IOEngine {
      * @param length Length of bytes to append to the file
      * @return Number of bytes appended, or Error on failure.
      */
-    virtual IOResult<size_t> append(const FileHandle& fh, const uint8_t* buffer,
-                                    size_t length) = 0;
+    virtual Result<size_t> append(const FileHandle& fh, const uint8_t* buffer,
+                                  size_t length) = 0;
 
-    virtual IOResult<size_t> file_size(const FileHandle& fh) = 0;
+    virtual Result<size_t> file_size(const FileHandle& fh) = 0;
 
     /**
      * @brief Reads up to @p count bytes from @p fh at the given @p offset.
@@ -112,8 +108,8 @@ class IOEngine {
      * @param offset   Byte offset from the start of the file.
      * @return Number of bytes actually read, or Error on failure.
      */
-    virtual IOResult<size_t> read(const FileHandle& fh, size_t count,
-                                  uint8_t* buffer, size_t offset) = 0;
+    virtual Result<size_t> read(const FileHandle& fh, size_t count,
+                                uint8_t* buffer, size_t offset) = 0;
 
     /**
      * @brief Flushes all the directory and flushes it to the disk
@@ -122,7 +118,7 @@ class IOEngine {
      * Mode::Read).
      * @return void is successful, or Error on failure.
      */
-    virtual IOResult<void> sync_directory(const std::string& path) = 0;
+    virtual Result<void> sync_directory(const std::string& path) = 0;
 
     /**
      * @brief Flushes all the changes to the disk similar to fsync
@@ -131,7 +127,7 @@ class IOEngine {
      * Mode::Read).
      * @return void is successful, or Error on failure.
      */
-    virtual IOResult<void> sync_all(const FileHandle& fh) = 0;
+    virtual Result<void> sync_all(const FileHandle& fh) = 0;
 
     /**
      * @brief Flushes all the data changes except metadata* to the disk
@@ -144,7 +140,7 @@ class IOEngine {
      * Mode::Read).
      * @return void is successful, or Error on failure.
      */
-    virtual IOResult<void> sync_data(const FileHandle& fh) = 0;
+    virtual Result<void> sync_data(const FileHandle& fh) = 0;
 
     /**
      * @brief Cleanly unlinks the provided file and syncs the parent directory
@@ -153,7 +149,7 @@ class IOEngine {
      * @param path       Path to the file to be removed
      * @return void is successful, or Error on failure.
      */
-    virtual IOResult<void> remove(const std::string& path) = 0;
+    virtual Result<void> remove(const std::string& path) = 0;
 };
 
 }  // namespace enigmadb::io
