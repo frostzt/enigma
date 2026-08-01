@@ -1,8 +1,8 @@
-#include "enigmadb/common/hlc.h"
+#include "enigmadb/hlc.h"
 
 #include <chrono>
 
-namespace enigmadb::common {
+namespace enigmadb {
 
 uint64_t TimestampGenerator::next() {
     const auto now = std::chrono::system_clock::now();
@@ -28,4 +28,4 @@ uint64_t TimestampGenerator::next() {
     return candidate;
 }
 
-}  // namespace enigmadb::common
+}  // namespace enigmadb

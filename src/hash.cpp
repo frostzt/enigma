@@ -1,8 +1,8 @@
-#include "enigmadb/common/hash.h"
+#include "enigmadb/hash.h"
 
-#include "enigmadb/common/encoding.h"
+#include "enigmadb/encoding.h"
 
-namespace enigmadb::common {
+namespace enigmadb {
 
 uint32_t Hash(const uint8_t* data, size_t n, uint32_t seed) {
     // Similar to murmur hash
@@ -37,4 +37,4 @@ uint32_t Hash(const uint8_t* data, size_t n, uint32_t seed) {
     return h;
 }
 
-}  // namespace enigmadb::common
+}  // namespace enigmadb

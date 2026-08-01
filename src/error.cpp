@@ -1,11 +1,11 @@
-#include "enigmadb/common/error.h"
+#include "enigmadb/error.h"
 
 #include <cxxabi.h>
 
 #include <iostream>
 #include <string>
 
-namespace enigmadb::common {
+namespace enigmadb {
 
 [[noreturn]] void _server_panic_impl(const char* file, int line,
                                      const std::string& msg) {
@@ -55,4 +55,4 @@ namespace enigmadb::common {
     std::abort();
 }
 
-}  // namespace enigmadb::common
+}  // namespace enigmadb

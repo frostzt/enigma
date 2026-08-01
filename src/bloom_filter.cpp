@@ -1,13 +1,13 @@
-#include "enigmadb/common/bloom_filter.h"
+#include "enigmadb/bloom_filter.h"
 
 #include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <vector>
 
-#include "enigmadb/common/hash.h"
+#include "enigmadb/hash.h"
 
-namespace enigmadb::common {
+namespace enigmadb {
 
 BloomFilter::BloomFilter(size_t expected_keys, double false_positive_rate) {
     assert(expected_keys > 0);
@@ -78,4 +78,4 @@ BloomFilter BloomFilter::from_keys(
     return filter;
 }
 
-}  // namespace enigmadb::common
+}  // namespace enigmadb

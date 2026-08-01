@@ -1,9 +1,9 @@
-#include "enigmadb/common/encoding.h"
+#include "enigmadb/encoding.h"
 
 #include <cstddef>
 #include <cstring>
 
-namespace enigmadb::common {
+namespace enigmadb {
 
 size_t encode_uint8(uint8_t value, uint8_t* buffer, size_t offset) {
     buffer[offset] = value;
@@ -64,4 +64,4 @@ size_t encode_bytes(const void* data, size_t length, uint8_t* buffer,
     return offset + length;
 }
 
-}  // namespace enigmadb::common
+}  // namespace enigmadb
