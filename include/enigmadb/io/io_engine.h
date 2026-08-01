@@ -16,7 +16,7 @@
 #include <cstddef>
 #include <string>
 
-#include "enigmadb/result.h"
+#include "enigmadb/base.h"
 
 namespace enigmadb::io {
 

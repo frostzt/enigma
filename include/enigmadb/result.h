@@ -11,8 +11,6 @@
 #include <stdexcept>
 #include <variant>
 
-#include "enigmadb/error.h"
-
 namespace enigmadb {
 
 template <typename T, typename E>
@@ -90,9 +88,6 @@ class ExpectResult<void, E> {
 
     static ExpectResult err(E error) { return ExpectResult(std::move(error)); }
 };
-
-template <typename T>
-using Result = ExpectResult<T, Error>;
 
 }  // namespace enigmadb
 

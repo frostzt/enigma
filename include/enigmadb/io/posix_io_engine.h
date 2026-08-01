@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <string>
 
+#include "enigmadb/base.h"
 #include "enigmadb/io/io_engine.h"
 
 namespace enigmadb::io {
