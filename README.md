@@ -1,5 +1,8 @@
 # enigma
 
+Engine and idea inpired by Rocks, the name is inspired by my favorite Soft Support/Offlaner
+Enigma in Dota 2.
+
 ## Directory Architecture
 
 ```shell
