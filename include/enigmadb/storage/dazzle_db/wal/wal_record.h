@@ -6,20 +6,16 @@
  * @date 2026-03-31
  */
 
-#ifndef ENIGMA_DB_WAL_RECORD_H
-#define ENIGMA_DB_WAL_RECORD_H
+#ifndef ENIGMA_DB_DAZZLE_WAL_RECORD_H
+#define ENIGMA_DB_DAZZLE_WAL_RECORD_H
 
 #include <cstdint>
 #include <string>
 #include <vector>
 
-#include "enigmadb/common/error.h"
-#include "enigmadb/common/result.h"
+#include "enigmadb/base.h"
 
-namespace enigmadb::storage::wal {
-
-template <typename T>
-using WalResult = common::ExpectResult<T, common::Error>;
+namespace enigmadb::dazzle {
 
 enum class WalOpType : uint8_t {
     PUT_ROW = 0x01,
@@ -79,9 +75,8 @@ size_t get_record_size(const WalRecord& record);
 std::vector<uint8_t> serialize_wal_record(const WalRecord& record);
 // clang-format on
 
-enigmadb::common::ExpectResult<WalRecord, enigmadb::common::Error>
-deserialize_wal_record(const uint8_t* buffer, size_t length);
+Result<WalRecord> deserialize_wal_record(const uint8_t* buffer, size_t length);
 
-}  // namespace enigmadb::storage::wal
+}  // namespace enigmadb::dazzle
 
-#endif  // ENIGMA_DB_WAL_RECORD_H
+#endif  // ENIGMA_DB_DAZZLE_WAL_RECORD_H

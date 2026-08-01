@@ -11,10 +11,7 @@
 #include <string_view>
 #include <vector>
 
-#include "enigmadb/common/error.h"
-#include "enigmadb/common/result.h"
-
-namespace enigmadb::storage::sstable {
+namespace enigmadb::dazzle {
 
 /// @brief Maximum data block size in bytes before flushing to disk.
 /// @todo Could be derived from the OS page size at runtime.
@@ -29,10 +26,6 @@ static constexpr size_t MAGIC_SIZE = 8;
 /// @brief Magic bytes written to the footer to identify a valid SSTable file.
 static constexpr std::array<char, 8> MAGIC = {'E', 'N', 'I', 'G',
                                               'S', 'S', 'T', 'B'};
-
-/// @brief Convenience alias for result types used throughout the SSTable layer.
-template <typename T>
-using SSTExpectResult = common::ExpectResult<T, common::Error>;
 
 /**
  * @brief An 8 byte struct that tracks an SSTable independently via an
@@ -54,6 +47,11 @@ struct SSTableIdComparator {
 inline std::string sstable_filename(SSTableId id) {
     std::stringstream ss;
     ss << "sst_" << std::setfill('0') << std::setw(8) << id.value << ".db";
+    return ss.str();
+}
+inline std::string sst_path(std::string data_dir, uint64_t seq) {
+    std::stringstream ss;
+    ss << data_dir << "/sst/" << sstable_filename(SSTableId{seq});
     return ss.str();
 }
 
@@ -109,6 +107,6 @@ struct MinimalSSTableFooter {
     uint64_t highest_sequence;
 };
 
-}  // namespace enigmadb::storage::sstable
+}  // namespace enigmadb::dazzle
 
 #endif  // ENIGMA_DB_SSTABLE_WRITER_H

@@ -29,7 +29,7 @@
 
 #include "enigmadb/storage/key_encoding.h"
 
-namespace enigmadb::storage::memtable {
+namespace enigmadb::dazzle {
 
 /**
  * @brief A single value stored in the memtable.
@@ -59,7 +59,8 @@ class Memtable {
    private:
     size_t bytes_;
     size_t max_memtable_size_;
-    std::map<std::vector<uint8_t>, MemtableValue, CompositeKeyComparator>
+    std::map<std::vector<uint8_t>, MemtableValue,
+             storage::CompositeKeyComparator>
         entries_;
 
    public:
@@ -143,6 +144,6 @@ class Memtable {
     auto end() const { return entries_.end(); }
 };
 
-}  // namespace enigmadb::storage::memtable
+}  // namespace enigmadb::dazzle
 
 #endif  // ENIGMA_DB_MEMTABLE_H

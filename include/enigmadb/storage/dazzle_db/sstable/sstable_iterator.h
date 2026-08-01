@@ -19,13 +19,14 @@
 #include <optional>
 #include <vector>
 
-#include "enigmadb/common/error.h"
 #include "enigmadb/io/io_engine.h"
+#include "enigmadb/storage/dazzle_db/memtable/memtable.h"
+#include "enigmadb/storage/dazzle_db/sstable/sstable_common.h"
 #include "enigmadb/storage/iterator.h"
-#include "enigmadb/storage/memtable/memtable.h"
-#include "enigmadb/storage/sstable/sstable_common.h"
+#include "enigmadb/storage/key.h"
+#include "enigmadb/storage/value.h"
 
-namespace enigmadb::storage::sstable {
+namespace enigmadb::dazzle {
 
 /**
  * @brief Concrete Iterator that sequentially scans every entry in an
@@ -43,19 +44,19 @@ namespace enigmadb::storage::sstable {
  * @note The iterator currently reads blocks in index order (first to
  *       last) and does not support seeking to an arbitrary key.
  */
-class SSTableIterator : public Iterator {
+class SSTableIterator : public storage::Iterator {
    private:
     io::IOEngine& engine_;
     const io::FileHandle& fh_;
     const std::vector<IndexEntry>& index_entries_;
-    std::optional<common::Error> error_;
+    std::optional<Error> error_;
 
     size_t current_block_idx_;
     std::vector<uint8_t> block_buffer_;
     size_t block_offset_;
 
     std::vector<uint8_t> current_key_;
-    memtable::MemtableValue current_value_;
+    MemtableValue current_value_;
     bool valid_;
 
     /**
@@ -70,7 +71,7 @@ class SSTableIterator : public Iterator {
      *
      * @param err  The error to store for later retrieval via status().
      */
-    void set_error(common::Error err);
+    void set_error(Error err);
 
    public:
     SSTableIterator(io::IOEngine& engine, const io::FileHandle& fh,
@@ -86,11 +87,11 @@ class SSTableIterator : public Iterator {
     bool valid() const override;
     void seek_to_first() override;
     void next() override;
-    common::ExpectResult<void, common::Error> status() const override;
-    const std::vector<uint8_t>& key() const override;
-    const memtable::MemtableValue& value() const override;
+    Result<void> status() const override;
+    const storage::Key& key() const override;
+    const storage::Value& value() const override;
 };
 
-};  // namespace enigmadb::storage::sstable
+};  // namespace enigmadb::dazzle
 
 #endif  // ENIGMA_DB_SSTABLE_ITERATOR_H

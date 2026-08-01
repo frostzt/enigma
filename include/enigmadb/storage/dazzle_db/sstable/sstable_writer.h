@@ -2,50 +2,6 @@
  * @file sstable_writer.h
  * @brief Sequential writer for SSTable (Sorted String Table) files.
  *
- * Produces an SSTable with the following on-disk layout:
- *
- * @code
- * ┌──────────────────────────────────────────┐
- * │  Data Block 0                            │
- * │  ┌──────────────────────────────────────┐ │
- * │  │ key_len (4B) | key | val_len (4B)   │ │
- * │  │ | value | is_tombstone (1B)          │ │
- * │  │ ... repeated per entry ...           │ │
- * │  └──────────────────────────────────────┘ │
- * │  Data Block 1                            │
- * │  ...                                     │
- * ├──────────────────────────────────────────┤
- * │  Index Block                             │
- * │  ┌──────────────────────────────────────┐ │
- * │  │ key_len (4B) | first_key             │ │
- * │  │ block_offset (8B) | block_size (4B)  │ │
- * │  │ ... repeated per data block ...      │ │
- * │  └──────────────────────────────────────┘ │
- * ├──────────────────────────────────────────┤
- * │  Footer (32B fixed)                      │
- * │  index_block_offset (8B)                 │
- * │  index_block_size   (4B)                 │
- * │  entry_count        (4B)                 │
- * │  format_version     (2B)                 │
- * │  checksum           (4B)  ← crc-32 of prev 18 bytes
- * │  magic "ENIGSSTB"   (8B)                 │
- * │  padding            (2B)                 │
- * └──────────────────────────────────────────┘
- * @endcode
- *
- * All multi-byte integers are big-endian. Data blocks are flushed to
- * disk when they exceed MAX_PAGING_SIZE_BYTES. Entries within each
- * block are stored in insertion order (which must be sorted by the
- * caller, typically from a memtable flush).
- *
- * Typical usage:
- * @code
- * auto writer = SSTableWriter::create(engine, "/data/000001.sst");
- * for (auto& [key, val] : memtable)
- *     writer->add(key, val);
- * writer->finish();  // flushes remaining data, writes index + footer, syncs
- * @endcode
- *
  * @author frostzt
  * @date 2026-04-08
  */
@@ -57,12 +13,12 @@
 #include <utility>
 #include <vector>
 
-#include "enigmadb/common/bloom_filter.h"
+#include "enigmadb/bloom_filter.h"
 #include "enigmadb/io/io_engine.h"
-#include "enigmadb/storage/memtable/memtable.h"
-#include "enigmadb/storage/sstable/sstable_common.h"
+#include "enigmadb/storage/dazzle_db/memtable/memtable.h"
+#include "enigmadb/storage/dazzle_db/sstable/sstable_common.h"
 
-namespace enigmadb::storage::sstable {
+namespace enigmadb::dazzle {
 
 /**
  * @brief Writes a single SSTable file from a stream of sorted key-value pairs.
@@ -90,7 +46,7 @@ class SSTableWriter {
     size_t current_file_offset_;         ///< Bytes written to disk so far.
     size_t current_block_start_offset_;  ///< File offset where the current
                                          ///< block starts.
-    common::BloomFilter bloom_filter_;
+    BloomFilter bloom_filter_;
     uint64_t highest_sequence_;
 
     std::vector<IndexEntry>
@@ -126,7 +82,7 @@ class SSTableWriter {
      *
      * @return Success, or an error if the write fails.
      */
-    SSTExpectResult<void> flush_block();
+    Result<void> flush_block();
 
    public:
     /**
@@ -142,9 +98,9 @@ class SSTableWriter {
      * @return An SSTableWriter on success, or an error if the file
      *         cannot be opened.
      */
-    static SSTExpectResult<SSTableWriter> create(io::IOEngine& engine,
-                                                 const std::string& path,
-                                                 size_t estimated_keys);
+    static Result<SSTableWriter> create(io::IOEngine& engine,
+                                        const std::string& path,
+                                        size_t estimated_keys);
 
     /**
      * @brief Appends a key-value entry to the SSTable.
@@ -158,8 +114,8 @@ class SSTableWriter {
      * @param[in] value  Memtable value; tombstones are preserved as-is.
      * @return Success, or an error if a block flush fails.
      */
-    SSTExpectResult<void> add(const std::vector<uint8_t>& key,
-                              const memtable::MemtableValue& value);
+    Result<void> add(const std::vector<uint8_t>& key,
+                     const MemtableValue& value);
 
     /**
      * @brief Finalizes the SSTable file.
@@ -180,9 +136,9 @@ class SSTableWriter {
      *
      * @return Success, or an error if any write or sync fails.
      */
-    SSTExpectResult<void> finish();
+    Result<void> finish();
 };
 
-}  // namespace enigmadb::storage::sstable
+}  // namespace enigmadb::dazzle
 
 #endif  // ENIGMA_DB_SSTABLE_WRITER_H

@@ -18,13 +18,14 @@
 
 #include <vector>
 
-#include "enigmadb/common/bloom_filter.h"
+#include "enigmadb/base.h"
+#include "enigmadb/bloom_filter.h"
 #include "enigmadb/io/io_engine.h"
-#include "enigmadb/storage/memtable/memtable.h"
-#include "enigmadb/storage/sstable/sstable_common.h"
-#include "enigmadb/storage/sstable/sstable_iterator.h"
+#include "enigmadb/storage/dazzle_db/memtable/memtable.h"
+#include "enigmadb/storage/dazzle_db/sstable/sstable_common.h"
+#include "enigmadb/storage/dazzle_db/sstable/sstable_iterator.h"
 
-namespace enigmadb::storage::sstable {
+namespace enigmadb::dazzle {
 
 /**
  * @brief Read-only handle to a single SSTable file.
@@ -44,7 +45,7 @@ class SSTableReader {
     std::string path_;
     std::vector<IndexEntry>
         index_entries_;  ///< In-memory copy of the index block.
-    common::BloomFilter bloom_filter_;
+    BloomFilter bloom_filter_;
     MinimalSSTableFooter footer_;
 
     /**
@@ -57,7 +58,7 @@ class SSTableReader {
      */
     SSTableReader(io::IOEngine& engine, io::FileHandle fh,
                   const std::string& path, std::vector<IndexEntry> idx_entries,
-                  common::BloomFilter blf, MinimalSSTableFooter footer)
+                  BloomFilter blf, MinimalSSTableFooter footer)
         : engine_(engine),
           fh_(std::move(fh)),
           path_(path),
@@ -81,8 +82,8 @@ class SSTableReader {
      *         cannot be opened, is too small, has invalid magic, a
      *         checksum mismatch, or a malformed index block.
      */
-    static SSTExpectResult<SSTableReader> create(io::IOEngine& engine,
-                                                 const std::string& path);
+    static Result<SSTableReader> create(io::IOEngine& engine,
+                                        const std::string& path);
 
     /**
      * @brief Point lookup for a single composite key.
@@ -100,15 +101,14 @@ class SSTableReader {
      *         Returns an error if the data block read fails or the block
      *         is malformed.
      *
-     * TODO: We need to move this either to use `SSTExpectResult` or
+     * TODO: We need to move this either to use `Result` or
      * simply use `std::optional` - this makes it pretty weird when
      * reading this value.
      */
-    SSTExpectResult<std::optional<memtable::MemtableValue>> get(
-        const std::vector<uint8_t>& key);
+    Result<std::optional<MemtableValue>> get(const std::vector<uint8_t>& key);
 
-    SSTExpectResult<MinimalSSTableFooter> get_footer() const {
-        return footer_;
+    Result<MinimalSSTableFooter> get_footer() const {
+        return Result<MinimalSSTableFooter>::ok(footer_);
     };
 
     SSTableIterator iterator() const {
@@ -116,6 +116,6 @@ class SSTableReader {
     }
 };
 
-}  // namespace enigmadb::storage::sstable
+}  // namespace enigmadb::dazzle
 
 #endif  // ENIGMA_DB_SSTABLE_READER_H

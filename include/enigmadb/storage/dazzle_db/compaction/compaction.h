@@ -11,14 +11,10 @@
 
 #include <vector>
 
-#include "enigmadb/common/error.h"
-#include "enigmadb/common/result.h"
 #include "enigmadb/io/io_engine.h"
-#include "enigmadb/storage/sstable/sstable_common.h"
+#include "enigmadb/storage/dazzle_db/sstable/sstable_common.h"
 
-namespace enigmadb::storage::compaction {
-
-using DoCompactResult = common::ExpectResult<sstable::SSTableId, common::Error>;
+namespace enigmadb::dazzle {
 
 struct SizeTieredConfig {
     size_t min_merge_width_;  ///< Minimum number of files required to
@@ -43,11 +39,11 @@ class Compactor {
    public:
     static Compactor create(io::IOEngine& engine, const std::string& data_dir);
 
-    DoCompactResult do_size_tiered_compact(
-        const std::vector<sstable::SSTableId>& inputs,
-        const uint64_t next_sst_seq, bool is_full_compaction);
+    Result<SSTableId> do_size_tiered_compact(
+        const std::vector<SSTableId>& inputs, const uint64_t next_sst_seq,
+        bool is_full_compaction);
 };
 
-}  // namespace enigmadb::storage::compaction
+}  // namespace enigmadb::dazzle
 
 #endif  // ENIGMA_DB_COMPACTION_H

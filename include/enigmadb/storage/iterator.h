@@ -3,22 +3,6 @@
  * @brief Abstract iterator interface for sequential traversal of
  *        sorted key-value storage.
  *
- * Provides a uniform cursor-style API over different backing stores
- * (memtables, SSTable data blocks, merged views). Concrete
- * implementations define how entries are fetched and ordered.
- *
- * Typical usage:
- * @code
- * iter->seek_to_first();
- * while (iter->valid()) {
- *     process(iter->key(), iter->value());
- *     iter->next();
- * }
- * if (auto s = iter->status(); !s.has_value()) {
- *     handle_error(s.err());
- * }
- * @endcode
- *
  * @author frostzt
  * @date 2026-06-03
  */
@@ -26,12 +10,9 @@
 #ifndef ENIGMA_DB_ITERATOR_H
 #define ENIGMA_DB_ITERATOR_H
 
-#include <cstdint>
-#include <vector>
-
-#include "enigmadb/common/error.h"
-#include "enigmadb/common/result.h"
-#include "enigmadb/storage/memtable/memtable.h"
+#include "enigmadb/base.h"
+#include "enigmadb/storage/key.h"
+#include "enigmadb/storage/value.h"
 
 namespace enigmadb::storage {
 
@@ -78,7 +59,7 @@ class Iterator {
      *         or an error describing what went wrong (e.g. I/O
      *         failure, corrupted block).
      */
-    virtual common::ExpectResult<void, common::Error> status() const = 0;
+    virtual Result<void> status() const = 0;
 
     /**
      * @brief Advances the iterator to the next entry.
@@ -99,7 +80,7 @@ class Iterator {
      * The reference is stable until the next call to next() or
      * seek_to_first().
      */
-    virtual const std::vector<uint8_t>& key() const = 0;
+    virtual const Key& key() const = 0;
 
     /**
      * @brief Returns a reference to the current entry's value
@@ -110,7 +91,7 @@ class Iterator {
      * The reference is stable until the next call to next() or
      * seek_to_first().
      */
-    virtual const memtable::MemtableValue& value() const = 0;
+    virtual const Value& value() const = 0;
 };
 
 };  // namespace enigmadb::storage
