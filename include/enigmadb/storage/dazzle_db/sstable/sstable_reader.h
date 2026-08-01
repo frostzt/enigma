@@ -21,7 +21,6 @@
 #include "enigmadb/base.h"
 #include "enigmadb/bloom_filter.h"
 #include "enigmadb/io/io_engine.h"
-#include "enigmadb/storage/dazzle_db/memtable/memtable.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_common.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_iterator.h"
 
@@ -105,7 +104,7 @@ class SSTableReader {
      * simply use `std::optional` - this makes it pretty weird when
      * reading this value.
      */
-    Result<std::optional<MemtableValue>> get(const std::vector<uint8_t>& key);
+    Result<std::optional<InternalValue>> get(const std::vector<uint8_t>& key);
 
     Result<MinimalSSTableFooter> get_footer() const {
         return Result<MinimalSSTableFooter>::ok(footer_);

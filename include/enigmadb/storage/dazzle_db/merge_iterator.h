@@ -20,16 +20,14 @@
 #ifndef ENIGMA_DB_MERGE_ITERATOR_H
 #define ENIGMA_DB_MERGE_ITERATOR_H
 
+#include <cstddef>
 #include <optional>
 #include <queue>
 #include <vector>
 
-#include "enigmadb/common/error.h"
-#include "enigmadb/storage/iterator.h"
-#include "enigmadb/storage/key_encoding.h"
-#include "enigmadb/storage/memtable/memtable.h"
+#include "enigmadb/storage/dazzle_db/internal_iterator.h"
 
-namespace enigmadb::storage {
+namespace enigmadb::dazzle {
 
 /**
  * @brief A heap node that wraps a pointer to a source iterator.
@@ -38,7 +36,7 @@ namespace enigmadb::storage {
  * the source whose current position supplies the key and value.
  */
 struct HeapEntry {
-    Iterator* source_;  ///< Non-owning pointer to the source iterator.
+    InternalIterator* source_;  ///< Non-owning pointer to the source iterator.
 };
 
 /**
@@ -56,22 +54,11 @@ struct HeapEntry {
  * heap first.
  */
 struct HeapCompare {
-    CompositeKeyComparator key_cmp;
     bool operator()(const HeapEntry& a, const HeapEntry& b) const {
-        const auto& akey = a.source_->key();
-        const auto& bkey = b.source_->key();
-
-        // if a's key < b's key  → a is HIGHER priority → return false
-        if (key_cmp(akey, bkey)) return false;
-
-        // if b's key < a's key  → a is LOWER  priority → return true
-        if (key_cmp(bkey, akey)) return true;
-
-        // keys equal → newer (higher seq) wins the top → a lower if older
-        if (a.source_->value().sequence < b.source_->value().sequence) {
-            return true;
-        }
-
+        auto& akey = a.source_->key();
+        auto& bkey = b.source_->key();
+        if (akey < bkey) return false;
+        if (bkey < akey) return true;
         return false;
     }
 };
@@ -100,7 +87,7 @@ struct HeapCompare {
  *       the merge iterator becomes invalid and the error is
  *       retrievable via status().
  */
-class MergeIterator : public Iterator {
+class MergeIterator : public InternalIterator {
    public:
     /**
      * @brief Constructs a merge iterator over the given sources.
@@ -112,7 +99,7 @@ class MergeIterator : public Iterator {
      *                 source must produce entries in sorted composite
      *                 key order. Must outlive this MergeIterator.
      */
-    explicit MergeIterator(std::vector<Iterator*> sources)
+    explicit MergeIterator(std::vector<InternalIterator*> sources)
         : sources_(std::move(sources)), error_(std::nullopt), valid_(false) {}
 
     /// @copydoc Iterator::valid()
@@ -140,26 +127,26 @@ class MergeIterator : public Iterator {
     void next() override;
 
     /// @copydoc Iterator::key()
-    const std::vector<uint8_t>& key() const override;
+    const storage::Key& key() const override;
 
     /// @copydoc Iterator::value()
-    const memtable::MemtableValue& value() const override;
+    const InternalValue& value() const override;
 
     /// @copydoc Iterator::status()
-    common::ExpectResult<void, common::Error> status() const override;
+    Result<void> status() const override;
 
    private:
-    std::vector<Iterator*> sources_;  ///< All source iterators (non-owning).
+    std::vector<InternalIterator*>
+        sources_;  ///< All source iterators (non-owning).
 
     /// @brief Min-heap of sources ordered by (key asc, sequence desc).
     std::priority_queue<HeapEntry, std::vector<HeapEntry>, HeapCompare> heap_;
 
-    std::optional<common::Error>
-        error_;  ///< Set on failure; nullopt while healthy.
+    std::optional<Error> error_;  ///< Set on failure; nullopt while healthy.
 
-    std::vector<uint8_t> current_key_;       ///< Key of the current winner.
-    memtable::MemtableValue current_value_;  ///< Value of the current winner.
-    bool valid_;  ///< True when positioned at a valid entry.
+    storage::Key current_key_;     ///< Key of the current winner.
+    InternalValue current_value_;  ///< Value of the current winner.
+    bool valid_;                   ///< True when positioned at a valid entry.
 
     /**
      * @brief Selects the heap winner, copies its key/value, and
@@ -183,17 +170,13 @@ class MergeIterator : public Iterator {
      *
      * If the source becomes invalid due to an error (as opposed to
      * exhaustion), the merge iterator is invalidated.
-     *
-     * @param src  Source iterator to advance.
      */
-    void advance_and_repush(Iterator* src);
+    void advance_and_repush(InternalIterator* src);
 
     /**
      * @brief Records an error and invalidates the iterator.
-     *
-     * @param err  The error to store for retrieval via status().
      */
-    void set_error(common::Error err);
+    void set_error(Error err);
 
     /**
      * @brief Returns true if an error has been recorded.
@@ -201,6 +184,6 @@ class MergeIterator : public Iterator {
     bool is_error() const;
 };
 
-}  // namespace enigmadb::storage
+}  // namespace enigmadb::dazzle
 
 #endif  // ENIGMA_DB_MERGE_ITERATOR_H

@@ -20,11 +20,10 @@
 #include <vector>
 
 #include "enigmadb/io/io_engine.h"
-#include "enigmadb/storage/dazzle_db/memtable/memtable.h"
+#include "enigmadb/storage/dazzle_db/internal_iterator.h"
+#include "enigmadb/storage/dazzle_db/internal_value.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_common.h"
-#include "enigmadb/storage/iterator.h"
 #include "enigmadb/storage/key.h"
-#include "enigmadb/storage/value.h"
 
 namespace enigmadb::dazzle {
 
@@ -44,7 +43,7 @@ namespace enigmadb::dazzle {
  * @note The iterator currently reads blocks in index order (first to
  *       last) and does not support seeking to an arbitrary key.
  */
-class SSTableIterator : public storage::Iterator {
+class SSTableIterator : public InternalIterator {
    private:
     io::IOEngine& engine_;
     const io::FileHandle& fh_;
@@ -56,7 +55,7 @@ class SSTableIterator : public storage::Iterator {
     size_t block_offset_;
 
     std::vector<uint8_t> current_key_;
-    MemtableValue current_value_;
+    InternalValue current_value_;
     bool valid_;
 
     /**
@@ -89,7 +88,7 @@ class SSTableIterator : public storage::Iterator {
     void next() override;
     Result<void> status() const override;
     const storage::Key& key() const override;
-    const storage::Value& value() const override;
+    const InternalValue& value() const override;
 };
 
 };  // namespace enigmadb::dazzle

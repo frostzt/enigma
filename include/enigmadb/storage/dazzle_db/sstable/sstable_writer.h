@@ -15,7 +15,7 @@
 
 #include "enigmadb/bloom_filter.h"
 #include "enigmadb/io/io_engine.h"
-#include "enigmadb/storage/dazzle_db/memtable/memtable.h"
+#include "enigmadb/storage/dazzle_db/internal_value.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_common.h"
 
 namespace enigmadb::dazzle {
@@ -115,7 +115,7 @@ class SSTableWriter {
      * @return Success, or an error if a block flush fails.
      */
     Result<void> add(const std::vector<uint8_t>& key,
-                     const MemtableValue& value);
+                     const InternalValue& value);
 
     /**
      * @brief Finalizes the SSTable file.

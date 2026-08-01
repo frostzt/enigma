@@ -27,24 +27,10 @@
 #include <string>
 #include <vector>
 
-#include "enigmadb/storage/key_encoding.h"
+#include "enigmadb/storage/dazzle_db/internal_value.h"
+#include "enigmadb/storage/key.h"
 
 namespace enigmadb::dazzle {
-
-/**
- * @brief A single value stored in the memtable.
- *
- * Holds either live column data or a tombstone marker indicating
- * that the column has been deleted. Tombstones are preserved in the
- * memtable so they can be flushed to SSTables and suppressed during
- * compaction.
- */
-struct MemtableValue {
-    std::vector<uint8_t>
-        data;           ///< Raw column value; empty when is_tombstone is true.
-    bool is_tombstone;  ///< True if this entry represents a deletion.
-    uint64_t sequence;  ///< Unique sequence number for this record.
-};
 
 /**
  * @brief In-memory sorted write buffer keyed by composite keys.
@@ -59,9 +45,7 @@ class Memtable {
    private:
     size_t bytes_;
     size_t max_memtable_size_;
-    std::map<std::vector<uint8_t>, MemtableValue,
-             storage::CompositeKeyComparator>
-        entries_;
+    std::map<storage::Key, InternalValue> entries_;
 
    public:
     /**
@@ -114,7 +98,7 @@ class Memtable {
      * @return The column value if present and not tombstoned,
      *         or std::nullopt if the key is absent or deleted.
      */
-    std::optional<MemtableValue> get(const std::vector<uint8_t>& partition_key,
+    std::optional<InternalValue> get(const std::vector<uint8_t>& partition_key,
                                      const std::vector<uint8_t>& clustering_key,
                                      const std::string& column_name);
 

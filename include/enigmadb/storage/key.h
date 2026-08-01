@@ -10,8 +10,12 @@ namespace enigmadb::storage {
 
 class Key {
    public:
+    Key() = default;
     explicit Key(std::vector<uint8_t> bytes) : bytes_(std::move(bytes)) {}
     std::span<const uint8_t> bytes() const { return bytes_; }
+
+    bool operator==(const Key&) const = default;
+    auto operator<=>(const Key& b) const = default;
 
    private:
     std::vector<uint8_t> bytes_;

@@ -20,6 +20,7 @@
 #include "enigmadb/hlc.h"
 #include "enigmadb/io/io_engine.h"
 #include "enigmadb/storage/dazzle_db/compaction/compaction.h"
+#include "enigmadb/storage/dazzle_db/memtable/memtable.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_common.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_reader.h"
 #include "enigmadb/storage/dazzle_db/wal/wal_writer.h"
@@ -289,7 +290,7 @@ class Dazzle {
      *         if the key is absent or tombstoned. Returns an error if
      *         any SSTable read fails.
      */
-    Result<std::optional<MemtableValue>> get(
+    Result<std::optional<InternalValue>> get(
         const std::vector<uint8_t>& partition_key,
         const std::vector<uint8_t>& clustering_key,
         const std::string& column_name);
