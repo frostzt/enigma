@@ -15,7 +15,7 @@
 #include <filesystem>
 #include <string>
 
-namespace enigmadb::common {
+namespace enigmadb {
 
 struct Tempdir {
     std::string path;
@@ -27,6 +27,6 @@ struct Tempdir {
     ~Tempdir() { std::filesystem::remove_all(path); }
 };
 
-}  // namespace enigmadb::common
+}  // namespace enigmadb
 
 #endif  // ENIGMA_DB_TEMPDIR_H

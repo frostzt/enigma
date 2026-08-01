@@ -12,7 +12,7 @@
 #include <atomic>
 #include <memory>
 
-namespace enigmadb::common {
+namespace enigmadb {
 
 class TimestampGenerator {
    private:
@@ -36,6 +36,6 @@ class TimestampGenerator {
     uint64_t next();
 };
 
-}  // namespace enigmadb::common
+}  // namespace enigmadb
 
 #endif  // ENIGMA_DB_HLC_H

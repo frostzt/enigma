@@ -14,7 +14,7 @@
 #include <cstring>
 #include <string>
 
-namespace enigmadb::common {
+namespace enigmadb {
 
 struct Tempfile {
     std::string path;
@@ -37,6 +37,6 @@ struct Tempfile {
     }
 };
 
-}  // namespace enigmadb::common
+}  // namespace enigmadb
 
 #endif  // ENIGMA_DB_TEMPFILE_H

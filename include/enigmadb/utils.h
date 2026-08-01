@@ -15,7 +15,7 @@
 #include <filesystem>
 #include <vector>
 
-namespace enigmadb::common {
+namespace enigmadb {
 
 inline std::vector<uint8_t> string_to_bytes(std::string_view str) {
     return {str.begin(), str.end()};
@@ -53,6 +53,6 @@ inline void trim_in_place(std::string& s) {
             s.end());
 }
 
-}  // namespace enigmadb::common
+}  // namespace enigmadb
 
 #endif  // ENIGMA_DB_UTILS_H

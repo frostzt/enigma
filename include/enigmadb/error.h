@@ -13,7 +13,7 @@
 #include <cstddef>
 #include <string>
 
-namespace enigmadb::common {
+namespace enigmadb {
 
 enum class ErrorCode {
     NONE = -1,
@@ -57,6 +57,6 @@ struct Error {
         }                                                  \
     } while (0)
 
-}  // namespace enigmadb::common
+}  // namespace enigmadb
 
 #endif  // ENIGMA_DB_ERROR_H

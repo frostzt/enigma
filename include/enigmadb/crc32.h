@@ -12,7 +12,7 @@
 #include <cstdint>
 #include <cstring>
 
-namespace enigmadb::common {
+namespace enigmadb {
 
 static constexpr uint32_t crc_32_table[256] = {
     0x00000000L, 0xF26B8303L, 0xE13B70F7L, 0x1350F3F4L, 0xC79A971FL,
@@ -70,6 +70,6 @@ static constexpr uint32_t crc_32_table[256] = {
 
 uint32_t compute_crc_32(const uint8_t* data, size_t length);
 
-}  // namespace enigmadb::common
+}  // namespace enigmadb
 
 #endif  // ENIGMA_DB_CRC32_H

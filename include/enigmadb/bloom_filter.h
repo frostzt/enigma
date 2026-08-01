@@ -12,7 +12,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace enigmadb::common {
+namespace enigmadb {
 
 constexpr auto SEED_1 = 0xbc9f1d34;
 constexpr auto SEED_2 = 0x6c8e9cf5;
@@ -45,6 +45,6 @@ class BloomFilter {
     size_t size_bytes() const;
 };
 
-}  // namespace enigmadb::common
+}  // namespace enigmadb
 
 #endif  // ENIGMA_DB_BLOOM_FILTER_H
