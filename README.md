@@ -1,5 +1,8 @@
 # enigma
 
+Engine and idea inpired by Rocks, the name is inspired by my favorite Soft Support/Offlaner
+Enigma in Dota 2.
+
 ## Directory Architecture
 
 ```shell
@@ -28,6 +31,16 @@ enigmadb/
 ├── bench/                      (microbenchmarks)
 ├── tools/                      (CLI shell, utilities)
 └── third_party/                (vendored dependencies)
+```
+
+## Debugging and tols
+
+Have created a bunch of tools to help debug and understand stuff inside tools dir
+
+```shell
+cmake -B build -DCMAKE_BUILD_TYPE=Debug -DENIGMADB_BUILD_TOOLS=ON
+cmake --build build --target sstable_dump
+./build/tools/sstable_dump path/to/sst_00000001.db
 ```
 
 ## Platform

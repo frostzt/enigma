@@ -15,16 +15,14 @@
 #include <vector>
 
 #include "enigmadb/storage/iterator.h"
-#include "enigmadb/storage/memtable/memtable.h"
+#include "enigmadb/storage/key.h"
+#include "enigmadb/storage/value.h"
 
 namespace enigmadb::storage {
 
-using MemtableValue = memtable::MemtableValue;
-
 class FakeIterator : public Iterator {
    public:
-    FakeIterator(
-        std::vector<std::pair<std::vector<uint8_t>, MemtableValue>> entries)
+    FakeIterator(std::vector<std::pair<Key, Value>> entries)
         : entries_(std::move(entries)), curr_idx_(0) {}
 
     bool valid() const override { return curr_idx_ < entries_.size(); }
@@ -33,24 +31,22 @@ class FakeIterator : public Iterator {
 
     void next() override { curr_idx_++; }
 
-    common::ExpectResult<void, common::Error> status() const override {
-        return common::ExpectResult<void, common::Error>::ok();
-    }
+    Result<void> status() const override { return Result<void>::ok(); }
 
     /// @copydoc Iterator::key()
-    const std::vector<uint8_t>& key() const override {
+    const Key& key() const override {
         assert(valid());
         return entries_[curr_idx_].first;
     }
 
     /// @copydoc Iterator::value()
-    const memtable::MemtableValue& value() const override {
+    const Value& value() const override {
         assert(valid());
         return entries_[curr_idx_].second;
     }
 
    private:
-    std::vector<std::pair<std::vector<uint8_t>, MemtableValue>> entries_;
+    std::vector<std::pair<Key, Value>> entries_;
     size_t curr_idx_;
 };
 

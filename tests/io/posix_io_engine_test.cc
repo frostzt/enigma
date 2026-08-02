@@ -3,20 +3,19 @@
 #include <cstring>
 #include <string>
 
-#include "enigmadb/common/error.h"
-#include "enigmadb/common/tempfile.h"
+#include "enigmadb/error.h"
 #include "enigmadb/io/io_engine.h"
+#include "enigmadb/tempfile.h"
 #include "gtest/gtest.h"
 
-using namespace enigmadb::io;
-using namespace enigmadb::common;
+using namespace enigmadb;
 
 TEST(POSIX_IO_Engine, open_non_existent_file) {
-    PosixIOEngine engine;
-    auto result = engine.open("i_do_not_exist.txt", Mode::Read);
+    io::PosixIOEngine engine;
+    auto result = engine.open("i_do_not_exist.txt", io::Mode::Read);
 
     ASSERT_FALSE(result.has_value());
-    auto& err = result.err();
+    auto& err = result.error();
 
     ASSERT_EQ(err.code, ErrorCode::FILE_DESCRIPTOR_ERR);
     EXPECT_STREQ("No such file or directory", err.message.c_str());
@@ -27,8 +26,8 @@ TEST(POSIX_IO_Engine, create_write_close) {
     uint8_t string_buffer[] = "sourav";
 
     {
-        PosixIOEngine engine;
-        auto open_result = engine.open(testfile.path, Mode::Append);
+        io::PosixIOEngine engine;
+        auto open_result = engine.open(testfile.path, io::Mode::Append);
 
         ASSERT_TRUE(open_result.has_value());
         auto& fh = open_result.value();
@@ -41,8 +40,8 @@ TEST(POSIX_IO_Engine, create_write_close) {
     }
 
     {
-        PosixIOEngine engine;
-        auto open_result = engine.open(testfile.path, Mode::Read);
+        io::PosixIOEngine engine;
+        auto open_result = engine.open(testfile.path, io::Mode::Read);
 
         ASSERT_TRUE(open_result.has_value());
         auto& fh = open_result.value();
@@ -60,8 +59,8 @@ TEST(POSIX_IO_Engine, read_past_eof) {
     uint8_t string_buffer[] = "sourav";
 
     {
-        PosixIOEngine engine;
-        auto open_result = engine.open(testfile.path, Mode::Append);
+        io::PosixIOEngine engine;
+        auto open_result = engine.open(testfile.path, io::Mode::Append);
 
         ASSERT_TRUE(open_result.has_value());
         auto& fh = open_result.value();
@@ -74,8 +73,8 @@ TEST(POSIX_IO_Engine, read_past_eof) {
     }
 
     {
-        PosixIOEngine engine;
-        auto open_result = engine.open(testfile.path, Mode::Read);
+        io::PosixIOEngine engine;
+        auto open_result = engine.open(testfile.path, io::Mode::Read);
 
         ASSERT_TRUE(open_result.has_value());
         auto& fh = open_result.value();
@@ -93,8 +92,8 @@ TEST(POSIX_IO_Engine, read_from_offset) {
     uint8_t string_buffer[] = "helloworld";
 
     {
-        PosixIOEngine engine;
-        auto open_result = engine.open(testfile.path, Mode::Append);
+        io::PosixIOEngine engine;
+        auto open_result = engine.open(testfile.path, io::Mode::Append);
 
         ASSERT_TRUE(open_result.has_value());
         auto& fh = open_result.value();
@@ -107,8 +106,8 @@ TEST(POSIX_IO_Engine, read_from_offset) {
     }
 
     {
-        PosixIOEngine engine;
-        auto open_result = engine.open(testfile.path, Mode::Read);
+        io::PosixIOEngine engine;
+        auto open_result = engine.open(testfile.path, io::Mode::Read);
 
         ASSERT_TRUE(open_result.has_value());
         auto& fh = open_result.value();
@@ -124,8 +123,8 @@ TEST(POSIX_IO_Engine, sync_data_succeeds) {
     Tempfile testfile("tempfile-XXXXXX");
     uint8_t string_buffer[] = "helloworld";
 
-    PosixIOEngine engine;
-    auto open_result = engine.open(testfile.path, Mode::Append);
+    io::PosixIOEngine engine;
+    auto open_result = engine.open(testfile.path, io::Mode::Append);
 
     ASSERT_TRUE(open_result.has_value());
     auto& fh = open_result.value();
@@ -144,8 +143,8 @@ TEST(POSIX_IO_Engine, sync_all_succeeds) {
     Tempfile testfile("tempfile-XXXXXX");
     uint8_t string_buffer[] = "helloworld";
 
-    PosixIOEngine engine;
-    auto open_result = engine.open(testfile.path, Mode::Append);
+    io::PosixIOEngine engine;
+    auto open_result = engine.open(testfile.path, io::Mode::Append);
 
     ASSERT_TRUE(open_result.has_value());
     auto& fh = open_result.value();
@@ -166,8 +165,8 @@ TEST(POSIX_IO_Engine, multi_appends) {
     uint8_t world[] = "world";
 
     {
-        PosixIOEngine engine;
-        auto open_result = engine.open(testfile.path, Mode::Append);
+        io::PosixIOEngine engine;
+        auto open_result = engine.open(testfile.path, io::Mode::Append);
 
         ASSERT_TRUE(open_result.has_value());
         auto& fh = open_result.value();
@@ -184,8 +183,8 @@ TEST(POSIX_IO_Engine, multi_appends) {
     }
 
     {
-        PosixIOEngine engine;
-        auto open_result = engine.open(testfile.path, Mode::Read);
+        io::PosixIOEngine engine;
+        auto open_result = engine.open(testfile.path, io::Mode::Read);
 
         ASSERT_TRUE(open_result.has_value());
         auto& fh = open_result.value();

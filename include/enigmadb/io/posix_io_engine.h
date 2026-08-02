@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <string>
 
+#include "enigmadb/base.h"
 #include "enigmadb/io/io_engine.h"
 
 namespace enigmadb::io {
@@ -24,21 +25,23 @@ class PosixIOEngine : public IOEngine {
    public:
     ~PosixIOEngine() {};
 
-    IOResult<FileHandle> open(const std::string& path, Mode mode) override;
+    Result<FileHandle> open(const std::string& path, Mode mode) override;
 
-    IOResult<size_t> append(const FileHandle& fh, const uint8_t* buffer,
-                            size_t length) override;
+    Result<size_t> append(const FileHandle& fh, const uint8_t* buffer,
+                          size_t length) override;
 
-    IOResult<size_t> read(const FileHandle& fh, size_t count, uint8_t* buffer,
-                          size_t offset) override;
+    Result<size_t> read(const FileHandle& fh, size_t count, uint8_t* buffer,
+                        size_t offset) override;
 
-    IOResult<size_t> file_size(const FileHandle& fh) override;
+    Result<size_t> file_size(const FileHandle& fh) override;
 
-    IOResult<void> sync_all(const FileHandle& fh) override;
+    Result<void> sync_all(const FileHandle& fh) override;
 
-    IOResult<void> sync_directory(const std::string& path) override;
+    Result<void> sync_directory(const std::string& path) override;
 
-    IOResult<void> sync_data(const FileHandle& fh) override;
+    Result<void> sync_data(const FileHandle& fh) override;
+
+    Result<void> remove(const std::string& path) override;
 };
 
 }  // namespace enigmadb::io

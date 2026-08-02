@@ -1,0 +1,7 @@
+include/enigmadb/storage/dazzledb/README
+
+OVERVIEW
+========
+
+Inspired by favorite Support/Hard Support (Position 5) Hero "Dazzle"
+dazzledb is an LSM Tree Engine.

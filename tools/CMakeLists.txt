@@ -1,0 +1,2 @@
+add_executable(sstable_dump sstable_dump.cpp)
+target_link_libraries(sstable_dump PRIVATE enigmadb_lib)

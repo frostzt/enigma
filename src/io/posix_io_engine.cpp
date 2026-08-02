@@ -4,18 +4,99 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <cassert>
 #include <cerrno>
 #include <cstring>
+#include <filesystem>
+#include <vector>
 
-#include "enigmadb/common/error.h"
-#include "enigmadb/common/result.h"
+#include "enigmadb/base.h"
+#include "enigmadb/error.h"
 #include "enigmadb/io/io_engine.h"
-
-using namespace enigmadb::common;
+#include "enigmadb/result.h"
 
 namespace enigmadb::io {
 
-IOResult<FileHandle> PosixIOEngine::open(const std::string& path, Mode mode) {
+#ifndef NDEBUG
+
+#if defined(__linux__)
+#include <dirent.h>
+#elif defined(__APPLE__)
+#include <libproc.h>
+#include <sys/proc_info.h>
+#endif
+
+static bool debug_has_open_fd_for_path(const std::string& target_path) {
+#if defined(__linux__)
+    int dir_fd = ::open("/proc/self/fd", O_RDONLY | O_DIRECTORY);
+    if (dir_fd == -1) return false;
+
+    DIR* dir = ::fdopendir(dir_fd);
+    if (!dir) {
+        ::close(dir_fd);
+        return false;
+    }
+
+    struct dirent* entry;
+    char link_buf[PATH_MAX];
+    bool leaked = false;
+
+    while ((entry = ::readdir(dir)) != nullptr) {
+        if (entry->d_name[0] == '.') continue;
+
+        std::string fd_path = std::string("/proc/self/fd/") + entry->d_name;
+        ssize_t len =
+            ::readlink(fd_path.c_str(), link_buf, sizeof(link_buf) - 1);
+        if (len != -1) {
+            link_buf[len] = '\0';
+            std::string resolved(link_buf);
+
+            // Linux appends " (deleted)" to unlinked open files
+            if (resolved == target_path ||
+                resolved == (target_path + " (deleted)")) {
+                leaked = true;
+                break;
+            }
+        }
+    }
+
+    ::closedir(dir);
+    return leaked;
+#elif defined(__APPLE__)
+    pid_t pid = ::getpid();
+
+    int buffer_size = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, nullptr, 0);
+    if (buffer_size <= 0) return false;
+
+    std::vector<struct proc_fdinfo> fds(buffer_size /
+                                        sizeof(struct proc_fdinfo));
+    buffer_size =
+        proc_pidinfo(pid, PROC_PIDLISTFDS, 0, fds.data(), buffer_size);
+    int fd_count = buffer_size / sizeof(struct proc_fdinfo);
+
+    for (int i = 0; i < fd_count; ++i) {
+        if (fds[i].proc_fdtype == PROX_FDTYPE_VNODE) {
+            struct vnode_fdinfowithpath vnode_path_info;
+            int ret =
+                proc_pidfdinfo(pid, fds[i].proc_fd, PROC_PIDFDVNODEPATHINFO,
+                               &vnode_path_info, sizeof(vnode_path_info));
+            if (ret > 0) {
+                std::string resolved_path(vnode_path_info.pvip.vip_path);
+                if (resolved_path == target_path) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+#else
+    return false;
+#endif
+}
+
+#endif  // NDEBUG
+
+Result<FileHandle> PosixIOEngine::open(const std::string& path, Mode mode) {
     // clang-format off
     int flags;
     switch (mode) {
@@ -41,7 +122,7 @@ IOResult<FileHandle> PosixIOEngine::open(const std::string& path, Mode mode) {
     return ExpectResult<FileHandle, Error>::ok(std::move(fh));
 };
 
-IOResult<void> PosixIOEngine::sync_data(const FileHandle& fh) {
+Result<void> PosixIOEngine::sync_data(const FileHandle& fh) {
     if (fh.fd() == -1) {
         return ExpectResult<void, Error>::err(
             Error{ErrorCode::FILE_DESCRIPTOR_ERR, "invalid file descriptor"});
@@ -61,7 +142,7 @@ IOResult<void> PosixIOEngine::sync_data(const FileHandle& fh) {
     return ExpectResult<void, Error>::ok();
 }
 
-IOResult<void> PosixIOEngine::sync_all(const FileHandle& fh) {
+Result<void> PosixIOEngine::sync_all(const FileHandle& fh) {
     if (fh.fd() == -1) {
         return ExpectResult<void, Error>::err(
             Error{ErrorCode::FILE_DESCRIPTOR_ERR, "invalid file descriptor"});
@@ -80,7 +161,7 @@ IOResult<void> PosixIOEngine::sync_all(const FileHandle& fh) {
     return ExpectResult<void, Error>::ok();
 }
 
-IOResult<void> PosixIOEngine::sync_directory(const std::string& path) {
+Result<void> PosixIOEngine::sync_directory(const std::string& path) {
     errno = 0;
     int fd = ::open(path.c_str(), O_RDONLY);
     if (fd == -1) {
@@ -97,8 +178,8 @@ IOResult<void> PosixIOEngine::sync_directory(const std::string& path) {
     return ExpectResult<void, Error>::ok();
 }
 
-IOResult<size_t> PosixIOEngine::append(const FileHandle& fh,
-                                       const uint8_t* buffer, size_t length) {
+Result<size_t> PosixIOEngine::append(const FileHandle& fh,
+                                     const uint8_t* buffer, size_t length) {
     errno = 0;
     if (fh.fd() == -1) {
         return ExpectResult<size_t, Error>::err(
@@ -119,11 +200,11 @@ IOResult<size_t> PosixIOEngine::append(const FileHandle& fh,
         }
         bytes_written += bytes;
     }
-    return bytes_written;
+    return Result<size_t>::ok(bytes_written);
 }
 
-IOResult<size_t> PosixIOEngine::read(const FileHandle& fh, size_t count,
-                                     uint8_t* buffer, size_t offset) {
+Result<size_t> PosixIOEngine::read(const FileHandle& fh, size_t count,
+                                   uint8_t* buffer, size_t offset) {
     if (fh.fd() == -1) {
         return ExpectResult<size_t, Error>::err(
             Error{ErrorCode::FILE_DESCRIPTOR_ERR, "invalid file descriptor"});
@@ -147,17 +228,50 @@ IOResult<size_t> PosixIOEngine::read(const FileHandle& fh, size_t count,
         bytes_read += bytes;
     }
 
-    return bytes_read;
+    return Result<size_t>::ok(bytes_read);
 }
 
-IOResult<size_t> PosixIOEngine::file_size(const FileHandle& fh) {
+Result<size_t> PosixIOEngine::file_size(const FileHandle& fh) {
     struct stat st;
     errno = 0;
     if (::fstat(fh.fd(), &st) == -1) {
         char* err_msg = strerror(errno);
-        return IOResult<size_t>::err(Error{ErrorCode::FSTAT_ERR, err_msg});
+        return Result<size_t>::err(Error{ErrorCode::FSTAT_ERR, err_msg});
     }
-    return IOResult<size_t>::ok(static_cast<size_t>(st.st_size));
+    return Result<size_t>::ok(static_cast<size_t>(st.st_size));
+}
+
+Result<void> PosixIOEngine::remove(const std::string& path) {
+    errno = 0;
+
+    /* Remove the provided file */
+    if (::unlink(path.c_str()) == -1) {
+        if (errno == ENOENT) {
+            char* err_msg = ::strerror(errno);
+            return ExpectResult<void, Error>::err(
+                Error{ErrorCode::FILE_DESCRIPTOR_ERR, err_msg});
+        }
+    }
+
+    std::filesystem::path p(path);
+    if (p.has_parent_path()) {
+        /* Best effort parent dir sync */
+        sync_directory(p.parent_path().string());
+    }
+
+#ifndef NDEBUG
+    /*  Path must no longer exist in directory hierarchy */
+    assert(!std::filesystem::exists(path) &&
+           "File path still exists after unlink!");
+#if defined(__linux__) || defined(__APPLE__)
+    /* Ensure this process isn't holding onto an open FD for this file */
+    bool leaked = debug_has_open_fd_for_path(path);
+    assert(!leaked &&
+           "FS LEAK: Attempted to remove file while process still holds an "
+           "open FileHandle/FD!");
+#endif
+#endif
+    return Result<void>::ok();
 }
 
 }  // namespace enigmadb::io
