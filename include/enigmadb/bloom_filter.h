@@ -12,6 +12,8 @@
 #include <cstdint>
 #include <vector>
 
+#include "enigmadb/storage/key.h"
+
 namespace enigmadb {
 
 constexpr auto SEED_1 = 0xbc9f1d34;
@@ -33,10 +35,10 @@ class BloomFilter {
         bit_count_ = bit_array_.size() * 8;  // convert bytes back to bits
     }
 
-    void add(const std::vector<uint8_t>& key);
-    bool may_contain(const std::vector<uint8_t>& key) const;
+    void add(const storage::Key& key);
+    bool may_contain(const storage::Key& key) const;
 
-    static BloomFilter from_keys(const std::vector<std::vector<uint8_t>>& keys,
+    static BloomFilter from_keys(const std::vector<storage::Key>& keys,
                                  double false_positive_rate);
 
     // For serializing into SSTable

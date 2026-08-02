@@ -1,26 +1,23 @@
-#include "enigmadb/storage/merge_iterator.h"
+#include "enigmadb/storage/dazzle_db/merge_iterator.h"
 
 #include <cassert>
 #include <optional>
 #include <vector>
 
-#include "enigmadb/common/error.h"
-#include "enigmadb/common/result.h"
-#include "enigmadb/storage/iterator.h"
-#include "enigmadb/storage/memtable/memtable.h"
+#include "enigmadb/storage/dazzle_db/internal_iterator.h"
+#include "enigmadb/storage/dazzle_db/internal_value.h"
+#include "enigmadb/storage/key.h"
 
-using namespace enigmadb::common;
-
-namespace enigmadb::storage {
+namespace enigmadb::dazzle {
 
 bool MergeIterator::valid() const { return valid_; }
 
-const std::vector<uint8_t>& MergeIterator::key() const {
+const storage::Key& MergeIterator::key() const {
     assert(valid());
     return current_key_;
 }
 
-const memtable::MemtableValue& MergeIterator::value() const {
+const InternalValue& MergeIterator::value() const {
     assert(valid());
     return current_value_;
 }
@@ -43,7 +40,6 @@ void MergeIterator::seek_to_first() {
     reset_heap();
     error_ = std::nullopt;
     valid_ = false;
-    current_key_.clear();
     current_value_.data.clear();
     current_value_.is_tombstone = false;
     current_value_.sequence = 0;
@@ -54,7 +50,7 @@ void MergeIterator::seek_to_first() {
         if (source->valid()) {
             heap_.push(HeapEntry{source});
         } else if (!source->status().has_value()) {
-            set_error(source->status().err());
+            set_error(source->status().error());
             break;
         }
     }
@@ -65,7 +61,7 @@ void MergeIterator::seek_to_first() {
     }
 }
 
-ExpectResult<void, common::Error> MergeIterator::status() const {
+Result<void> MergeIterator::status() const {
     if (error_.has_value()) {
         return ExpectResult<void, Error>::err(error_.value());
     }
@@ -107,15 +103,15 @@ void MergeIterator::advance_to_winner() {
     }
 }
 
-void MergeIterator::advance_and_repush(Iterator* src) {
+void MergeIterator::advance_and_repush(InternalIterator* src) {
     src->next();
     if (src->valid()) {
         heap_.push(HeapEntry{src});
     } else if (!src->status().has_value()) { /* we have an actual error */
-        set_error(src->status().err());
+        set_error(src->status().error());
     }
 }
 
 void MergeIterator::next() { advance_to_winner(); }
 
-}  // namespace enigmadb::storage
+}  // namespace enigmadb::dazzle

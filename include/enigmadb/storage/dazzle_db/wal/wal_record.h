@@ -10,32 +10,24 @@
 #define ENIGMA_DB_DAZZLE_WAL_RECORD_H
 
 #include <cstdint>
-#include <string>
 #include <vector>
 
 #include "enigmadb/base.h"
+#include "enigmadb/storage/key.h"
 
 namespace enigmadb::dazzle {
 
 enum class WalOpType : uint8_t {
     PUT_ROW = 0x01,
     DELETE_ROW = 0x02,
-    DELETE_COLUMN = 0x03,
-    DELETE_PARTITION = 0x04,
-};
-
-struct WalColumn {
-    std::string name;
-    std::vector<uint8_t> value;
 };
 
 struct WalRecord {
     WalOpType op_type;
     uint64_t timestamp;
     uint64_t sequence;
-    std::vector<uint8_t> partition_key;
-    std::vector<uint8_t> clustering_key;
-    std::vector<WalColumn> columns;
+    storage::Key key;
+    std::vector<uint8_t> value;
 };
 
 size_t get_record_size(const WalRecord& record);
@@ -44,33 +36,18 @@ size_t get_record_size(const WalRecord& record);
 /**
  * @brief Serializes the WAL Record into raw bytes
  *
- * Here is how the serialization is done and how it looks like
- *
- * 0  1  2  3  4  5  6  7  0  1  2  3  4  5  6  7  - bytes NOT bits
- * |   LENGTH  |   CRC32   |OP| Timestamp -> next byte too
- *    |       Sequence        | P.KEY LEN |  PART KEY ARBITRARY |
- * | C.KEY LEN | CLUS KEY ARBITRARY |C.LEN|CNAME|
- * | COL NAME ARBITRARY | COL.VALUE | COL VALUE ARBITRARY
- *
  * --- HEADER ---
  * Length (4 bytes) -- Length of the entire record
  * CRC32  (4 bytes) -- CRC Checksum of the entire record
  *
  * --- BODY ---
- * Wal Op Type           (1 byte)  -- Type of operation
- * Timestamp             (8 bytes) -- Timestamp of this operation
- * Sequence              (8 bytes) -- Ever increasing number assigned to this op
- * Partition Key Length  (4 bytes) -- Length of the next byte sequence containing Partition key
- * Partition Key       (ARBITRARY) -- Partition key name
- * Clustering Key Length (4 bytes) -- Length of the next byte sequence containing Clustering key
- * Clustering Key      (ARBITRARY) -- Clustering key name
- * Columns               (2 bytes) -- Numbers of column
- *    --- REPEATED xColumns
- *    Column Name Size            (2 bytes) -- Length of the column name
- *    Column Name               (ARBITRARY) -- Name of the column
- *    Column Value Size           (4 bytes) -- Length of the column value
- *    Column Value              (ARBITRARY) -- Column value
- *    --- REPEATED xColumns
+ * Wal Op Type           (1 byte)      -- Type of operation
+ * Timestamp             (8 bytes)     -- Timestamp of this operation
+ * Sequence              (8 bytes)     -- Ever increasing number assigned to this op
+ * Key Length            (4 bytes)     -- Length of the next byte sequence containing key
+ * Key                   (ARBITRARY)   -- key
+ * Value Length          (4 bytes)     -- Length of the next byte sequence containing value
+ * Value                 (ARBITRARY)   -- value
  */
 std::vector<uint8_t> serialize_wal_record(const WalRecord& record);
 // clang-format on

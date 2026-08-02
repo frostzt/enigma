@@ -1,26 +1,22 @@
-#include "enigmadb/storage/compaction/compaction.h"
+#include "enigmadb/storage/dazzle_db/compaction/compaction.h"
 
 #include <memory>
 #include <vector>
 
+#include "enigmadb/base.h"
 #include "enigmadb/io/io_engine.h"
-#include "enigmadb/storage/common.h"
-#include "enigmadb/storage/iterator.h"
-#include "enigmadb/storage/merge_iterator.h"
-#include "enigmadb/storage/sstable/sstable_common.h"
-#include "enigmadb/storage/sstable/sstable_reader.h"
-#include "enigmadb/storage/sstable/sstable_writer.h"
+#include "enigmadb/storage/dazzle_db/merge_iterator.h"
+#include "enigmadb/storage/dazzle_db/sstable/sstable_common.h"
+#include "enigmadb/storage/dazzle_db/sstable/sstable_reader.h"
+#include "enigmadb/storage/dazzle_db/sstable/sstable_writer.h"
 
-using namespace enigmadb::io;
-using namespace enigmadb::storage::sstable;
+namespace enigmadb::dazzle {
 
-namespace enigmadb::storage::compaction {
-
-Compactor Compactor::create(IOEngine& engine, const std::string& data_dir) {
+Compactor Compactor::create(io::IOEngine& engine, const std::string& data_dir) {
     return Compactor{engine, data_dir};
 }
 
-DoCompactResult Compactor::do_size_tiered_compact(
+Result<SSTableId> Compactor::do_size_tiered_compact(
     const std::vector<SSTableId>& inputs, const uint64_t next_sst_seq,
     bool is_full_compaction) {
     uint64_t possible_keys = 0;
@@ -29,12 +25,12 @@ DoCompactResult Compactor::do_size_tiered_compact(
     std::vector<std::unique_ptr<SSTableReader>> readers;
     for (const auto i : inputs) {
         auto r = SSTableReader::create(engine_, sst_path(data_dir_, i.value));
-        if (!r.has_value()) return DoCompactResult::err(r.err());
+        if (!r.has_value()) return Result<SSTableId>::err(r.error());
 
         /* get an estimate amount for next possible keys */
         auto& reader = r.value();
         auto f = reader.get_footer();
-        if (!f.has_value()) return DoCompactResult::err(f.err());
+        if (!f.has_value()) return Result<SSTableId>::err(f.error());
         possible_keys += f.value().entry_count;
 
         readers.emplace_back(
@@ -49,7 +45,7 @@ DoCompactResult Compactor::do_size_tiered_compact(
     }
 
     /* borrows from readers above, heap stable tho */
-    std::vector<Iterator*> iterators;
+    std::vector<InternalIterator*> iterators;
     iterators.reserve(owned_itrs.size());
     for (auto& it : owned_itrs) {
         iterators.push_back(it.get());
@@ -58,7 +54,7 @@ DoCompactResult Compactor::do_size_tiered_compact(
     /* new sst writer */
     auto w = SSTableWriter::create(engine_, sst_path(data_dir_, next_sst_seq),
                                    possible_keys);
-    if (!w.has_value()) return DoCompactResult::err(w.err());
+    if (!w.has_value()) return Result<SSTableId>::err(w.error());
     auto& writer = w.value();
 
     /* construct a merge iterator over itrs and add to writer */
@@ -71,16 +67,16 @@ DoCompactResult Compactor::do_size_tiered_compact(
         if (value.is_tombstone && is_full_compaction) continue;
 
         auto ar = writer.add(key, value);
-        if (!ar.has_value()) return DoCompactResult::err(ar.err());
+        if (!ar.has_value()) return Result<SSTableId>::err(ar.error());
     }
 
     /* flush and create this new file; writer.finish calls fsync on the file and
      * directory */
     if (auto f = writer.finish(); !f.has_value()) {
-        return DoCompactResult::err(f.err());
+        return Result<SSTableId>::err(f.error());
     }
 
-    return DoCompactResult::ok(SSTableId{next_sst_seq});
+    return Result<SSTableId>::ok(SSTableId{next_sst_seq});
 }
 
-}  // namespace enigmadb::storage::compaction
+}  // namespace enigmadb::dazzle

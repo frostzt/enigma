@@ -17,6 +17,7 @@
 #include "enigmadb/io/io_engine.h"
 #include "enigmadb/storage/dazzle_db/internal_value.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_common.h"
+#include "enigmadb/storage/key.h"
 
 namespace enigmadb::dazzle {
 
@@ -40,12 +41,11 @@ class SSTableWriter {
     io::FileHandle fh_;
     std::string path_;
 
-    std::vector<uint8_t> buffer_;  ///< Current data block being built.
-    std::vector<uint8_t>
-        current_block_first_key_;        ///< First key of the current block.
-    size_t current_file_offset_;         ///< Bytes written to disk so far.
-    size_t current_block_start_offset_;  ///< File offset where the current
-                                         ///< block starts.
+    std::vector<uint8_t> buffer_;           ///< Current data block being built.
+    storage::Key current_block_first_key_;  ///< First key of the current block.
+    size_t current_file_offset_;            ///< Bytes written to disk so far.
+    size_t current_block_start_offset_;     ///< File offset where the current
+                                            ///< block starts.
     BloomFilter bloom_filter_;
     uint64_t highest_sequence_;
 
@@ -90,13 +90,6 @@ class SSTableWriter {
      *        a ready-to-use writer.
      *
      * The file is opened in write mode via @p engine.
-     *
-     * @param engine         IOEngine to use for all I/O on this file.
-     * @param path           Filesystem path for the SSTable file.
-     * @param estimated_keys Pre-emptive approximate amount of keys in this
-     * SSTable.
-     * @return An SSTableWriter on success, or an error if the file
-     *         cannot be opened.
      */
     static Result<SSTableWriter> create(io::IOEngine& engine,
                                         const std::string& path,
@@ -108,14 +101,8 @@ class SSTableWriter {
      * If the current data block would exceed MAX_PAGING_SIZE_BYTES after
      * adding this entry, the block is flushed to disk first and a new
      * block is started.
-     *
-     * @param[in] key    Encoded composite key (must be in sorted order
-     *                   relative to all previously added keys).
-     * @param[in] value  Memtable value; tombstones are preserved as-is.
-     * @return Success, or an error if a block flush fails.
      */
-    Result<void> add(const std::vector<uint8_t>& key,
-                     const InternalValue& value);
+    Result<void> add(const storage::Key& key, const InternalValue& value);
 
     /**
      * @brief Finalizes the SSTable file.

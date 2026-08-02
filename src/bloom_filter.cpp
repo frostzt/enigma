@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "enigmadb/hash.h"
+#include "enigmadb/storage/key.h"
 
 namespace enigmadb {
 
@@ -34,9 +35,9 @@ BloomFilter::BloomFilter(size_t expected_keys, double false_positive_rate) {
                       0);  // round up to full bytes, zero-initialized
 }
 
-void BloomFilter::add(const std::vector<uint8_t>& key) {
-    auto h1 = Hash(key.data(), key.size(), SEED_1);
-    auto h2 = Hash(key.data(), key.size(), SEED_2);
+void BloomFilter::add(const storage::Key& key) {
+    auto h1 = Hash(key.bytes().data(), key.size(), SEED_1);
+    auto h2 = Hash(key.bytes().data(), key.size(), SEED_2);
 
     for (size_t i = 0; i < num_hashes_; i++) {
         size_t bit_pos = (h1 + i * (h2 | 1)) % bit_count_;
@@ -46,9 +47,9 @@ void BloomFilter::add(const std::vector<uint8_t>& key) {
     }
 }
 
-bool BloomFilter::may_contain(const std::vector<uint8_t>& key) const {
-    auto h1 = Hash(key.data(), key.size(), SEED_1);
-    auto h2 = Hash(key.data(), key.size(), SEED_2);
+bool BloomFilter::may_contain(const storage::Key& key) const {
+    auto h1 = Hash(key.bytes().data(), key.size(), SEED_1);
+    auto h2 = Hash(key.bytes().data(), key.size(), SEED_2);
 
     for (size_t i = 0; i < num_hashes_; i++) {
         size_t bit_pos = (h1 + i * (h2 | 1)) % bit_count_;
@@ -69,8 +70,8 @@ uint8_t BloomFilter::num_hashes() const {
 
 size_t BloomFilter::size_bytes() const { return bit_array_.size(); }
 
-BloomFilter BloomFilter::from_keys(
-    const std::vector<std::vector<uint8_t>>& keys, double false_positive_rate) {
+BloomFilter BloomFilter::from_keys(const std::vector<storage::Key>& keys,
+                                   double false_positive_rate) {
     BloomFilter filter(keys.size(), false_positive_rate);
     for (const auto& key : keys) {
         filter.add(key);

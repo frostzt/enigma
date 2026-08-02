@@ -104,7 +104,7 @@ class SSTableReader {
      * simply use `std::optional` - this makes it pretty weird when
      * reading this value.
      */
-    Result<std::optional<InternalValue>> get(const std::vector<uint8_t>& key);
+    Result<std::optional<InternalValue>> get(const storage::Key& key);
 
     Result<MinimalSSTableFooter> get_footer() const {
         return Result<MinimalSSTableFooter>::ok(footer_);

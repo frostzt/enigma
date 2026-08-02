@@ -1,26 +1,22 @@
-#include "enigmadb/storage/sstable/sstable_iterator.h"
+#include "enigmadb/storage/dazzle_db/sstable/sstable_iterator.h"
 
 #include <cassert>
 #include <cstddef>
 #include <vector>
 
-#include "enigmadb/common/encoding.h"
-#include "enigmadb/common/error.h"
-#include "enigmadb/common/result.h"
-#include "enigmadb/storage/memtable/memtable.h"
+#include "enigmadb/encoding.h"
+#include "enigmadb/storage/key.h"
 
-using namespace enigmadb::common;
-
-namespace enigmadb::storage::sstable {
+namespace enigmadb::dazzle {
 
 bool SSTableIterator::valid() const { return valid_; }
 
-const std::vector<uint8_t>& SSTableIterator::key() const {
+const storage::Key& SSTableIterator::key() const {
     assert(valid());
     return current_key_;
 }
 
-const memtable::MemtableValue& SSTableIterator::value() const {
+const InternalValue& SSTableIterator::value() const {
     assert(valid());
     return current_value_;
 }
@@ -45,7 +41,7 @@ bool SSTableIterator::load_block() {
     auto res = engine_.read(fh_, entry.block_size, block_buffer_.data(),
                             entry.block_offset);
     if (!res.has_value()) {
-        set_error(res.err());
+        set_error(res.error());
         return false;
     }
     return true;
@@ -56,6 +52,7 @@ void SSTableIterator::seek_to_first() {
     block_buffer_.clear();
     block_offset_ = 0;
     error_ = std::nullopt;
+    valid_ = false;
 
     if (index_entries_.empty()) {
         return;
@@ -69,6 +66,8 @@ void SSTableIterator::seek_to_first() {
 }
 
 void SSTableIterator::next() {
+    if (error_.has_value()) return;
+
     /* exhausted the current block, move to the next one */
     if (!block_buffer_.empty() &&
         block_offset_ >= index_entries_[current_block_idx_].block_size) {
@@ -109,7 +108,6 @@ void SSTableIterator::next() {
     }
 
     /* assign key as the current key */
-    current_key_.clear();
     current_key_.assign(block_buffer_.data() + block_offset_,
                         block_buffer_.data() + block_offset_ + key_len);
 
@@ -131,7 +129,6 @@ void SSTableIterator::next() {
     }
 
     /* assign value as the current value */
-    current_value_.data.clear();
     current_value_.data.assign(block_buffer_.data() + block_offset_,
                                block_buffer_.data() + block_offset_ + v_len);
 
@@ -161,4 +158,4 @@ void SSTableIterator::next() {
     valid_ = true;
 }
 
-};  // namespace enigmadb::storage::sstable
+};  // namespace enigmadb::dazzle

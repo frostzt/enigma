@@ -6,8 +6,8 @@
  * @date 2026-04-05
  */
 
-#ifndef ENIGMA_DB_STORAGE_ENGINE_H
-#define ENIGMA_DB_STORAGE_ENGINE_H
+#ifndef ENIGMA_DB_DAZZLE_H
+#define ENIGMA_DB_DAZZLE_H
 
 #include <atomic>
 #include <cstdint>
@@ -17,6 +17,7 @@
 #include <string>
 #include <vector>
 
+#include "enigmadb/base.h"
 #include "enigmadb/hlc.h"
 #include "enigmadb/io/io_engine.h"
 #include "enigmadb/storage/dazzle_db/compaction/compaction.h"
@@ -24,6 +25,11 @@
 #include "enigmadb/storage/dazzle_db/sstable/sstable_common.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_reader.h"
 #include "enigmadb/storage/dazzle_db/wal/wal_writer.h"
+#include "enigmadb/storage/iterator.h"
+#include "enigmadb/storage/key.h"
+#include "enigmadb/storage/key_range.h"
+#include "enigmadb/storage/storage_engine.h"
+#include "enigmadb/storage/value.h"
 
 namespace enigmadb::dazzle {
 
@@ -34,7 +40,7 @@ namespace enigmadb::dazzle {
  * Dazzle is move-only and holds a non-owning reference to the
  * IOEngine. Obtain instances exclusively through Dazzle::open().
  */
-class Dazzle {
+class Dazzle : public storage::StorageEngine {
    private:
     io::IOEngine& engine_;
     const std::string data_dir_;
@@ -139,19 +145,9 @@ class Dazzle {
      * Constructs a WalRecord, appends and syncs it to the active WAL,
      * applies the mutation to the memtable, and triggers a flush if
      * the memtable has exceeded its size threshold.
-     *
-     * @param[in] partition_key   Raw bytes of the partition key.
-     * @param[in] clustering_key  Raw bytes of the clustering key.
-     * @param[in] column_name     Column being written or deleted.
-     * @param[in] value           Column value; std::nullopt for deletes.
-     * @param     remove          True if this is a delete (tombstone)
-     * operation.
-     * @return Success, or an error if the WAL write, sync, or flush fails.
      */
-    Result<void> put(const std::vector<uint8_t>& partition_key,
-                     const std::vector<uint8_t>& clustering_key,
-                     const std::string& column_name,
-                     const std::optional<std::vector<uint8_t>>& value,
+    Result<void> put(const storage::Key& key,
+                     std::optional<std::span<const uint8_t>> value,
                      bool remove);
 
     /**
@@ -230,13 +226,6 @@ class Dazzle {
      * opens all existing SSTable files as readers (sorted by sequence
      * number), opens a new WAL segment for writes, and runs crash
      * recovery by replaying any old WAL segments.
-     *
-     * @param engine          IOEngine to use for all file I/O.
-     * @param data_dir        Root directory for all storage files.
-     * @param memtable_size   Approximate byte threshold at which the
-     *                        memtable is flushed to an SSTable.
-     * @return A ready-to-use Dazzle, or an error if directory
-     *         creation, SSTable opening, WAL creation, or recovery fails.
      */
     static Result<std::unique_ptr<Dazzle>> open(io::IOEngine& engine,
                                                 const std::string& data_dir,
@@ -248,17 +237,9 @@ class Dazzle {
      * The value is first durably written to the WAL, then applied to
      * the active memtable. If the memtable exceeds its size threshold
      * a flush is triggered automatically.
-     *
-     * @param[in] partition_key   Raw bytes of the partition key.
-     * @param[in] clustering_key  Raw bytes of the clustering key.
-     * @param[in] column_name     Column being written.
-     * @param[in] value           Raw column value; must not be empty.
-     * @return Success, or an error if the value is empty or any I/O fails.
      */
-    Result<void> put(const std::vector<uint8_t>& partition_key,
-                     const std::vector<uint8_t>& clustering_key,
-                     const std::string& column_name,
-                     const std::vector<uint8_t>& value);
+    Result<void> put(const storage::Key& key,
+                     std::span<const uint8_t> value) override;
 
     /**
      * @brief Deletes a column by writing a tombstone.
@@ -266,15 +247,11 @@ class Dazzle {
      * The delete is first durably written to the WAL, then applied
      * to the active memtable. The tombstone propagates to SSTables
      * on flush and suppresses older values during reads.
-     *
-     * @param[in] partition_key   Raw bytes of the partition key.
-     * @param[in] clustering_key  Raw bytes of the clustering key.
-     * @param[in] column_name     Column to delete.
-     * @return Success, or an error if any I/O fails.
      */
-    Result<void> remove(const std::vector<uint8_t>& partition_key,
-                        const std::vector<uint8_t>& clustering_key,
-                        const std::string& column_name);
+    Result<void> remove(const storage::Key& key) override;
+
+    Result<std::unique_ptr<storage::Iterator>> scan(
+        const storage::KeyRange& range) override;
 
     /**
      * @brief Point lookup for a single column value.
@@ -282,18 +259,8 @@ class Dazzle {
      * Checks the active memtable first, then scans SSTables from
      * newest to oldest. A tombstone at any level is treated as a
      * definitive delete — older SSTables are not consulted.
-     *
-     * @param[in] partition_key   Raw bytes of the partition key.
-     * @param[in] clustering_key  Raw bytes of the clustering key.
-     * @param[in] column_name     Column to look up.
-     * @return The column value wrapped in std::optional, or std::nullopt
-     *         if the key is absent or tombstoned. Returns an error if
-     *         any SSTable read fails.
      */
-    Result<std::optional<InternalValue>> get(
-        const std::vector<uint8_t>& partition_key,
-        const std::vector<uint8_t>& clustering_key,
-        const std::string& column_name);
+    Result<std::optional<storage::Value>> get(const storage::Key&) override;
 
     /**
      * @brief Flushes the active memtable to a new SSTable and rotates
@@ -316,4 +283,4 @@ class Dazzle {
 
 }  // namespace enigmadb::dazzle
 
-#endif  // ENIGMA_DB_STORAGE_ENGINE_H
+#endif  // ENIGMA_DB_DAZZLE_H

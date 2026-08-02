@@ -54,7 +54,7 @@ class SSTableIterator : public InternalIterator {
     std::vector<uint8_t> block_buffer_;
     size_t block_offset_;
 
-    std::vector<uint8_t> current_key_;
+    storage::Key current_key_;
     InternalValue current_value_;
     bool valid_;
 

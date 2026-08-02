@@ -9,7 +9,8 @@
 #include <sstream>
 #include <string>
 #include <string_view>
-#include <vector>
+
+#include "enigmadb/storage/key.h"
 
 namespace enigmadb::dazzle {
 
@@ -40,7 +41,7 @@ struct SSTableId {
 
 struct SSTableIdComparator {
     bool operator()(const SSTableId& a, const SSTableId& b) const {
-        return a.value > b.value;
+        return a.value < b.value;
     }
 };
 
@@ -92,9 +93,9 @@ inline SSTableId parse_sstable_filename(std::string_view filename) {
  * block by SSTableWriter::finish().
  */
 struct IndexEntry {
-    std::vector<uint8_t> first_key;  ///< First (smallest) key in the block.
-    size_t block_offset;  ///< Byte offset of the block from file start.
-    size_t block_size;    ///< Size of the block in bytes.
+    storage::Key first_key;  ///< First (smallest) key in the block.
+    size_t block_offset;     ///< Byte offset of the block from file start.
+    size_t block_size;       ///< Size of the block in bytes.
 };
 
 struct MinimalSSTableFooter {

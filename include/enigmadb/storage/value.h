@@ -7,6 +7,7 @@
 namespace enigmadb::storage {
 
 class Value {
+   public:
     std::vector<uint8_t> data;
 };
 

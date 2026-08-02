@@ -24,8 +24,7 @@
 #include <cstdint>
 #include <map>
 #include <optional>
-#include <string>
-#include <vector>
+#include <span>
 
 #include "enigmadb/storage/dazzle_db/internal_value.h"
 #include "enigmadb/storage/key.h"
@@ -61,16 +60,8 @@ class Memtable {
      *
      * If a tombstone previously existed for this key it is replaced
      * with the live value.
-     *
-     * @param[in] partition_key   Raw bytes of the partition key.
-     * @param[in] clustering_key  Raw bytes of the clustering key.
-     * @param[in] column_name     Column being written.
-     * @param[in] value           Raw column value bytes.
-     * @param[in] sequence        Sequence number for this entry.
      */
-    void put(const std::vector<uint8_t>& partition_key,
-             const std::vector<uint8_t>& clustering_key,
-             const std::string& column_name, const std::vector<uint8_t>& value,
+    void put(const storage::Key& key, std::span<const uint8_t> value,
              uint64_t sequence);
 
     /**
@@ -79,28 +70,13 @@ class Memtable {
      * The tombstone is retained in the memtable and eventually flushed
      * to disk so that older versions of this key are suppressed during
      * compaction.
-     *
-     * @param[in] partition_key   Raw bytes of the partition key.
-     * @param[in] clustering_key  Raw bytes of the clustering key.
-     * @param[in] column_name     Column to delete.
-     * @param[in] sequence        Sequence number for this entry.
      */
-    void remove(const std::vector<uint8_t>& partition_key,
-                const std::vector<uint8_t>& clustering_key,
-                const std::string& column_name, uint64_t sequence);
+    void remove(const storage::Key& key, uint64_t sequence);
 
     /**
      * @brief Point lookup for a single column value.
-     *
-     * @param[in] partition_key   Raw bytes of the partition key.
-     * @param[in] clustering_key  Raw bytes of the clustering key.
-     * @param[in] column_name     Column to look up.
-     * @return The column value if present and not tombstoned,
-     *         or std::nullopt if the key is absent or deleted.
      */
-    std::optional<InternalValue> get(const std::vector<uint8_t>& partition_key,
-                                     const std::vector<uint8_t>& clustering_key,
-                                     const std::string& column_name);
+    std::optional<InternalValue> get(const storage::Key& key);
 
     /**
      * @brief Returns a rough estimate of the memory consumed by this memtable.
