@@ -57,7 +57,7 @@ Result<WalRecord> deserialize_wal_record(const uint8_t* buffer, size_t length) {
     WalRecord record;
     size_t offset = 0;
 
-    constexpr size_t MIN_RECORD_SIZE = 35;
+    constexpr size_t MIN_RECORD_SIZE = 33;
     if (length < MIN_RECORD_SIZE) {
         return Result<WalRecord>::err(Error{ErrorCode::READ_OUT_OF_RANGE,
                                             "buffer too small for WAL record"});

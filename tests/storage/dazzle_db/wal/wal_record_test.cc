@@ -69,7 +69,7 @@ TEST(WAL_Record, truncated_buffer) {
     ASSERT_EQ(size, serialized_record.size());
 
     std::vector<uint8_t> truncated(serialized_record.begin(),
-                                   serialized_record.begin() + size / 2);
+                                   serialized_record.begin() + size / 1.25);
 
     auto deserialized_result =
         dazzle::deserialize_wal_record(truncated.data(), truncated.size());
