@@ -4,6 +4,7 @@
 #include <string>
 
 #include "enigmadb/io/posix_io_engine.h"
+#include "enigmadb/storage/dazzle_db/compaction/compaction.h"
 #include "enigmadb/tempdir.h"
 #include "enigmadb/utils.h"
 #include "gtest/gtest.h"
@@ -355,6 +356,7 @@ TEST(Dazzle, high_water_mark_from_sstable_and_wal_replay_with_tombstone) {
         ASSERT_TRUE(storage_engine_result.has_value());
 
         auto& storage_engine = storage_engine_result.value();
+        storage_engine->set_compaction_config(dazzle::SizeTieredConfig{16, 20});
 
         auto k1 = make_key("alice", "2026-05", "age");
         auto k2 = make_key("john", "2026-05", "age");
@@ -380,6 +382,7 @@ TEST(Dazzle, high_water_mark_from_sstable_and_wal_replay_with_tombstone) {
         ASSERT_TRUE(storage_engine_result.has_value());
 
         auto& storage_engine = storage_engine_result.value();
+        storage_engine->set_compaction_config(dazzle::SizeTieredConfig{16, 20});
 
         ASSERT_EQ(storage_engine->latest_lsn(), 7);
 
@@ -413,7 +416,7 @@ TEST(Dazzle, high_water_mark_from_sstable_and_wal_replay_with_tombstone) {
         ASSERT_EQ(bytes_to_string(gourav_record.data), "24");
 
         auto tuffy_record = storage_engine->get_internal(k5).value().value();
-        ASSERT_EQ(tuffy_record.sequence, 5);
-        ASSERT_EQ(bytes_to_string(tuffy_record.data), "5");
+        ASSERT_EQ(tuffy_record.sequence, 6);
+        ASSERT_EQ(bytes_to_string(tuffy_record.data), "");
     }
 }
