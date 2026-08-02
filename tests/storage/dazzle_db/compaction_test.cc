@@ -1,51 +1,47 @@
-#include "enigmadb/storage/compaction/compaction.h"
+#include "enigmadb/storage/dazzle_db/compaction/compaction.h"
 
 #include <filesystem>
 #include <string>
 
-#include "enigmadb/common/tempdir.h"
-#include "enigmadb/common/utils.h"
 #include "enigmadb/io/posix_io_engine.h"
-#include "enigmadb/storage/common.h"
-#include "enigmadb/storage/storage_engine.h"
+#include "enigmadb/storage/dazzle_db/dazzle_engine.h"
+#include "enigmadb/tempdir.h"
+#include "enigmadb/utils.h"
 #include "gtest/gtest.h"
+#include "test_support/keys.h"
 
 namespace fs = std::filesystem;
 
-using namespace enigmadb::io;
-using namespace enigmadb::common;
-using namespace enigmadb::storage;
-using namespace enigmadb::storage::sstable;
-using namespace enigmadb::storage::compaction;
+using namespace enigmadb;
+using namespace enigmadb::TESTNAMESPACE;
 
 TEST(compaction, size_tiered_full_compaction) {
-    PosixIOEngine engine;
+    io::PosixIOEngine engine;
     std::string data_dir_path = "./compaction_tests";
     Tempdir testdir(data_dir_path);
 
-    auto compactor = Compactor::create(engine, "./compaction_tests");
+    auto compactor = dazzle::Compactor::create(engine, "./compaction_tests");
 
-    auto storage_engine_result = StorageEngine::open(
+    auto storage_engine_result = dazzle::Dazzle::open(
         engine, "./compaction_tests", 100000); /* huge pre-emptively :) */
     ASSERT_TRUE(storage_engine_result.has_value());
 
     auto& storage_engine = storage_engine_result.value();
     ASSERT_TRUE(
-        storage_engine
-            ->set_compaction_config(compaction::SizeTieredConfig{16, 20})
+        storage_engine->set_compaction_config(dazzle::SizeTieredConfig{16, 20})
             .has_value());
 
     /* flush calls for sure will create new sst files */
     for (size_t i = 0; i < 8; i++) {
         /* each sstable will have 1000 entries */
         for (size_t k = 0; k < 1000; k++) {
+            auto key = make_key(
+                "alice__" + std::to_string(i) + "__" + std::to_string(k),
+                "2026-01", "age");
             ASSERT_TRUE(
                 storage_engine
-                    ->put(string_to_bytes("alice__" + std::to_string(i) + "__" +
-                                          std::to_string(k)),
-                          string_to_bytes("2026-01"), "age",
-                          string_to_bytes("1234" + std::to_string(i) + "__" +
-                                          std::to_string(k)))
+                    ->put(key, string_to_bytes("1234" + std::to_string(i) +
+                                               "__" + std::to_string(k)))
                     .has_value());
         }
 
@@ -58,12 +54,10 @@ TEST(compaction, size_tiered_full_compaction) {
     for (size_t i = 0; i < 8; i++) {
         for (size_t k = 0; k < 1000; k++) {
             if (k % 2 == 0) continue;
-            ASSERT_TRUE(
-                storage_engine
-                    ->remove(string_to_bytes("alice__" + std::to_string(i) +
-                                             "__" + std::to_string(k)),
-                             string_to_bytes("2026-01"), "age")
-                    .has_value());
+            auto key = make_key(
+                "alice__" + std::to_string(i) + "__" + std::to_string(k),
+                "2026-01", "age");
+            ASSERT_TRUE(storage_engine->remove(key).has_value());
             total_deleted++;
         }
 
@@ -82,17 +76,14 @@ TEST(compaction, size_tiered_full_compaction) {
     /* should get all entries back post deletes */
     for (size_t i = 0; i < 8; i++) {
         for (size_t k = 0; k < 1000; k++) {
+            auto key = make_key(
+                "alice__" + std::to_string(i) + "__" + std::to_string(k),
+                "2026-01", "age");
             if (k % 2 != 0) {
-                auto vr = storage_engine->get(
-                    string_to_bytes("alice__" + std::to_string(i) + "__" +
-                                    std::to_string(k)),
-                    string_to_bytes("2026-01"), "age");
+                auto vr = storage_engine->get(key);
                 ASSERT_FALSE(vr.value().has_value());
             } else {
-                auto vr = storage_engine->get(
-                    string_to_bytes("alice__" + std::to_string(i) + "__" +
-                                    std::to_string(k)),
-                    string_to_bytes("2026-01"), "age");
+                auto vr = storage_engine->get(key);
                 ASSERT_TRUE(vr.has_value());
                 ASSERT_EQ(
                     bytes_to_string(vr.value().value().data),
@@ -101,8 +92,8 @@ TEST(compaction, size_tiered_full_compaction) {
         }
     }
 
-    auto sstr = SSTableReader::create(
-        engine, sst_path(testdir.path, next_id.value().value));
+    auto sstr = dazzle::SSTableReader::create(
+        engine, dazzle::sst_path(testdir.path, next_id.value().value));
     ASSERT_TRUE(sstr.has_value());
     auto& sst_reader = sstr.value();
     auto sst_itr = sst_reader.iterator();

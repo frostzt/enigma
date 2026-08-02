@@ -1,33 +1,34 @@
-#include "enigmadb/storage/sstable/sstable_iterator.h"
+#include "enigmadb/storage/dazzle_db/sstable/sstable_iterator.h"
 
 #include <filesystem>
 #include <string>
 
-#include "enigmadb/common/tempfile.h"
-#include "enigmadb/common/utils.h"
 #include "enigmadb/io/posix_io_engine.h"
-#include "enigmadb/storage/sstable/sstable_reader.h"
-#include "enigmadb/storage/sstable/sstable_writer.h"
+#include "enigmadb/storage/dazzle_db/internal_value.h"
+#include "enigmadb/storage/dazzle_db/sstable/sstable_reader.h"
+#include "enigmadb/storage/dazzle_db/sstable/sstable_writer.h"
+#include "enigmadb/tempfile.h"
+#include "enigmadb/utils.h"
 #include "gtest/gtest.h"
+#include "test_support/keys.h"
 
-using namespace enigmadb::io;
-using namespace enigmadb::common;
-using namespace enigmadb::storage;
-using namespace enigmadb::storage::sstable;
-using namespace enigmadb::storage::memtable;
+using namespace enigmadb;
+using namespace enigmadb::TESTNAMESPACE;
 
 TEST(sstable_iterator, empty_sstable) {
-    PosixIOEngine engine;
+    io::PosixIOEngine engine;
     Tempfile testfile("tempfile-XXXXXX");
 
-    auto crewriter_result = SSTableWriter::create(engine, testfile.path, 250);
+    auto crewriter_result =
+        dazzle::SSTableWriter::create(engine, testfile.path, 250);
     ASSERT_TRUE(crewriter_result.has_value());
 
     auto& writer = crewriter_result.value();
     auto finish_result = writer.finish();
     ASSERT_TRUE(finish_result.has_value());
 
-    auto crewreader_result = SSTableReader::create(engine, testfile.path);
+    auto crewreader_result =
+        dazzle::SSTableReader::create(engine, testfile.path);
     ASSERT_TRUE(crewreader_result.has_value());
 
     auto& reader = crewreader_result.value();
@@ -41,25 +42,22 @@ TEST(sstable_iterator, empty_sstable) {
 }
 
 TEST(sstable_iterator, simple_loop) {
-    PosixIOEngine engine;
+    io::PosixIOEngine engine;
     Tempfile testfile("tempfile-XXXXXX");
 
     auto prev_size = std::filesystem::file_size(testfile.path);
 
-    auto crewriter_result = SSTableWriter::create(engine, testfile.path, 250);
+    auto crewriter_result =
+        dazzle::SSTableWriter::create(engine, testfile.path, 250);
     ASSERT_TRUE(crewriter_result.has_value());
 
     auto& writer = crewriter_result.value();
 
     for (size_t i = 10; i < 60; i++) {
-        ASSERT_TRUE(writer
-                        .add(encode_composite_key(
-                                 string_to_bytes("user:" + std::to_string(i)),
-                                 string_to_bytes("2026-01"), "age"),
-                             memtable::MemtableValue{
-                                 string_to_bytes("value_" + std::to_string(i)),
-                                 false, i})
-                        .has_value());
+        auto k = make_key("user:" + std::to_string(i), "2026-01", "age");
+        auto v = dazzle::InternalValue{
+            string_to_bytes("value_" + std::to_string(i)), false, i};
+        ASSERT_TRUE(writer.add(k, v).has_value());
     }
 
     auto finish_result = writer.finish();
@@ -68,7 +66,8 @@ TEST(sstable_iterator, simple_loop) {
     auto curr_size = std::filesystem::file_size(testfile.path);
     ASSERT_TRUE(curr_size > prev_size);
 
-    auto crewreader_result = SSTableReader::create(engine, testfile.path);
+    auto crewreader_result =
+        dazzle::SSTableReader::create(engine, testfile.path);
     ASSERT_TRUE(crewreader_result.has_value());
 
     auto& reader = crewreader_result.value();
@@ -83,26 +82,24 @@ TEST(sstable_iterator, simple_loop) {
 }
 
 TEST(sstable_iterator, exhaustion) {
-    PosixIOEngine engine;
+    io::PosixIOEngine engine;
     Tempfile testfile("tempfile-XXXXXX");
 
-    auto crewriter_result = SSTableWriter::create(engine, testfile.path, 250);
+    auto crewriter_result =
+        dazzle::SSTableWriter::create(engine, testfile.path, 250);
     ASSERT_TRUE(crewriter_result.has_value());
 
     auto& writer = crewriter_result.value();
 
-    ASSERT_TRUE(
-        writer
-            .add(
-                encode_composite_key(string_to_bytes("user:sourav"),
-                                     string_to_bytes("2026-01"), "age"),
-                memtable::MemtableValue{string_to_bytes("value_123"), false, 1})
-            .has_value());
+    auto k = make_key("user:sourav", "2026-01", "age");
+    auto v = dazzle::InternalValue{string_to_bytes("value_123"), false, 1};
+    ASSERT_TRUE(writer.add(k, v).has_value());
 
     auto finish_result = writer.finish();
     ASSERT_TRUE(finish_result.has_value());
 
-    auto crewreader_result = SSTableReader::create(engine, testfile.path);
+    auto crewreader_result =
+        dazzle::SSTableReader::create(engine, testfile.path);
     ASSERT_TRUE(crewreader_result.has_value());
 
     auto& reader = crewreader_result.value();
@@ -123,29 +120,27 @@ TEST(sstable_iterator, exhaustion) {
 }
 
 TEST(sstable_iterator, large_key_value_pairs) {
-    PosixIOEngine engine;
+    io::PosixIOEngine engine;
     Tempfile testfile("tempfile-XXXXXX");
 
-    auto crewriter_result = SSTableWriter::create(engine, testfile.path, 50001);
+    auto crewriter_result =
+        dazzle::SSTableWriter::create(engine, testfile.path, 50001);
     ASSERT_TRUE(crewriter_result.has_value());
 
     auto& writer = crewriter_result.value();
 
     for (size_t i = 10; i < 50000; i++) {
-        ASSERT_TRUE(writer
-                        .add(encode_composite_key(
-                                 string_to_bytes("user:" + std::to_string(i)),
-                                 string_to_bytes("2026-01"), "age"),
-                             memtable::MemtableValue{
-                                 string_to_bytes("value_" + std::to_string(i)),
-                                 false, 1})
-                        .has_value());
+        auto k = make_key("user:" + std::to_string(i), "2026-01", "age");
+        auto v = dazzle::InternalValue{
+            string_to_bytes("value_" + std::to_string(i)), false, i};
+        ASSERT_TRUE(writer.add(k, v).has_value());
     }
 
     auto finish_result = writer.finish();
     ASSERT_TRUE(finish_result.has_value());
 
-    auto crewreader_result = SSTableReader::create(engine, testfile.path);
+    auto crewreader_result =
+        dazzle::SSTableReader::create(engine, testfile.path);
     ASSERT_TRUE(crewreader_result.has_value());
 
     auto& reader = crewreader_result.value();

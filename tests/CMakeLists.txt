@@ -12,6 +12,8 @@ target_link_libraries(unit_tests
 
 gtest_discover_tests(unit_tests)
 
+target_include_directories(unit_tests PRIVATE ${CMAKE_SOURCE_DIR}/tests)
+
 if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
   if(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "21")
     # Workaround for a googletest bug with char conversions recognized by Clang 21+

@@ -15,7 +15,6 @@
 #include <memory>
 #include <optional>
 #include <string>
-#include <vector>
 
 #include "enigmadb/base.h"
 #include "enigmadb/hlc.h"
@@ -279,6 +278,11 @@ class Dazzle : public storage::StorageEngine {
      *         or sync fails.
      */
     Result<void> flush();
+
+    /**
+     * @NOTE: TEST ONLY
+     */
+    Result<std::optional<InternalValue>> get_internal(const storage::Key&);
 };
 
 }  // namespace enigmadb::dazzle

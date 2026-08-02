@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
+#include <span>
 #include <vector>
 
 namespace enigmadb {
@@ -29,6 +30,10 @@ inline void clear_dir(const std::filesystem::path& p) {
     for (const auto& entry : std::filesystem::directory_iterator(p)) {
         std::filesystem::remove_all(entry.path());
     }
+}
+
+inline std::span<const uint8_t> as_bytes(std::string_view s) {
+    return {reinterpret_cast<const uint8_t*>(s.data()), s.size()};
 }
 
 inline std::string trim_string(const std::string& s) {

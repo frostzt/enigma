@@ -1,9 +1,9 @@
-#include "enigmadb/common/result.h"
+#include "enigmadb/result.h"
 
-#include "enigmadb/common/error.h"
+#include "enigmadb/error.h"
 #include "gtest/gtest.h"
 
-using namespace enigmadb::common;
+using namespace enigmadb;
 
 TEST(Result, result_expectOk) {
     auto res = ExpectResult<int, std::runtime_error>::ok(1);
@@ -19,7 +19,7 @@ TEST(Result, result_expectOkInvalidAccessToError) {
     ASSERT_TRUE(res.has_value());
 
     try {
-        res.err();
+        res.error();
         FAIL();
     } catch (std::exception& e) {
         EXPECT_STREQ(e.what(), expected_err_msg.c_str());
@@ -48,7 +48,7 @@ TEST(Result, result_expectErr) {
         ExpectResult<int, std::runtime_error>::err(std::runtime_error(err_msg));
     ASSERT_FALSE(res.has_value());
 
-    auto& error = res.err();
+    auto& error = res.error();
     EXPECT_STREQ(error.what(), err_msg.c_str());
 }
 
@@ -72,13 +72,13 @@ TEST(Result, result_expectErrMoveSemantics) {
         ExpectResult<int, std::runtime_error>::err(std::runtime_error(err_msg));
     ASSERT_FALSE(res.has_value());
 
-    auto& error = res.err();
+    auto& error = res.error();
     EXPECT_STREQ(error.what(), err_msg.c_str());
 
     auto resmoved = std::move(res);
     ASSERT_FALSE(resmoved.has_value());
 
-    auto& errormoved = resmoved.err();
+    auto& errormoved = resmoved.error();
     EXPECT_STREQ(errormoved.what(), err_msg.c_str());
 }
 
@@ -88,7 +88,7 @@ TEST(Result, result_expectErrWithCustomError) {
         ExpectResult<std::string, Error>::err(Error::unexpected(err_msg));
     ASSERT_FALSE(res.has_value());
 
-    auto& error = res.err();
+    auto& error = res.error();
     EXPECT_STREQ(error.message.c_str(), err_msg.c_str());
 }
 
@@ -97,6 +97,6 @@ TEST(Result, result_expectErrWithVoid) {
     auto res = ExpectResult<void, Error>::err(Error::unexpected(err_msg));
     ASSERT_FALSE(res.has_value());
 
-    auto& error = res.err();
+    auto& error = res.error();
     EXPECT_STREQ(error.message.c_str(), err_msg.c_str());
 }

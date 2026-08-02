@@ -1,4 +1,4 @@
-#include "enigmadb/common/hlc.h"
+#include "enigmadb/hlc.h"
 
 #include <gtest/gtest.h>
 
@@ -6,7 +6,7 @@
 #include <unordered_set>
 #include <vector>
 
-using namespace enigmadb::common;
+using namespace enigmadb;
 
 TEST(HybridLogicalClock, generator) {
     TimestampGenerator tsGen;

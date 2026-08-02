@@ -1,23 +1,23 @@
-#include "enigmadb/storage/merge_iterator.h"
+#include "enigmadb/storage/dazzle_db/merge_iterator.h"
 
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "enigmadb/common/utils.h"
-#include "enigmadb/storage/fake_iterator.h"
-#include "enigmadb/storage/key_encoding.h"
+#include "enigmadb/storage/dazzle_db/internal_value.h"
+#include "enigmadb/utils.h"
 #include "gtest/gtest.h"
+#include "test_support/fake_internal_iterator.h"
+#include "test_support/keys.h"
 
-using namespace enigmadb::common;
-using namespace enigmadb::storage;
-using namespace enigmadb::storage::memtable;
+using namespace enigmadb;
+using namespace enigmadb::TESTNAMESPACE;
 
-auto make_entry(std::string name, size_t sequence, bool is_tombstone = false) {
-    return std::make_pair(
-        encode_composite_key(string_to_bytes(name), string_to_bytes(name),
-                             name),
-        MemtableValue{string_to_bytes(name), is_tombstone, sequence});
+std::pair<storage::Key, dazzle::InternalValue> make_entry(
+    std::string name, size_t sequence, bool is_tombstone = false) {
+    auto k = make_key(name, name, name);
+    return std::make_pair(k, dazzle::InternalValue{string_to_bytes(name),
+                                                   is_tombstone, sequence});
 }
 
 TEST(merge_iterator, iterator_compare) {
@@ -31,20 +31,19 @@ TEST(merge_iterator, iterator_compare) {
     auto elixir = make_entry("elixir", 5);
     auto fortran = make_entry("fortran", 6);
 
-    FakeIterator itr_a({ada, delphi});
-    FakeIterator itr_b({basic, elixir});
-    FakeIterator itr_c({cobol, fortran});
+    FakeInternalIterator itr_a({ada, delphi});
+    FakeInternalIterator itr_b({basic, elixir});
+    FakeInternalIterator itr_c({cobol, fortran});
 
-    MergeIterator merge_itr({&itr_a, &itr_b, &itr_c});
+    dazzle::MergeIterator merge_itr({&itr_a, &itr_b, &itr_c});
 
     size_t counter = 0;
     for (merge_itr.seek_to_first(); merge_itr.valid(); merge_itr.next()) {
         auto key = merge_itr.key();
         auto value = merge_itr.value();
 
-        auto common = string_to_bytes(a_to_f[counter]);
-        auto expected_key =
-            encode_composite_key(common, common, a_to_f[counter]);
+        auto common = a_to_f[counter];
+        auto expected_key = make_key(common, common, a_to_f[counter]);
 
         ASSERT_EQ(key, expected_key);
         ASSERT_EQ(bytes_to_string(value.data), a_to_f[counter]);
@@ -68,22 +67,21 @@ TEST(merge_iterator, uneven_lengths) {
     auto elixir = make_entry("elixir", 5);
     auto fortran = make_entry("fortran", 6);
 
-    FakeIterator itr_a({ada});
-    FakeIterator itr_b({basic, delphi, elixir});
-    FakeIterator itr_c({cobol});
-    FakeIterator itr_d({fortran});
-    FakeIterator itr_e({});
+    FakeInternalIterator itr_a({ada});
+    FakeInternalIterator itr_b({basic, delphi, elixir});
+    FakeInternalIterator itr_c({cobol});
+    FakeInternalIterator itr_d({fortran});
+    FakeInternalIterator itr_e({});
 
-    MergeIterator merge_itr({&itr_a, &itr_b, &itr_c, &itr_d, &itr_e});
+    dazzle::MergeIterator merge_itr({&itr_a, &itr_b, &itr_c, &itr_d, &itr_e});
 
     size_t counter = 0;
     for (merge_itr.seek_to_first(); merge_itr.valid(); merge_itr.next()) {
         auto key = merge_itr.key();
         auto value = merge_itr.value();
 
-        auto common = string_to_bytes(a_to_f[counter]);
-        auto expected_key =
-            encode_composite_key(common, common, a_to_f[counter]);
+        auto common = a_to_f[counter];
+        auto expected_key = make_key(common, common, a_to_f[counter]);
 
         ASSERT_EQ(key, expected_key);
         ASSERT_EQ(bytes_to_string(value.data), a_to_f[counter]);
@@ -110,13 +108,13 @@ TEST(merge_iterator, deduplication) {
     auto fortran = make_entry("fortran", 8);
     auto elixir_third = make_entry("elixir", 9);
 
-    FakeIterator itr_a({ada, elixir_zero});
-    FakeIterator itr_b({basic, delphi, elixir_one});
-    FakeIterator itr_c({cobol});
-    FakeIterator itr_d({elixir_second, fortran});
-    FakeIterator itr_e({elixir_third});
+    FakeInternalIterator itr_a({ada, elixir_zero});
+    FakeInternalIterator itr_b({basic, delphi, elixir_one});
+    FakeInternalIterator itr_c({cobol});
+    FakeInternalIterator itr_d({elixir_second, fortran});
+    FakeInternalIterator itr_e({elixir_third});
 
-    MergeIterator merge_itr({&itr_a, &itr_b, &itr_c, &itr_d, &itr_e});
+    dazzle::MergeIterator merge_itr({&itr_a, &itr_b, &itr_c, &itr_d, &itr_e});
 
     std::vector<size_t> expected_sequence = {1, 2, 3, 4, 9, 8};
 
@@ -125,9 +123,8 @@ TEST(merge_iterator, deduplication) {
         auto key = merge_itr.key();
         auto value = merge_itr.value();
 
-        auto common = string_to_bytes(a_to_f[counter]);
-        auto expected_key =
-            encode_composite_key(common, common, a_to_f[counter]);
+        auto common = a_to_f[counter];
+        auto expected_key = make_key(common, common, a_to_f[counter]);
 
         ASSERT_EQ(key, expected_key);
         ASSERT_EQ(bytes_to_string(value.data), a_to_f[counter]);
@@ -152,13 +149,13 @@ TEST(merge_iterator, tombstone) {
     auto fortran = make_entry("fortran", 6);
     auto delphi_is_gone = make_entry("delphi", 7, true);
 
-    FakeIterator itr_a({ada});
-    FakeIterator itr_b({basic, delphi, elixir});
-    FakeIterator itr_c({cobol});
-    FakeIterator itr_d({fortran});
-    FakeIterator itr_e({delphi_is_gone});
+    FakeInternalIterator itr_a({ada});
+    FakeInternalIterator itr_b({basic, delphi, elixir});
+    FakeInternalIterator itr_c({cobol});
+    FakeInternalIterator itr_d({fortran});
+    FakeInternalIterator itr_e({delphi_is_gone});
 
-    MergeIterator merge_itr({&itr_a, &itr_b, &itr_c, &itr_d, &itr_e});
+    dazzle::MergeIterator merge_itr({&itr_a, &itr_b, &itr_c, &itr_d, &itr_e});
 
     std::vector<size_t> expected_sequence = {1, 2, 3, 7, 5, 6};
 
@@ -167,9 +164,8 @@ TEST(merge_iterator, tombstone) {
         auto key = merge_itr.key();
         auto value = merge_itr.value();
 
-        auto common = string_to_bytes(a_to_f[counter]);
-        auto expected_key =
-            encode_composite_key(common, common, a_to_f[counter]);
+        auto common = a_to_f[counter];
+        auto expected_key = make_key(common, common, a_to_f[counter]);
 
         ASSERT_EQ(key, expected_key);
         ASSERT_EQ(bytes_to_string(value.data), a_to_f[counter]);
@@ -199,13 +195,13 @@ TEST(merge_iterator, insert_beats_tombstone) {
     auto delphi_is_gone = make_entry("delphi", 7, true);
     auto delphi_is_back = make_entry("delphi", 8);
 
-    FakeIterator itr_a({ada});
-    FakeIterator itr_b({basic, delphi, elixir});
-    FakeIterator itr_c({cobol, delphi_is_gone});
-    FakeIterator itr_d({fortran});
-    FakeIterator itr_e({delphi_is_back});
+    FakeInternalIterator itr_a({ada});
+    FakeInternalIterator itr_b({basic, delphi, elixir});
+    FakeInternalIterator itr_c({cobol, delphi_is_gone});
+    FakeInternalIterator itr_d({fortran});
+    FakeInternalIterator itr_e({delphi_is_back});
 
-    MergeIterator merge_itr({&itr_a, &itr_b, &itr_c, &itr_d, &itr_e});
+    dazzle::MergeIterator merge_itr({&itr_a, &itr_b, &itr_c, &itr_d, &itr_e});
 
     std::vector<size_t> expected_sequence = {1, 2, 3, 8, 5, 6};
 
@@ -214,9 +210,8 @@ TEST(merge_iterator, insert_beats_tombstone) {
         auto key = merge_itr.key();
         auto value = merge_itr.value();
 
-        auto common = string_to_bytes(a_to_f[counter]);
-        auto expected_key =
-            encode_composite_key(common, common, a_to_f[counter]);
+        auto common = a_to_f[counter];
+        auto expected_key = make_key(common, common, a_to_f[counter]);
 
         ASSERT_EQ(key, expected_key);
         ASSERT_EQ(bytes_to_string(value.data), a_to_f[counter]);

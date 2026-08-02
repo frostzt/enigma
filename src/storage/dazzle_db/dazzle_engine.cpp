@@ -54,6 +54,25 @@ std::string Dazzle::sst_path(uint64_t seq) {
     return ss.str();
 }
 
+Result<std::optional<InternalValue>> Dazzle::get_internal(
+    const storage::Key& key) {
+    if (auto found = active_memtable_.get(key); found.has_value()) {
+        return Result<std::optional<InternalValue>>::ok(found);
+    }
+
+    for (auto it = sst_readers_.rbegin(); it != sst_readers_.rend(); ++it) {
+        auto lookup = it->second->get(key);
+        if (!lookup.has_value()) {
+            return Result<std::optional<InternalValue>>::err(lookup.error());
+        }
+        if (lookup.value().has_value()) {
+            return Result<std::optional<InternalValue>>::ok(lookup.value());
+        }
+    }
+
+    return Result<std::optional<InternalValue>>::ok(std::nullopt);
+}
+
 Result<std::unique_ptr<Dazzle>> Dazzle::open(io::IOEngine& engine,
                                              const std::string& data_dir,
                                              const uint64_t memtable_size) {

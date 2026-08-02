@@ -1,8 +1,8 @@
-#include "enigmadb/common/crc32.h"
+#include "enigmadb/crc32.h"
 
 #include <gtest/gtest.h>
 
-using namespace enigmadb::common;
+using namespace enigmadb;
 
 TEST(crc32, produces_same_checksum) {
     uint8_t buffer[] = "sourav";

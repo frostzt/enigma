@@ -1,8 +1,8 @@
-#include "enigmadb/common/encoding.h"
+#include "enigmadb/encoding.h"
 
 #include <gtest/gtest.h>
 
-using namespace enigmadb::common;
+using namespace enigmadb;
 
 TEST(encoding, round_trip_uint8) {
     uint8_t value = 12;
