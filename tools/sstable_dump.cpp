@@ -2,21 +2,18 @@
 #include <string>
 #include <vector>
 
-#include "enigmadb/common/utils.h"
+#include "enigmadb/catalog/key_encoding.h"
 #include "enigmadb/io/posix_io_engine.h"
-#include "enigmadb/storage/key_encoding.h"
-#include "enigmadb/storage/sstable/sstable_reader.h"
+#include "enigmadb/storage/dazzle_db/sstable/sstable_reader.h"
+#include "enigmadb/utils.h"
 
-using namespace enigmadb::storage::sstable;
-using namespace enigmadb::storage;
-using namespace enigmadb::io;
-using namespace enigmadb::common;
+using namespace enigmadb;
 
 int run(std::string filepath) {
-    PosixIOEngine engine;
-    auto rr = SSTableReader::create(engine, filepath);
+    io::PosixIOEngine engine;
+    auto rr = dazzle::SSTableReader::create(engine, filepath);
     if (!rr.has_value()) {
-        std::cout << rr.err().message << "\n";
+        std::cout << rr.error().message << "\n";
         return 1;
     }
 
@@ -28,7 +25,7 @@ int run(std::string filepath) {
 
     auto fv = reader.get_footer();
     if (!fv.has_value()) {
-        std::cout << fv.err().message << "\n";
+        std::cout << fv.error().message << "\n";
         return 1;
     }
 
@@ -47,14 +44,14 @@ int run(std::string filepath) {
     for (itr.seek_to_first(); itr.valid(); itr.next()) {
         auto v = itr.value();
 
-        std::vector<uint8_t> pkey;
-        std::vector<uint8_t> ckey;
-        std::string cname;
+        auto decomposed = catalog::decode_composite_key(itr.key().bytes());
+        if (!decomposed.has_value()) return 1;
 
-        decode_composite_key(itr.key(), pkey, ckey, cname);
+        auto compkey = decomposed.value();
 
-        std::cout << "[ENCODED] key: " << bytes_to_string(pkey) << "_"
-                  << bytes_to_string(ckey) << "_" << cname << "   ";
+        std::cout << "[ENCODED] key: " << bytes_to_string(compkey.partition_key)
+                  << "_" << bytes_to_string(compkey.clustering_key) << "_"
+                  << bytes_to_string(compkey.column_name) << "   ";
         std::cout << "val: " << bytes_to_string(v.data) << "  ";
         std::cout << "tom: " << v.is_tombstone << "  ";
         std::cout << "seq: " << v.sequence << std::endl;

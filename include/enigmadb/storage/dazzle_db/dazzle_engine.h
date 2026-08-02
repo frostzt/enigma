@@ -249,8 +249,9 @@ class Dazzle : public storage::StorageEngine {
      */
     Result<void> remove(const storage::Key& key) override;
 
-    Result<std::unique_ptr<storage::Iterator>> scan(
-        const storage::KeyRange& range) override;
+    /* TODO: Implementation pending */
+    // Result<std::unique_ptr<storage::Iterator>> scan(
+    //     const storage::KeyRange& range) override;
 
     /**
      * @brief Point lookup for a single column value.
