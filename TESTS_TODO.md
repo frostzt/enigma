@@ -1,20 +1,6 @@
 # EnigmaDB — Exhaustive Test Plan
 
-Companion to `ENIGMADB_ROADMAP.md`. **Non-blocking** — work through this in parallel with feature development. The roadmap says what to build; this says what to prove.
-
----
-
-## Why this document exists
-
-68 passing tests do not mean the system is correct. They mean 68 specific behaviors were exercised. The gap between those two statements is where database bugs live — and database bugs are uniquely nasty because they corrupt data silently and surface weeks later.
-
-**The standard for a test in this document:** *if the code were broken in the specific way this test targets, would this test fail?* A test that passes whether or not the behavior is correct is worse than no test, because it manufactures confidence.
-
-Three failure modes seen already in this project, all of which produced green tests over broken or unexercised code:
-
-1. **Passing around the bug, not through it** — the `full_compaction` test that passed `is_full_compaction = false`, so the tombstone-drop branch never executed.
-2. **Indistinguishable outcomes** — asserting `get()` returns not-found after a delete, which passes whether the tombstone was dropped *or* preserved. Had to inspect the output file to tell them apart.
-3. **Accidental alignment** — asserting `sequence == counter + 1`, which only worked because sequences happened to be assigned in sorted-key order. Any other assignment would fail a correct implementation.
+Generated this by using Greptile and plenty of tests misssing need to handle all those.
 
 ---
 
