@@ -28,3 +28,24 @@ TEST(sstable_common, sstable_parse_filename) {
     EXPECT_EQ(10101, dazzle::parse_sstable_filename("sst_00010101.db").value);
     EXPECT_EQ(101010, dazzle::parse_sstable_filename("sst_00101010.db").value);
 }
+
+TEST(sstable_common, sstable_parse_filename_with_full_path) {
+    EXPECT_EQ(
+        1, dazzle::parse_sstable_filename("path/to/some/random/sst_00000001.db")
+               .value);
+    EXPECT_EQ(10, dazzle::parse_sstable_filename(
+                      "path/to/some/random/sst_00000010.db")
+                      .value);
+    EXPECT_EQ(101, dazzle::parse_sstable_filename(
+                       "path/to/some/random/sst_00000101.db")
+                       .value);
+    EXPECT_EQ(1010, dazzle::parse_sstable_filename(
+                        "path/to/some/random/sst_00001010.db")
+                        .value);
+    EXPECT_EQ(10101, dazzle::parse_sstable_filename(
+                         "path/to/some/random/sst_00010101.db")
+                         .value);
+    EXPECT_EQ(101010, dazzle::parse_sstable_filename(
+                          "path/to/some/random/sst_00101010.db")
+                          .value);
+}

@@ -43,6 +43,10 @@ struct Error {
     static Error unexpected(std::string message) {
         return Error{ErrorCode::UNEXPECTED_ERR, std::move(message)};
     }
+
+    static Error bad_config(std::string message) {
+        return Error{ErrorCode::BAD_CONFIG, std::move(message)};
+    }
 };
 
 [[noreturn]] void _server_panic_impl(const char* file, int line,

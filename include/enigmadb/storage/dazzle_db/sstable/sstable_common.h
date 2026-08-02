@@ -35,8 +35,8 @@ static constexpr std::array<char, 8> MAGIC = {'E', 'N', 'I', 'G',
 struct SSTableId {
     uint64_t value;  ///< Id of the sstable
 
+    auto operator<=>(const SSTableId& oth) const = default;
     bool operator==(const SSTableId& oth) const { return value == oth.value; }
-    bool operator<(const SSTableId& oth) const { return value < oth.value; }
 };
 
 struct SSTableIdComparator {
@@ -50,36 +50,46 @@ inline std::string sstable_filename(SSTableId id) {
     ss << "sst_" << std::setfill('0') << std::setw(8) << id.value << ".db";
     return ss.str();
 }
+
 inline std::string sst_path(std::string data_dir, uint64_t seq) {
     std::stringstream ss;
     ss << data_dir << "/sst/" << sstable_filename(SSTableId{seq});
     return ss.str();
 }
 
-inline SSTableId parse_sstable_filename(std::string_view filename) {
+inline SSTableId parse_sstable_filename(std::string_view path) {
     constexpr std::string_view prefix = "sst_";
     constexpr std::string_view suffix = ".db";
-    uint64_t value = 0;
+
+    auto last_slash = path.find_last_of("/\\");
+    std::string_view filename = (last_slash == std::string_view::npos)
+                                    ? path
+                                    : path.substr(last_slash + 1);
 
     if (filename.size() <= prefix.size() + suffix.size() ||
         filename.substr(0, prefix.size()) != prefix ||
         filename.substr(filename.size() - suffix.size()) != suffix) {
-        return SSTableId{value};
-    }
-
-    auto part = filename.substr(
-        prefix.size(), filename.size() - prefix.size() - suffix.size());
-    auto [ptr, ec] =
-        std::from_chars(part.data(), part.data() + part.size(), value);
-    if (ptr != part.data() + part.size()) {
         return SSTableId{0};
     }
 
-    /* TODO: Server logger and need to replace these */
+    auto num_part = filename.substr(
+        prefix.size(), filename.size() - prefix.size() - suffix.size());
+
+    uint64_t value = 0;
+    auto [ptr, ec] = std::from_chars(num_part.data(),
+                                     num_part.data() + num_part.size(), value);
+
+    /* TODO: Server logs */
     if (ec == std::errc::invalid_argument) {
         std::cout << "This is not a number.\n";
+        return SSTableId{0};
     } else if (ec == std::errc::result_out_of_range) {
-        std::cout << "This number is larger than an int.\n";
+        std::cout << "This number is larger than uint64_t.\n";
+        return SSTableId{0};
+    }
+
+    if (ptr != num_part.data() + num_part.size()) {
+        return SSTableId{0};
     }
 
     return SSTableId{value};

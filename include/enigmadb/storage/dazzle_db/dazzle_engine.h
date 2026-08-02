@@ -24,9 +24,7 @@
 #include "enigmadb/storage/dazzle_db/sstable/sstable_common.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_reader.h"
 #include "enigmadb/storage/dazzle_db/wal/wal_writer.h"
-#include "enigmadb/storage/iterator.h"
 #include "enigmadb/storage/key.h"
-#include "enigmadb/storage/key_range.h"
 #include "enigmadb/storage/storage_engine.h"
 #include "enigmadb/storage/value.h"
 
@@ -73,19 +71,21 @@ class Dazzle : public storage::StorageEngine {
         return lsn_.fetch_add(1, std::memory_order_relaxed);
     }
 
-    /**
-     * @brief Bumps SST file sequence by one
-     */
-    uint64_t bump_sst_sequence() {
+    uint64_t mint_sst_id() {
         return next_sst_seq_.fetch_add(1, std::memory_order_relaxed);
-    };
+    }
 
-    /**
-     * @brief Bumps WAL file sequence by one
-     */
-    uint64_t bump_wal_sequence() {
+    uint64_t peek_sst_id() const {
+        return next_sst_seq_.load(std::memory_order_relaxed);
+    }
+
+    uint64_t mint_wal_id() {
         return next_wal_seq_.fetch_add(1, std::memory_order_relaxed);
-    };
+    }
+
+    uint64_t peek_wal_id() const {
+        return next_wal_seq_.load(std::memory_order_relaxed);
+    }
 
     /* --------------------------------------------------
      * Compaction
@@ -185,20 +185,6 @@ class Dazzle : public storage::StorageEngine {
      * @brief Returns the latest LSN available
      */
     uint64_t latest_lsn() const { return lsn_.load(std::memory_order_relaxed); }
-
-    /**
-     * @brief Returns the next wal sequence number available
-     */
-    uint64_t get_next_wal_sequence() const {
-        return next_wal_seq_.load(std::memory_order_relaxed);
-    }
-
-    /**
-     * @brief Returns the next sstable sequence number available
-     */
-    uint64_t get_next_sst_sequence() const {
-        return next_sst_seq_.load(std::memory_order_relaxed);
-    }
 
     Result<SSTableId> do_compact_work();
 

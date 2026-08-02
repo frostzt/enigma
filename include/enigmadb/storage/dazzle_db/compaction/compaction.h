@@ -1,6 +1,6 @@
 /**
  * @file compaction.h
- * @brief
+ * @brief Common compaction implementation
  *
  * @author frostzt
  * @date 2026-06-03

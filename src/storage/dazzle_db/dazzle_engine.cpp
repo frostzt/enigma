@@ -17,7 +17,9 @@
 #include <vector>
 
 #include "enigmadb/base.h"
+#include "enigmadb/error.h"
 #include "enigmadb/storage/dazzle_db/compaction/compaction.h"
+#include "enigmadb/storage/dazzle_db/compaction/tombstone_gc.h"
 #include "enigmadb/storage/dazzle_db/memtable/memtable.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_common.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_reader.h"
@@ -169,6 +171,8 @@ Result<std::unique_ptr<Dazzle>> Dazzle::open(io::IOEngine& engine,
         return Result<std::unique_ptr<Dazzle>>::err(wal_writer_res.error());
     }
 
+    /* FIXME: Need to revisit this later right now its really bad here with the
+     * sequences */
     auto storage_engine = std::unique_ptr<Dazzle>(new Dazzle(
         engine, data_dir, std::move(wal_writer_res.value()), memtable_size,
         std::move(mtable), std::move(sst_readers), highest_wal_seq + 1,
@@ -272,17 +276,24 @@ Result<SSTableId> Dazzle::do_compact_work() {
         inputs.push_back(id);
     }
 
+    std::vector<SSTableId> live;
+    live.reserve(sst_readers_.size());
+    for (const auto& [id, _] : sst_readers_) {
+        live.push_back(id);
+    }
+
     SSTableId sstid;
     Error err{ErrorCode::NONE, ""};
 
     /* actual compaction */
     std::visit(
-        [this, &inputs, &sstid, &err](const auto& opts) {
+        [this, &inputs, &live, &sstid, &err](const auto& opts) {
             using T = std::decay_t<decltype(opts)>;
             if constexpr (std::is_same_v<T, SizeTieredConfig>) {
-                bool is_full_compact = inputs.size() == sst_readers_.size();
+                bool is_full_compact = can_drop_tombstones(live, inputs);
+                auto new_sequence = this->mint_sst_id();
                 auto new_sst_result = compactor_.do_size_tiered_compact(
-                    inputs, this->get_next_sst_sequence(), is_full_compact);
+                    inputs, new_sequence, is_full_compact);
                 if (!new_sst_result.has_value()) {
                     err = new_sst_result.error();
                     return;
@@ -301,8 +312,6 @@ Result<SSTableId> Dazzle::do_compact_work() {
         return Result<SSTableId>::err(err);
     }
 
-    assert(sstid.value == get_next_sst_sequence());
-
     auto sstrr = SSTableReader::create(engine_, sst_path(sstid.value));
     if (!sstrr.has_value()) {
         /* We need to delete this file on failure if the reader wasn't able
@@ -312,15 +321,23 @@ Result<SSTableId> Dazzle::do_compact_work() {
         return Result<SSTableId>::err(sstrr.error());
     }
 
-    /* Empty the sst_readers_ vector and update it to use the new
-     * sstable file */
-    sst_readers_.clear();
+    /* Remove SSTable Readers that are NO longer needed */
+    std::vector<decltype(sst_readers_)::iterator> to_erase;
+    for (auto& i : inputs) {
+        auto it = sst_readers_.find(i);
+        if (it == sst_readers_.end()) {
+            return Result<SSTableId>::err(Error::unexpected(
+                "FATAL: Compacted input supplied no longer exists!"));
+        }
+        to_erase.push_back(it);
+    }
+    for (auto it : to_erase) {
+        sst_readers_.erase(it);
+    }
+
+    /* Emplace the new reader */
     sst_readers_.emplace(
         sstid, std::make_unique<SSTableReader>(std::move(sstrr.value())));
-
-    /* Bump sstable file sequence the newly generated one should have had
-     * the last one */
-    bump_sst_sequence();
 
     /* delete the old files - best effort rn later on obsolete sst files
      * will be cleaned up by a Manifest driven GC
@@ -344,9 +361,11 @@ Result<void> Dazzle::flush() {
         return Result<void>::ok();
     }
 
+    auto new_sequence = mint_sst_id();
+
     /* create a new sstable writer */
-    auto sstwrr = SSTableWriter::create(
-        engine_, sst_path(get_next_sst_sequence()), active_memtable_.count());
+    auto sstwrr = SSTableWriter::create(engine_, sst_path(new_sequence),
+                                        active_memtable_.count());
     if (!sstwrr.has_value()) {
         return Result<void>::err(sstwrr.error());
     }
@@ -366,21 +385,20 @@ Result<void> Dazzle::flush() {
     }
 
     /* open an sstable reader */
-    auto sstrr =
-        SSTableReader::create(engine_, sst_path(get_next_sst_sequence()));
+    auto sstrr = SSTableReader::create(engine_, sst_path(new_sequence));
     if (!sstrr.has_value()) {
         return Result<void>::err(sstrr.error());
     }
 
     /* create new wal sequence */
-    auto new_wal_seq = get_next_wal_sequence() + 1;
+    auto new_wal_seq = mint_wal_id();
     auto walwrr = WalWriter::create(engine_, wal_path(new_wal_seq));
     if (!walwrr.has_value()) {
         return Result<void>::err(walwrr.error());
     }
 
     sst_readers_.insert(std::make_pair(
-        SSTableId{get_next_sst_sequence()},
+        SSTableId{new_sequence},
         std::make_unique<SSTableReader>(std::move(sstrr.value()))));
 
     wal_writer_.emplace(std::move(walwrr.value()));
@@ -389,9 +407,7 @@ Result<void> Dazzle::flush() {
     Memtable mtable{memtable_size_};
     active_memtable_ = std::move(mtable);
 
-    auto old_wal_seq = get_next_wal_sequence();
-    bump_wal_sequence();
-    bump_sst_sequence();
+    auto old_wal_seq = new_wal_seq - 1;
 
     /* best effort del, deleting failure for old wals are not fatal */
     fs::remove(wal_path(old_wal_seq));
@@ -465,7 +481,7 @@ Result<uint64_t> Dazzle::recover() {
         if (!entry.is_regular_file() || entry.path().extension() != ".log")
             continue;
         auto seq = extract_num(entry.path().filename().string());
-        if (seq < get_next_wal_sequence()) {
+        if (seq < peek_wal_id()) {
             old_wal_files.push_back(entry.path());
         }
     }

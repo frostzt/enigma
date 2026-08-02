@@ -110,6 +110,8 @@ class SSTableReader {
         return Result<MinimalSSTableFooter>::ok(footer_);
     };
 
+    std::string_view get_path() const { return path_; }
+
     SSTableIterator iterator() const {
         return SSTableIterator(engine_, fh_, index_entries_);
     }
