@@ -1,3 +1,7 @@
+#if defined(__linux__) && !defined(_GNU_SOURCE)
+#define _GNU_SOURCE
+#endif
+
 #include "enigmadb/io/posix_io_engine.h"
 
 #include <sys/fcntl.h>
@@ -31,7 +35,8 @@ static bool debug_has_open_fd_for_path(const std::string& target_path) {
     int dir_fd = ::open("/proc/self/fd", O_RDONLY | O_DIRECTORY);
     if (dir_fd == -1) return false;
 
-    DIR* dir = ::fdopendir(dir_fd);
+    // Remove :: from C directory management functions
+    DIR* dir = fdopendir(dir_fd);
     if (!dir) {
         ::close(dir_fd);
         return false;
@@ -41,7 +46,7 @@ static bool debug_has_open_fd_for_path(const std::string& target_path) {
     char link_buf[PATH_MAX];
     bool leaked = false;
 
-    while ((entry = ::readdir(dir)) != nullptr) {
+    while ((entry = readdir(dir)) != nullptr) {
         if (entry->d_name[0] == '.') continue;
 
         std::string fd_path = std::string("/proc/self/fd/") + entry->d_name;
@@ -51,7 +56,6 @@ static bool debug_has_open_fd_for_path(const std::string& target_path) {
             link_buf[len] = '\0';
             std::string resolved(link_buf);
 
-            // Linux appends " (deleted)" to unlinked open files
             if (resolved == target_path ||
                 resolved == (target_path + " (deleted)")) {
                 leaked = true;
@@ -60,7 +64,7 @@ static bool debug_has_open_fd_for_path(const std::string& target_path) {
         }
     }
 
-    ::closedir(dir);
+    closedir(dir);
     return leaked;
 #elif defined(__APPLE__)
     pid_t pid = ::getpid();
