@@ -25,6 +25,8 @@ Generated this by using Greptile and plenty of tests misssing need to handle all
 - [ ] **TEST-002:** All numeric test keys zero-padded so lexicographic order matches numeric order. `user:10000 < user:1001 < user:11` otherwise.
 - [ ] **TEST-003:** Every test that constructs data with sequence numbers must **scramble** them relative to key order, so no assertion can pass by accidental alignment.
 - [ ] **TEST-004:** Whole suite runs clean under ASan and UBSan. Add a CI job.
+- [ ] **TEST-004b:** Run the full suite on **Linux and macOS**. libstdc++ and libc++ differ in heap sift order, `vector::data()` null-on-empty behaviour, and UBSan libc annotations. A real dedup bug was found only because of an incidental Linux build — that shouldn't be luck.
+- [ ] **TEST-004c:** Add a `-D_GLIBCXX_DEBUG` build to CI. It validates strict weak ordering on every comparator you pass to a standard algorithm, for free.
 - [ ] **TEST-005:** `grep -r catalog include/enigmadb/storage src/storage` returns zero hits — make it a CI step, not a habit.
 - [ ] **TEST-006:** Every module gets a "destructor releases resources" test — open N handles, destroy, assert fd count returns to baseline (`/proc/self/fd` on Linux).
 
@@ -227,13 +229,33 @@ Bytes come off disk and can be corrupt. Each of these must return an error, neve
 
 Existing coverage is decent. These are the gaps.
 
+### 8.1 `HeapCompare` in isolation ⚠️ ADDED AFTER A LIVE BUG
+
+The sequence tie-break was **silently dropped during a refactor**. Four of five `MergeIterator` tests still passed on macOS. It only surfaced on Linux, because without a tie-break the comparator says "equal keys are equivalent" — which is a *valid* strict weak ordering, just one where the winner among duplicates is unspecified. libc++ floated the newest to the top; libstdc++ floated the oldest. Not UB, so no sanitizer catches it. Worse than UB for that reason.
+
+Why the other tests missed it: two of them had no duplicate keys at all, and two had only **two** versions of a key — with two entries the heap has essentially one arrangement, so arbitrary order happens to be right. Only the four-duplicate case had enough entropy to expose it.
+
+**Lesson: test the comparator directly, and use ≥4 duplicates when testing dedup.**
+
+- [ ] **TEST-240** [UNIT] ⭐ **Irreflexivity:** `comp(a, a) == false` for every entry.
+- [ ] **TEST-241** [UNIT] ⭐ **Asymmetry:** for all pairs, `comp(a,b) && comp(b,a)` is never true. Cover distinct keys, equal keys with distinct sequences, and fully identical entries.
+- [ ] **TEST-242** [UNIT] ⭐ **Transitivity:** if `comp(a,b)` and `comp(b,c)` then `comp(a,c)`. Run over all ordered triples of a ~10-entry set mixing distinct keys, shared keys, and shared sequences.
+- [ ] **TEST-243** [UNIT] **Transitivity of equivalence:** if `!comp(a,b) && !comp(b,a)` and the same holds for `(b,c)`, then it must hold for `(a,c)`. This is the axiom most often violated and the one `std::priority_queue` silently depends on.
+- [ ] **TEST-244** [UNIT] ⭐ **The regression test.** Two entries, same key, sequences 5 and 9. Assert the 9 entry wins in **both** argument orders: `comp(seq5, seq9) == true` and `comp(seq9, seq5) == false`. **This is the test that would have caught the dropped tie-break, deterministically, on every platform.**
+- [ ] **TEST-245** [UNIT] Key ordering dominates sequence: key A < key B must win regardless of their sequences, including when A has the lower sequence.
+- [ ] **TEST-246** [UNIT] Equal key *and* equal sequence → genuinely equivalent (`!comp(a,b) && !comp(b,a)`). Document that the winner is arbitrary in this case, or make it deterministic by adding a source-rank final tie-break.
+- [ ] **TEST-247** [PROP] Feed N random entries to `std::sort` using `HeapCompare` — libstdc++ in debug mode (`-D_GLIBCXX_DEBUG`) actively validates strict weak ordering and will abort on a bad comparator. Cheap, thorough.
+- [ ] **TEST-248** [UNIT] **Cross-platform pin:** sort a fixed entry set with `HeapCompare` and assert the exact resulting order. Any comparator change that alters ordering fails loudly instead of drifting.
+
+### 8.2 `MergeIterator` behaviour
+
 - [ ] **TEST-250** [UNIT] Zero sources → invalid immediately.
 - [ ] **TEST-251** [UNIT] All sources empty → invalid immediately.
 - [ ] **TEST-252** [UNIT] Single source → passthrough, identical output.
 - [ ] **TEST-253** [UNIT] ⭐ **Error propagation:** a source whose `status()` goes bad mid-iteration. The merge must become invalid **and** surface the error. Requires the `fail_after_n` flag on `FakeInternalIterator`. Currently **untested** despite a real bug having been fixed here.
 - [ ] **TEST-254** [UNIT] Error on the very first `seek_to_first()` of one source.
 - [ ] **TEST-255** [UNIT] Same key in **all** sources at identical sequences — defined, deterministic winner (document which).
-- [ ] **TEST-256** [UNIT] Key present in 10 sources at 10 different sequences — highest wins, other 9 fully consumed.
+- [ ] **TEST-256** [UNIT] ⭐ Key present in 10 sources at 10 different sequences — highest wins, other 9 fully consumed. **Use ≥4 duplicates minimum in any dedup test**; with 2 the heap has too few arrangements to distinguish a correct comparator from an arbitrary one.
 - [ ] **TEST-257** [UNIT] Two distinct keys where one is a byte-prefix of the other, interleaved across sources.
 - [ ] **TEST-258** [UNIT] `seek_to_first()` called twice — full restart, no leaked state from the first pass.
 - [ ] **TEST-259** [UNIT] 100 sources — heap correctness at scale.
