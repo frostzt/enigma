@@ -20,7 +20,6 @@
 #ifndef ENIGMA_DB_MERGE_ITERATOR_H
 #define ENIGMA_DB_MERGE_ITERATOR_H
 
-#include <cstddef>
 #include <optional>
 #include <queue>
 #include <vector>
@@ -59,6 +58,11 @@ struct HeapCompare {
         auto& bkey = b.source_->key();
         if (akey < bkey) return false;
         if (bkey < akey) return true;
+
+        if (a.source_->value().sequence < b.source_->value().sequence) {
+            return true;
+        }
+
         return false;
     }
 };
