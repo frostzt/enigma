@@ -60,7 +60,9 @@ uint64_t decode_uint64(const uint8_t* buffer, size_t offset) {
 
 size_t encode_bytes(const void* data, size_t length, uint8_t* buffer,
                     size_t offset) {
-    memcpy(buffer + offset, data, length);
+    if (length > 0) {
+        memcpy(buffer + offset, data, length);
+    }
     return offset + length;
 }
 

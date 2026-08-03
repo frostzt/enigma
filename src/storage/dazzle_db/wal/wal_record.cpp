@@ -35,14 +35,18 @@ std::vector<uint8_t> serialize_wal_record(const WalRecord& record) {
     /* --- write key --- */
     auto key_length = record.key.size();
     offset = encode_uint32(key_length, buf, offset);
-    memcpy(buf + offset, record.key.bytes().data(), key_length);
-    offset += key_length;
+    if (key_length > 0) {
+        memcpy(buf + offset, record.key.bytes().data(), key_length);
+        offset += key_length;
+    }
 
     /* --- write value --- */
     auto value_length = record.value.size();
     offset = encode_uint32(value_length, buf, offset);
-    memcpy(buf + offset, record.value.data(), value_length);
-    offset += value_length;
+    if (value_length > 0) {
+        memcpy(buf + offset, record.value.data(), value_length);
+        offset += value_length;
+    }
 
     /* update header */
     auto body_length = offset - 8;
