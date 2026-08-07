@@ -211,6 +211,11 @@ Result<void> Dazzle::add_sst_reader(SSTableId id, SSTableReader reader) {
 
 Result<void> Dazzle::set_compaction_policy(
     std::unique_ptr<CompactionPolicy> policy) {
+    if (!policy) {
+        return Result<void>::err(
+            Error::bad_config("Compaction policy was not specified"));
+    }
+
     policy_ = std::move(policy);
     return Result<void>::ok();
 }
