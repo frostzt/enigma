@@ -36,7 +36,8 @@ int run(std::string filepath) {
               << "\nfilter_block_size: " << footer.filter_block_size
               << "\nentry_count: " << footer.entry_count
               << "\nformat_version: " << footer.format_version
-              << "\nhighest_sequence: " << footer.highest_sequence << "\n\n\n";
+              << "\nhighest_sequence: " << footer.highest_sequence
+              << "\nsize_bytes" << footer.size_bytes << "\n\n\n";
 
     std::cout << "------------ [DATA BLOCK] ------------\n" << std::endl;
     auto itr = reader.iterator();

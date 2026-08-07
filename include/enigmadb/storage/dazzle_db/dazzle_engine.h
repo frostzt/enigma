@@ -15,11 +15,13 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "enigmadb/base.h"
 #include "enigmadb/hlc.h"
 #include "enigmadb/io/io_engine.h"
 #include "enigmadb/storage/dazzle_db/compaction/compaction.h"
+#include "enigmadb/storage/dazzle_db/compaction/compaction_policy.h"
 #include "enigmadb/storage/dazzle_db/memtable/memtable.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_common.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_reader.h"
@@ -42,9 +44,6 @@ class Dazzle : public storage::StorageEngine {
     io::IOEngine& engine_;
     const std::string data_dir_;
 
-    /// SSTable readers
-    std::map<SSTableId, std::unique_ptr<SSTableReader>, SSTableIdComparator>
-        sst_readers_;
     /// Active WAL segment writer.
     std::optional<WalWriter> wal_writer_;
     /// Flush threshold in bytes.
@@ -53,6 +52,21 @@ class Dazzle : public storage::StorageEngine {
     Memtable active_memtable_;
     /// Hybrid logical clock for record timestamps.
     TimestampGenerator hlc_;
+
+    /* --------------------------------------------------
+     * SSTables
+     * --------------------------------------------------*/
+    /// SSTable readers
+    std::map<SSTableId, std::unique_ptr<SSTableReader>, SSTableIdComparator>
+        sst_readers_;
+
+    /// SSTable metadata
+    std::map<SSTableId, std::unique_ptr<SSTableMeta>, SSTableIdComparator>
+        sst_meta_;
+
+    std::vector<const SSTableMeta*> sst_meta_to_vector() const;
+
+    Result<void> add_sst_reader(SSTableId, SSTableReader);
 
     /* --------------------------------------------------
      * Sequences
@@ -90,10 +104,20 @@ class Dazzle : public storage::StorageEngine {
     /* --------------------------------------------------
      * Compaction
      * --------------------------------------------------*/
-    /// Configuration for compaction
-    CompactionConfig compaction_config_;
+    /// Compaction policy picker
+    std::unique_ptr<CompactionPolicy> policy_;
+
     /// Compactor compacts SSTable files
     Compactor compactor_;
+
+    /// Executes the compaction task
+    Result<SSTableId> execute(const CompactionTask&);
+
+    /// Registers the new SSTable reader and cleans up the deleted sstables
+    Result<void> install(const CompactionTask&);
+
+    /// Executes the compaction task and performs sst swap and cleanup
+    Result<std::optional<SSTableId>> run_task(const CompactionTask&);
 
     /**
      * @brief Private constructor; use Dazzle::open() instead.
@@ -103,19 +127,23 @@ class Dazzle : public storage::StorageEngine {
         uint64_t memtable_size, Memtable active_memtable,
         std::map<SSTableId, std::unique_ptr<SSTableReader>, SSTableIdComparator>
             sst_readers,
+        std::map<SSTableId, std::unique_ptr<SSTableMeta>, SSTableIdComparator>
+            sst_meta,
         uint64_t next_wal_seq, uint64_t next_sst_seq,
         uint64_t highest_sequence = 0,
-        CompactionConfig compaction_config = SizeTieredConfig{2, 6})
+        std::unique_ptr<CompactionPolicy> policy = nullptr)
         : engine_(engine),
           data_dir_(data_dir),
-          sst_readers_(std::move(sst_readers)),
           wal_writer_(std::move(wal_writer)),
           memtable_size_(memtable_size),
           active_memtable_(std::move(active_memtable)),
+          sst_readers_(std::move(sst_readers)),
+          sst_meta_(std::move(sst_meta)),
           lsn_{highest_sequence},
           next_wal_seq_{next_wal_seq},
           next_sst_seq_{next_sst_seq},
-          compaction_config_(std::move(compaction_config)),
+          policy_(policy ? std::move(policy)
+                         : std::make_unique<SizeTieredCompactionPolicy>(4, 32)),
           compactor_(Compactor::create(engine, data_dir)) {}
 
     /**
@@ -163,36 +191,35 @@ class Dazzle : public storage::StorageEngine {
      */
     Result<uint64_t> recover();
 
-    /**
-     * @brief Given the current configuration checks weather sstables
-     *        should be compacted or not.
-     */
-    bool should_compact() const;
-
-    /**
-     * @brief Returns weather we should run compaction for size tiered
-     *        compaction strategy.
-     */
-    bool should_compact_size_tiered(const SizeTieredConfig& opts) const;
-
    public:
     Dazzle(const Dazzle&) = delete;
     Dazzle& operator=(const Dazzle&) = delete;
     Dazzle(Dazzle&&) = delete;
     Dazzle& operator=(Dazzle&&) = delete;
 
+    /* --------------------------------------------------
+     * Compaction
+     * --------------------------------------------------*/
+    /* @brief Performs compaction based on what policy is picked */
+    Result<std::optional<SSTableId>> do_compact_work();
+
+    /* @brief Forces a full compaction
+     *
+     * WARN: Forces a FULL COMPACTION every tombstone will be dropped and just
+     *       one file would be left
+     */
+    Result<std::optional<SSTableId>> compact_now();
+
+    /**
+     * @brief Overrides the current compaction policy and sets it as active
+     */
+    Result<void> set_compaction_policy(
+        std::unique_ptr<CompactionPolicy> policy);
+
     /**
      * @brief Returns the latest LSN available
      */
     uint64_t latest_lsn() const { return lsn_.load(std::memory_order_relaxed); }
-
-    Result<SSTableId> do_compact_work();
-
-    /**
-     * @brief Overrides the current compaction config and sets it to the
-     *        config provided.
-     */
-    Result<void> set_compaction_config(CompactionConfig config);
 
     /**
      * @brief Returns the current directory where sstables files are stored
@@ -212,9 +239,10 @@ class Dazzle : public storage::StorageEngine {
      * number), opens a new WAL segment for writes, and runs crash
      * recovery by replaying any old WAL segments.
      */
-    static Result<std::unique_ptr<Dazzle>> open(io::IOEngine& engine,
-                                                const std::string& data_dir,
-                                                const uint64_t memtable_size);
+    static Result<std::unique_ptr<Dazzle>> open(
+        io::IOEngine& engine, const std::string& data_dir,
+        const uint64_t memtable_size,
+        std::unique_ptr<CompactionPolicy> policy = nullptr);
 
     /**
      * @brief Writes a column value.

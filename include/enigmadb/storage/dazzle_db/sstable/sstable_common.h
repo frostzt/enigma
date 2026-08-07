@@ -14,12 +14,18 @@
 
 namespace enigmadb::dazzle {
 
+/// @brief The total size of the footer block
+constexpr size_t FOOTER_SIZE = 64;
+
+constexpr size_t MAGIC_BYTES_OFFSET = 50;
+constexpr size_t FOOTER_CHECKSUM_OFFSET = 46;
+
 /// @brief Maximum data block size in bytes before flushing to disk.
 /// @todo Could be derived from the OS page size at runtime.
 constexpr size_t MAX_PAGING_SIZE_BYTES = 4096;
 
 /// @brief Current SSTable on-disk format version.
-constexpr size_t SSTABLE_FORMAT_VERSION = 3;
+constexpr size_t SSTABLE_FORMAT_VERSION = 4;
 
 /// @brief Size of the magic identifier in the footer, in bytes.
 static constexpr size_t MAGIC_SIZE = 8;
@@ -37,6 +43,16 @@ struct SSTableId {
 
     auto operator<=>(const SSTableId& oth) const = default;
     bool operator==(const SSTableId& oth) const { return value == oth.value; }
+};
+
+/**
+ * @brief Struct representing metadata for a sstable
+ */
+struct SSTableMeta {
+    SSTableId id;
+    uint64_t size_bytes;
+    uint64_t entry_count;
+    uint64_t max_sequence;
 };
 
 struct SSTableIdComparator {
@@ -108,7 +124,7 @@ struct IndexEntry {
     size_t block_size;       ///< Size of the block in bytes.
 };
 
-struct MinimalSSTableFooter {
+struct SSTFooter {
     uint64_t index_block_offset;
     uint32_t index_block_size;
     uint64_t filter_block_offset;
@@ -116,6 +132,7 @@ struct MinimalSSTableFooter {
     uint32_t entry_count;
     uint16_t format_version;  ///< Footer format stored as 2 bytes
     uint64_t highest_sequence;
+    uint64_t size_bytes;
 };
 
 }  // namespace enigmadb::dazzle
