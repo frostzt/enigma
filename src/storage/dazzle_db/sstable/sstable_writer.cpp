@@ -99,6 +99,7 @@ Result<void> SSTableWriter::finish() {
         }
     }
 
+    size_t size_bytes = current_file_offset_;
     auto index_block_start = current_file_offset_;
 
     /* construct the index block */
@@ -130,6 +131,8 @@ Result<void> SSTableWriter::finish() {
             Error{ErrorCode::UNEXPECTED_ERR, "failed to write index block"});
     }
 
+    size_bytes += index_buffer.size();
+
     /* construct the filter block */
     size_t filter_size = bloom_filter_.size_bytes();
     std::vector<uint8_t> filter_buffer(filter_size + 1);
@@ -148,10 +151,15 @@ Result<void> SSTableWriter::finish() {
             Error{ErrorCode::UNEXPECTED_ERR, "failed to write filter block"});
     }
 
+    size_bytes += filter_buffer.size();
+
     /* construct the footer block */
     std::vector<uint8_t> footer_buffer;
-    footer_buffer.resize(56);
+    footer_buffer.resize(FOOTER_SIZE);
     size_t footer_offset = 0;
+
+    /* This size is always consistent */
+    size_bytes += FOOTER_SIZE;
 
     footer_offset =
         encode_uint64(index_block_start, footer_buffer.data(), footer_offset);
@@ -167,9 +175,12 @@ Result<void> SSTableWriter::finish() {
                                   footer_offset);
     footer_offset =
         encode_uint64(highest_sequence_, footer_buffer.data(), footer_offset);
+    footer_offset =
+        encode_uint64(size_bytes, footer_buffer.data(), footer_offset);
 
     /* calculate checksum */
-    auto checksum = compute_crc_32(footer_buffer.data(), 38);
+    auto checksum =
+        compute_crc_32(footer_buffer.data(), FOOTER_CHECKSUM_OFFSET);
     footer_offset = encode_uint32(checksum, footer_buffer.data(),
                                   footer_offset); /* checksum */
     footer_offset = encode_bytes(MAGIC.data(), MAGIC_SIZE, footer_buffer.data(),

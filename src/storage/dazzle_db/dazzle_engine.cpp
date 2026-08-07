@@ -13,13 +13,12 @@
 #include <sstream>
 #include <string>
 #include <utility>
-#include <variant>
 #include <vector>
 
 #include "enigmadb/base.h"
 #include "enigmadb/error.h"
 #include "enigmadb/storage/dazzle_db/compaction/compaction.h"
-#include "enigmadb/storage/dazzle_db/compaction/tombstone_gc.h"
+#include "enigmadb/storage/dazzle_db/compaction/compaction_policy.h"
 #include "enigmadb/storage/dazzle_db/memtable/memtable.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_common.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_reader.h"
@@ -75,9 +74,9 @@ Result<std::optional<InternalValue>> Dazzle::get_internal(
     return Result<std::optional<InternalValue>>::ok(std::nullopt);
 }
 
-Result<std::unique_ptr<Dazzle>> Dazzle::open(io::IOEngine& engine,
-                                             const std::string& data_dir,
-                                             const uint64_t memtable_size) {
+Result<std::unique_ptr<Dazzle>> Dazzle::open(
+    io::IOEngine& engine, const std::string& data_dir,
+    const uint64_t memtable_size, std::unique_ptr<CompactionPolicy> policy) {
     if (trim_string(data_dir) == "") {
         return Result<std::unique_ptr<Dazzle>>::err(
             Error{ErrorCode::BAD_CONFIG, "Data directory was not specified."});
@@ -114,6 +113,8 @@ Result<std::unique_ptr<Dazzle>> Dazzle::open(io::IOEngine& engine,
 
     std::map<SSTableId, std::unique_ptr<SSTableReader>, SSTableIdComparator>
         sst_readers;
+    std::map<SSTableId, std::unique_ptr<SSTableMeta>, SSTableIdComparator>
+        sst_meta;
 
     uint64_t max_sst_sequence_found = 0;
 
@@ -133,9 +134,14 @@ Result<std::unique_ptr<Dazzle>> Dazzle::open(io::IOEngine& engine,
             max_sst_sequence_found = footer.highest_sequence;
         }
 
-        sst_readers.insert(
-            std::make_pair(SSTableId{extract_num(entry.filename().string())},
-                           std::make_unique<SSTableReader>(std::move(reader))));
+        auto sstid = SSTableId{extract_num(entry.filename().string())};
+
+        sst_readers.insert(std::make_pair(
+            sstid, std::make_unique<SSTableReader>(std::move(reader))));
+        sst_meta.insert(std::make_pair(
+            sstid, std::make_unique<SSTableMeta>(
+                       SSTableMeta{sstid, footer.size_bytes, footer.entry_count,
+                                   footer.highest_sequence})));
     }
 
     /* if wal files exist recover */
@@ -175,8 +181,9 @@ Result<std::unique_ptr<Dazzle>> Dazzle::open(io::IOEngine& engine,
      * sequences */
     auto storage_engine = std::unique_ptr<Dazzle>(new Dazzle(
         engine, data_dir, std::move(wal_writer_res.value()), memtable_size,
-        std::move(mtable), std::move(sst_readers), highest_wal_seq + 1,
-        highest_sst_seq + 1, max_sst_sequence_found + 1));
+        std::move(mtable), std::move(sst_readers), std::move(sst_meta),
+        highest_wal_seq + 1, highest_sst_seq + 1, max_sst_sequence_found + 1,
+        std::move(policy)));
 
     /* try and recover */
     auto recover_result = storage_engine->recover();
@@ -187,20 +194,30 @@ Result<std::unique_ptr<Dazzle>> Dazzle::open(io::IOEngine& engine,
     return Result<std::unique_ptr<Dazzle>>::ok(std::move(storage_engine));
 }
 
-Result<void> Dazzle::set_compaction_config(CompactionConfig config) {
-    return std::visit(
-        [this](auto& opts) {
-            using T = std::decay_t<decltype(opts)>;
-            if constexpr (std::is_same_v<T, SizeTieredConfig>) {
-                compaction_config_ = std::move(opts);
-                return Result<void>::ok();
-            } else {
-                return Result<void>::err(
-                    Error{ErrorCode::BAD_CONFIG,
-                          "Invalid compaction configuration provided."});
-            }
-        },
-        config);
+Result<void> Dazzle::add_sst_reader(SSTableId id, SSTableReader reader) {
+    auto f = reader.get_footer();
+    if (!f.has_value()) return Result<void>::err(f.error());
+
+    auto& footer = f.value();
+
+    sst_readers_.insert(
+        std::make_pair(id, std::make_unique<SSTableReader>(std::move(reader))));
+    sst_meta_.insert(
+        std::make_pair(id, std::make_unique<SSTableMeta>(SSTableMeta{
+                               id, footer.size_bytes, footer.entry_count,
+                               footer.highest_sequence})));
+    return Result<void>::ok();
+}
+
+Result<void> Dazzle::set_compaction_policy(
+    std::unique_ptr<CompactionPolicy> policy) {
+    if (!policy) {
+        return Result<void>::err(
+            Error::bad_config("Compaction policy was not specified"));
+    }
+
+    policy_ = std::move(policy);
+    return Result<void>::ok();
 }
 
 Result<void> Dazzle::put(const storage::Key& key,
@@ -255,94 +272,97 @@ Result<void> Dazzle::put(const storage::Key& key,
         }
     }
 
-    /* check if we need to compact */
-    if (should_compact()) {
-        auto cres = do_compact_work();
-        // @TODO: This should later move to a background thread right now
-        //        compaction sits on a HOT PATH
-        if (!cres.has_value()) {
-            std::cerr << "[COMPACTION] Failed to compact file: "
-                      << cres.error().message << std::endl;
-        }
-    }
-
     return Result<void>::ok();
 }
 
-Result<SSTableId> Dazzle::do_compact_work() {
+std::vector<const SSTableMeta*> Dazzle::sst_meta_to_vector() const {
+    std::vector<const SSTableMeta*> metas;
+    metas.reserve(sst_meta_.size());
+    for (const auto& [_, meta] : sst_meta_) {
+        metas.push_back(meta.get());
+    }
+    return metas;
+}
+
+Result<std::optional<SSTableId>> Dazzle::do_compact_work() {
+    auto c_can = policy_->pick(sst_meta_to_vector());
+    if (!c_can.has_value()) {
+        return Result<std::optional<SSTableId>>::ok(std::nullopt);
+    }
+    const auto& candidate = c_can.value();
+    return run_task(CompactionTask{candidate.inputs, SSTableId{mint_sst_id()},
+                                   candidate.can_drop_tombstone});
+}
+
+Result<std::optional<SSTableId>> Dazzle::compact_now() {
+    auto metas = sst_meta_to_vector();
+    if (metas.empty()) {
+        return Result<std::optional<SSTableId>>::ok(std::nullopt);
+    }
+
     std::vector<SSTableId> inputs;
-    inputs.reserve(sst_readers_.size());
-    for (const auto& [id, _] : sst_readers_) {
-        inputs.push_back(id);
+    inputs.reserve(metas.size());
+    for (const auto* m : metas) inputs.push_back(m->id);
+    std::sort(inputs.begin(), inputs.end());
+
+    return run_task(CompactionTask{inputs, SSTableId{mint_sst_id()},
+                                   /* full compaction: inputs == live */ true});
+}
+
+Result<std::optional<SSTableId>> Dazzle::run_task(const CompactionTask& task) {
+    auto exec_result = execute(task);
+    if (!exec_result.has_value()) {
+        return Result<std::optional<SSTableId>>::err(exec_result.error());
     }
 
-    std::vector<SSTableId> live;
-    live.reserve(sst_readers_.size());
-    for (const auto& [id, _] : sst_readers_) {
-        live.push_back(id);
+    /* emplace the new sst reader */
+    if (auto r = install(task); !r.has_value()) {
+        return Result<std::optional<SSTableId>>::err(r.error());
     }
 
-    SSTableId sstid;
-    Error err{ErrorCode::NONE, ""};
+    return Result<std::optional<SSTableId>>::ok(task.output_id);
+}
 
-    /* actual compaction */
-    std::visit(
-        [this, &inputs, &live, &sstid, &err](const auto& opts) {
-            using T = std::decay_t<decltype(opts)>;
-            if constexpr (std::is_same_v<T, SizeTieredConfig>) {
-                bool is_full_compact = can_drop_tombstones(live, inputs);
-                auto new_sequence = this->mint_sst_id();
-                auto new_sst_result = compactor_.do_size_tiered_compact(
-                    inputs, new_sequence, is_full_compact);
-                if (!new_sst_result.has_value()) {
-                    err = new_sst_result.error();
-                    return;
-                }
+Result<SSTableId> Dazzle::execute(const CompactionTask& task) {
+    return compactor_.compact(task.inputs, task.output_id.value,
+                              task.can_drop_tombstone);
+}
 
-                sstid = new_sst_result.value();
-            } else {
-                server_panic(
-                    "Unidentified or invalid option type for compaction!");
-            }
-        },
-        compaction_config_);
-
-    /* Check if we errored out above */
-    if (err.code != ErrorCode::NONE) {
-        return Result<SSTableId>::err(err);
-    }
-
-    auto sstrr = SSTableReader::create(engine_, sst_path(sstid.value));
-    if (!sstrr.has_value()) {
-        /* We need to delete this file on failure if the reader wasn't able
-         * to open this compaction didn't happen - best effort delete,
-         * Manifest and recover should handle if anything goes wrong here */
-        engine_.remove(sst_path(sstid.value));
-        return Result<SSTableId>::err(sstrr.error());
-    }
-
-    /* Remove SSTable Readers that are NO longer needed */
+Result<void> Dazzle::install(const CompactionTask& task) {
+    /* Aggregate and make sure that inputs haven't changed */
     std::vector<decltype(sst_readers_)::iterator> to_erase;
-    for (auto& i : inputs) {
+    for (auto& i : task.inputs) {
         auto it = sst_readers_.find(i);
         if (it == sst_readers_.end()) {
-            return Result<SSTableId>::err(Error::unexpected(
+            return Result<void>::err(Error::unexpected(
                 "FATAL: Compacted input supplied no longer exists!"));
         }
         to_erase.push_back(it);
     }
+
+    /* Create a new SSTable Reader for this new sstable file */
+    auto sstrr = SSTableReader::create(engine_, sst_path(task.output_id.value));
+    if (!sstrr.has_value()) {
+        /* We need to delete this file on failure if the reader wasn't able
+         * to open this compaction didn't happen - best effort delete,
+         * Manifest and recover should handle if anything goes wrong here */
+        engine_.remove(sst_path(task.output_id.value));
+        return Result<void>::err(sstrr.error());
+    }
+
+    /* Remove the sst readers that are no longer needed */
     for (auto it : to_erase) {
+        sst_meta_.erase(it->first);
         sst_readers_.erase(it);
     }
 
     /* Emplace the new reader */
-    sst_readers_.emplace(
-        sstid, std::make_unique<SSTableReader>(std::move(sstrr.value())));
+    add_sst_reader(task.output_id, std::move(sstrr.value()));
 
     /* delete the old files - best effort rn later on obsolete sst files
      * will be cleaned up by a Manifest driven GC
      * @TODO: Need a GC for the deleted file */
-    for (const auto& sst_id : inputs) {
+    for (const auto& sst_id : task.inputs) {
         auto path = sst_path(sst_id.value);
         if (fs::exists(path)) {
             if (auto res = engine_.remove(path); !res.has_value()) {
@@ -353,7 +373,7 @@ Result<SSTableId> Dazzle::do_compact_work() {
         }
     }
 
-    return Result<SSTableId>::ok(sstid);
+    return Result<void>::ok();
 }
 
 Result<void> Dazzle::flush() {
@@ -397,10 +417,7 @@ Result<void> Dazzle::flush() {
         return Result<void>::err(walwrr.error());
     }
 
-    sst_readers_.insert(std::make_pair(
-        SSTableId{new_sequence},
-        std::make_unique<SSTableReader>(std::move(sstrr.value()))));
-
+    add_sst_reader(SSTableId{new_sequence}, std::move(sstrr.value()));
     wal_writer_.emplace(std::move(walwrr.value()));
 
     /* replace with a new empty memtable */
@@ -412,25 +429,16 @@ Result<void> Dazzle::flush() {
     /* best effort del, deleting failure for old wals are not fatal */
     fs::remove(wal_path(old_wal_seq));
 
+    /* check if we need to compact */
+    auto cres = do_compact_work();
+    // @TODO: This should later move to a background thread right now
+    //        compaction sits on a HOT PATH
+    if (!cres.has_value()) {
+        std::cerr << "[COMPACTION] Failed to compact file: "
+                  << cres.error().message << std::endl;
+    }
+
     return Result<void>::ok();
-}
-
-bool Dazzle::should_compact() const {
-    return std::visit(
-        [this](const auto& opts) -> bool {
-            using T = std::decay_t<decltype(opts)>;
-            if constexpr (std::is_same_v<T, SizeTieredConfig>) {
-                return should_compact_size_tiered(opts);
-            } else {
-                server_panic(
-                    "Unidentified or invalid option type for compaction!");
-            }
-        },
-        compaction_config_);
-}
-
-bool Dazzle::should_compact_size_tiered(const SizeTieredConfig& opts) const {
-    return sst_readers_.size() >= opts.min_merge_width_;
 }
 
 // @FIXME: `Result` is already an optional type need to fix this - this

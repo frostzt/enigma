@@ -3,6 +3,17 @@ name: CI
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
+      - 'LICENSE'
+
+# Cancel in-progress runs when a new push occurs on the same branch or PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   lint:
@@ -19,31 +30,49 @@ jobs:
           find src include tests -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.cc' \) \
             | xargs clang-format --dry-run --Werror
 
-  build:
-    name: Build
+  build-and-test:
+    name: ${{ matrix.name }}
     needs: lint
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: "Ubuntu Latest (GCC)"
+            os: ubuntu-latest
+            sanitizer_flags: ""
+          
+          - name: "macOS Latest (Clang)"
+            os: macos-latest
+            sanitizer_flags: ""
+
+          - name: "Ubuntu (ASan + UBSan)"
+            os: ubuntu-latest
+            sanitizer_flags: "-fsanitize=address,undefined -fno-omit-frame-pointer"
+
+    runs-on: ${{ matrix.os }}
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ matrix.os }}-${{ matrix.name }}-ccache
+
+      - name: Configure CMake
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_FLAGS="${{ matrix.sanitizer_flags }}" \
+            -DCMAKE_EXE_LINKER_FLAGS="${{ matrix.sanitizer_flags }}"
 
       - name: Build
         run: cmake --build build --parallel
 
-  test:
-    name: Test
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Configure
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug
-
-      - name: Build
-        run: cmake --build build --parallel
-
-      - name: Test
+      - name: Run Tests
+        env:
+          # Halt immediately on the first UBSan or ASan error hit during test execution
+          ASAN_OPTIONS: "halt_on_error=1:abort_on_error=1"
+          UBSAN_OPTIONS: "halt_on_error=1:print_stacktrace=1"
         run: ctest --test-dir build --output-on-failure

@@ -16,14 +16,18 @@
 
 namespace enigmadb::dazzle {
 
-struct SizeTieredConfig {
-    size_t min_merge_width_;  ///< Minimum number of files required to
-                              ///< trigger compaction
-    size_t max_merge_width_;  ///< Maximum number of files to consider while
-                              ///< compacting
+/// Describes a possible compaction task
+struct CompactionCandidate {
+    std::vector<SSTableId> inputs;
+    bool can_drop_tombstone;
 };
 
-using CompactionConfig = std::variant<SizeTieredConfig>;
+/// Describes a compaction task
+struct CompactionTask {
+    std::vector<SSTableId> inputs;
+    SSTableId output_id;
+    bool can_drop_tombstone;
+};
 
 class Compactor {
    private:
@@ -33,15 +37,12 @@ class Compactor {
     Compactor(io::IOEngine& engine, std::string data_dir)
         : engine_(engine), data_dir_(std::move(data_dir)) {}
 
-    /* @TODO: Need to figure out a better architecture here cause these
-     *        functions do duplicate work across sstable parts */
-
    public:
     static Compactor create(io::IOEngine& engine, const std::string& data_dir);
 
-    Result<SSTableId> do_size_tiered_compact(
-        const std::vector<SSTableId>& inputs, const uint64_t next_sst_seq,
-        bool is_full_compaction);
+    Result<SSTableId> compact(const std::vector<SSTableId>& inputs,
+                              const uint64_t next_sst_seq,
+                              bool is_full_compaction);
 };
 
 }  // namespace enigmadb::dazzle

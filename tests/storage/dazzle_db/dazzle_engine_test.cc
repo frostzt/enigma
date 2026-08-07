@@ -1,10 +1,11 @@
 #include "enigmadb/storage/dazzle_db/dazzle_engine.h"
 
 #include <filesystem>
+#include <memory>
 #include <string>
 
 #include "enigmadb/io/posix_io_engine.h"
-#include "enigmadb/storage/dazzle_db/compaction/compaction.h"
+#include "enigmadb/storage/dazzle_db/compaction/compaction_policy.h"
 #include "enigmadb/tempdir.h"
 #include "enigmadb/utils.h"
 #include "gtest/gtest.h"
@@ -356,7 +357,12 @@ TEST(Dazzle, high_water_mark_from_sstable_and_wal_replay_with_tombstone) {
         ASSERT_TRUE(storage_engine_result.has_value());
 
         auto& storage_engine = storage_engine_result.value();
-        storage_engine->set_compaction_config(dazzle::SizeTieredConfig{16, 20});
+        ASSERT_TRUE(
+            storage_engine
+                ->set_compaction_policy(
+                    std::make_unique<dazzle::SizeTieredCompactionPolicy>(16,
+                                                                         20))
+                .has_value());
 
         auto k1 = make_key("alice", "2026-05", "age");
         auto k2 = make_key("john", "2026-05", "age");
@@ -382,8 +388,12 @@ TEST(Dazzle, high_water_mark_from_sstable_and_wal_replay_with_tombstone) {
         ASSERT_TRUE(storage_engine_result.has_value());
 
         auto& storage_engine = storage_engine_result.value();
-        storage_engine->set_compaction_config(dazzle::SizeTieredConfig{16, 20});
-
+        ASSERT_TRUE(
+            storage_engine
+                ->set_compaction_policy(
+                    std::make_unique<dazzle::SizeTieredCompactionPolicy>(16,
+                                                                         20))
+                .has_value());
         ASSERT_EQ(storage_engine->latest_lsn(), 7);
 
         auto kb = make_key("bob", "2025-05", "name");
