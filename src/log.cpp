@@ -97,8 +97,8 @@ void Logger::dispatch(LogRecord record) {
     }
 
     if (record.level == Level::Fatal) {
-        dump_ring_buffer_to_stderr();
         shutdown();
+        dump_ring_buffer_to_stderr();
         std::abort();
     }
 }
