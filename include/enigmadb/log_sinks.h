@@ -69,15 +69,20 @@ class RingBufferSink : public LogSink {
     void signal_safe_dump(int fd) const noexcept;
 
    private:
-    // Marks a slot as unreadable: no record sequence ever takes this value, so
-    // a dump that sees it skips the slot.
-    static constexpr uint64_t kSlotEmpty = UINT64_MAX;
+    // Set in a slot's generation while a writer owns it. Sequence numbers never
+    // reach 2^63, so a marked generation can never be mistaken for a record.
+    static constexpr uint64_t kWritingFlag = uint64_t{1} << 63;
+    // Generation of a slot that has never been written. Unmarked, so it can be
+    // claimed, and no record sequence ever equals it.
+    static constexpr uint64_t kSlotFree = kWritingFlag - 1;
 
     struct Slot {
-        // Sequence number of the record living here, or kSlotEmpty while a
-        // writer is mid-copy. Dumps use it as a seqlock: unchanged before and
-        // after the copy means nothing overwrote the record underneath them.
-        std::atomic<uint64_t> gen{kSlotEmpty};
+        // Sequence number of the record living here, that number marked with
+        // kWritingFlag while a writer owns the slot, or kSlotFree if unused.
+        // Writers claim the slot by CAS on this, so only one ever writes the
+        // payload; dumps use it as a seqlock, reading the payload only if the
+        // generation is their record's before and after the copy.
+        std::atomic<uint64_t> gen{kSlotFree};
         std::atomic<uint32_t> len{0};
         // Payload, in words rather than bytes: a dump can run while a writer is
         // filling this slot, so both sides go through std::atomic_ref and the

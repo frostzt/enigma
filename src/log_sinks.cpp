@@ -173,12 +173,21 @@ void RingBufferSink::submit(const LogRecord& record) {
     uint64_t seq = write_seq_.fetch_add(1, std::memory_order_relaxed);
     Slot& slot = ring_[seq % slots_cap_];
 
-    size_t copy_len = std::min(formatted.size(), slot_bytes_);
+    // Enough traffic to wrap the whole ring can arrive while we are copying, in
+    // which case the writer that laps us targets this same slot. Take exclusive
+    // ownership first: whoever wins the claim writes the payload alone, and the
+    // loser drops its record rather than splicing its bytes into ours.
+    uint64_t cur = slot.gen.load(std::memory_order_acquire);
+    if (cur & kWritingFlag) return;  // still owned by a writer we lapped
+    if (!slot.gen.compare_exchange_strong(cur, seq | kWritingFlag,
+                                          std::memory_order_acq_rel,
+                                          std::memory_order_relaxed)) {
+        return;  // lost the claim to a concurrent writer
+    }
 
-    // Retire the previous record before touching its bytes, and only claim the
-    // slot once the new one is whole. A dump that looks in between sees
-    // kSlotEmpty and skips the slot rather than emitting a mix of the two.
-    slot.gen.store(kSlotEmpty, std::memory_order_release);
+    // The claim marked the slot unreadable, so a dump skips it until we publish
+    // the sequence number below.
+    size_t copy_len = std::min(formatted.size(), slot_bytes_);
     store_slot_bytes(slot.data, formatted.data(), copy_len);
     slot.len.store(static_cast<uint32_t>(copy_len), std::memory_order_relaxed);
     slot.gen.store(seq, std::memory_order_release);
@@ -196,18 +205,26 @@ void RingBufferSink::signal_safe_dump(int fd) const noexcept {
     for (uint64_t i = start; i < curr_seq; ++i) {
         const Slot& slot = ring_[i % slots_cap_];
 
-        // Acquire pairs with the writer's release below, so seeing our own
-        // sequence number means the payload it published is visible too.
-        if (slot.gen.load(std::memory_order_acquire) != i) continue;
+        // Whatever this slot holds, not necessarily record i: a writer that
+        // lost a claim leaves its sequence number unused, and the older record
+        // still sitting here is worth dumping. Acquire pairs with the writer's
+        // release below, so a published generation means its payload is
+        // visible too.
+        uint64_t gen = slot.gen.load(std::memory_order_acquire);
+        if (gen == kSlotFree || (gen & kWritingFlag)) continue;
 
         uint32_t len = slot.len.load(std::memory_order_relaxed);
         if (len == 0) continue;
-        if (len > sizeof(buf)) len = sizeof(buf);
+        bool truncated = len > sizeof(buf);
+        if (truncated) len = sizeof(buf);
         load_slot_bytes(buf, slot.data, len);
+        // Records carry their own newline; keep one when cutting a long record
+        // short so the dump stays one record per line.
+        if (truncated) buf[len - 1] = '\n';
 
         // Re-check: a writer that claimed the slot mid-copy leaves us holding
         // halves of two records, so drop them instead of printing garbage.
-        if (slot.gen.load(std::memory_order_acquire) != i) continue;
+        if (slot.gen.load(std::memory_order_acquire) != gen) continue;
 
         ::write(fd, buf, len);
     }
