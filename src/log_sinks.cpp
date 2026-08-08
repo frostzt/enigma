@@ -267,7 +267,8 @@ void AsyncSink::submit(const LogRecord& record) {
 
             // Woken by stop() rather than by space opening up: enqueueing now
             // would overwrite a live slot and leave the record undelivered.
-            if (size_ == capacity_ || !running_.load(std::memory_order_relaxed)) {
+            if (size_ == capacity_ ||
+                !running_.load(std::memory_order_relaxed)) {
                 lock.unlock();
                 deliver(record);
                 return;

@@ -90,7 +90,8 @@ TEST(Log, async_sink_loses_nothing_when_stop_races_submitters) {
         std::vector<std::thread> submitters;
         for (int t = 0; t < kThreads; ++t) {
             submitters.emplace_back([&] {
-                for (int i = 0; i < kPerThread; ++i) async.submit(make_record());
+                for (int i = 0; i < kPerThread; ++i)
+                    async.submit(make_record());
             });
         }
         std::this_thread::sleep_for(std::chrono::microseconds(100));
