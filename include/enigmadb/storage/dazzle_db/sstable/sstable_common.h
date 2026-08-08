@@ -5,11 +5,11 @@
 #include <charconv>
 #include <cstdint>
 #include <iomanip>
-#include <iostream>
 #include <sstream>
 #include <string>
 #include <string_view>
 
+#include "enigmadb/log.h"
 #include "enigmadb/storage/key.h"
 
 namespace enigmadb::dazzle {
@@ -79,12 +79,11 @@ inline SSTableId parse_sstable_filename(std::string_view path) {
     auto [ptr, ec] = std::from_chars(num_part.data(),
                                      num_part.data() + num_part.size(), value);
 
-    /* TODO: Server logs */
     if (ec == std::errc::invalid_argument) {
-        std::cout << "This is not a number.\n";
+        LOG_ERROR(Category::SSTable, "Not a valid number\n");
         return SSTableId{0};
     } else if (ec == std::errc::result_out_of_range) {
-        std::cout << "This number is larger than uint64_t.\n";
+        LOG_ERROR(Category::SSTable, "Number is larger than UINT64_T\n");
         return SSTableId{0};
     }
 

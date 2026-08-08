@@ -23,6 +23,7 @@ enum class Category : uint8_t {
     Wal,
     SSTable,
     Memtable,
+    Catalog,
     Compaction,
     IO,
     _Count

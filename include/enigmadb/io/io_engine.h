@@ -14,6 +14,8 @@
 #include <unistd.h>
 
 #include <cstddef>
+#include <format>
+#include <ostream>
 #include <string>
 
 #include "enigmadb/base.h"
@@ -25,8 +27,22 @@ enum class Mode {
     Write,      /// O_WRONLY | O_CREAT
     ReadWrite,  /// O_RDWR   | O_CREAT
     Append,     /// O_WRONLY | O_APPEND | O_CREAT
-    Overwrite   /// O_WRONLY | O_CREAT | O_TRUNC
+    Overwrite,  /// O_WRONLY | O_CREAT | O_TRUNC
 };
+
+inline std::ostream& operator<<(std::ostream& out, const Mode& mode) {
+    switch (mode) {
+            // clang-format off
+            case Mode::Read:      out << "O_RDONLY";                            break;
+            case Mode::Write:     out << "O_RDONLY | O_CREAT";                  break;
+            case Mode::ReadWrite: out << "O_RDWR | O_CREAT";                    break;
+            case Mode::Append:    out << "O_WRONLY | O_APPEND | O_CREAT";       break;
+            case Mode::Overwrite: out << "O_WRONLY | O_CREAT | O_TRUNC";        break;
+            default:              out << "UNKNOWN_MODE";                        break;
+            // clang-format on
+    }
+    return out;
+}
 
 /**
  * @brief Owns a file descriptor with RAII lifetime semantics.
@@ -153,5 +169,22 @@ class IOEngine {
 };
 
 }  // namespace enigmadb::io
+
+template <>
+struct std::formatter<enigmadb::io::Mode> : std::formatter<std::string_view> {
+    auto format(enigmadb::io::Mode mode, format_context& ctx) const {
+        // clang-format off
+        std::string_view name = "UNKNOWN_MODE";
+        switch (mode) {
+            case enigmadb::io::Mode::Read:      name = "O_RDONLY";                      break;
+            case enigmadb::io::Mode::Write:     name = "O_WRONLY | O_CREAT";            break;
+            case enigmadb::io::Mode::ReadWrite: name = "O_RDWR | O_CREAT";              break;
+            case enigmadb::io::Mode::Append:    name = "O_WRONLY | O_APPEND | O_CREAT"; break;
+            case enigmadb::io::Mode::Overwrite: name = "O_WRONLY | O_CREAT | O_TRUNC";  break;
+        }
+        return std::formatter<std::string_view>::format(name, ctx);
+        // clang-format on
+    }
+};
 
 #endif  // ENIGMADB_IO_ENGINE_H

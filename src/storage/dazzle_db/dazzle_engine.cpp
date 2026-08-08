@@ -18,6 +18,7 @@
 
 #include "enigmadb/base.h"
 #include "enigmadb/error.h"
+#include "enigmadb/log.h"
 #include "enigmadb/storage/dazzle_db/compaction/compaction.h"
 #include "enigmadb/storage/dazzle_db/compaction/tombstone_gc.h"
 #include "enigmadb/storage/dazzle_db/memtable/memtable.h"
@@ -261,8 +262,8 @@ Result<void> Dazzle::put(const storage::Key& key,
         // @TODO: This should later move to a background thread right now
         //        compaction sits on a HOT PATH
         if (!cres.has_value()) {
-            std::cerr << "[COMPACTION] Failed to compact file: "
-                      << cres.error().message << std::endl;
+            LOG_ERROR(Category::Compaction, "Failed to compact file={}",
+                      cres.error().message);
         }
     }
 
