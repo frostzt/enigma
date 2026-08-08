@@ -1,6 +1,8 @@
 #ifndef ENIGMA_DB_LOG_SINK_H
 #define ENIGMA_DB_LOG_SINK_H
 
+#include <unistd.h>
+
 #include <atomic>
 #include <condition_variable>
 #include <fstream>

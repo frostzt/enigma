@@ -64,6 +64,19 @@ struct LogConfig {
     LogConfig();
 };
 
+inline uint64_t get_current_thread_id() noexcept {
+#if defined(__APPLE__)
+    uint64_t tid;
+    pthread_threadid_np(nullptr, &tid);
+    return tid;
+#elif defined(__linux__)
+    return static_cast<uint64_t>(syscall(SYS_gettid));
+#else
+    return static_cast<uint64_t>(
+        std::hash<std::thread::id>{}(std::this_thread::get_id()));
+#endif
+};
+
 class LogSink;
 
 class Logger {
@@ -118,7 +131,7 @@ void log_impl(Category cat, Level lvl, const char* file, int line,
     LogRecord record{.level = lvl,
                      .category = cat,
                      .ts = std::chrono::system_clock::now(),
-                     .tid = static_cast<size_t>(pthread_self()),
+                     .tid = get_current_thread_id(),
                      .file = file,
                      .line = line,
                      .func = fn,

@@ -1,5 +1,7 @@
 #include "enigmadb/log_sinks.h"
 
+#include <unistd.h>
+
 #include <chrono>
 #include <cstring>
 #include <ctime>
