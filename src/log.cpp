@@ -64,7 +64,7 @@ Logger::Logger() {
     }
     auto initial = std::make_shared<SinkList>();
     initial->push_back(std::make_shared<ConsoleSink>());
-    sinks_.store(std::move(initial), std::memory_order_release);
+    sinks_ = std::move(initial);
 }
 
 Logger::~Logger() { shutdown(); }
@@ -112,8 +112,8 @@ void Logger::init(LogConfig& config) {
         *next = std::move(raw_sinks);
     }
     {
-        std::lock_guard<std::mutex> lock(sinks_mutex_);
-        sinks_.store(std::move(next), std::memory_order_release);
+        std::unique_lock<std::shared_mutex> lock(sinks_mutex_);
+        sinks_ = std::move(next);
     }
 
     if (config.enable_crash_handler) {
@@ -126,7 +126,7 @@ void Logger::init(LogConfig& config) {
 void Logger::shutdown() {
     if (shutdown_.exchange(true)) return;
 
-    auto sinks = sinks_.load(std::memory_order_acquire);
+    auto sinks = snapshot_sinks();
     if (!sinks) return;
 
     for (auto& sink : *sinks) {
@@ -145,7 +145,7 @@ void Logger::dispatch(LogRecord record) {
 
     // Work from a snapshot: init() and add_sink() can swap the list at any
     // moment, and our reference keeps this one alive for the whole dispatch.
-    auto sinks = sinks_.load(std::memory_order_acquire);
+    auto sinks = snapshot_sinks();
 
     if (sinks) {
         for (auto& sink : *sinks) {
@@ -171,13 +171,17 @@ void Logger::dispatch(LogRecord record) {
     }
 }
 
+std::shared_ptr<const Logger::SinkList> Logger::snapshot_sinks() const {
+    std::shared_lock<std::shared_mutex> lock(sinks_mutex_);
+    return sinks_;
+}
+
 void Logger::add_sink(std::shared_ptr<LogSink> sink) {
-    std::lock_guard<std::mutex> lock(sinks_mutex_);
-    auto current = sinks_.load(std::memory_order_acquire);
-    auto next = current ? std::make_shared<SinkList>(*current)
-                        : std::make_shared<SinkList>();
+    std::unique_lock<std::shared_mutex> lock(sinks_mutex_);
+    auto next = sinks_ ? std::make_shared<SinkList>(*sinks_)
+                       : std::make_shared<SinkList>();
     next->push_back(std::move(sink));
-    sinks_.store(std::move(next), std::memory_order_release);
+    sinks_ = std::move(next);
 }
 
 void Logger::set_level(Category cat, Level lvl) noexcept {

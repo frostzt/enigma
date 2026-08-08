@@ -243,15 +243,18 @@ AsyncSink::AsyncSink(std::vector<std::shared_ptr<LogSink>> sinks,
 AsyncSink::~AsyncSink() { stop(); }
 
 void AsyncSink::submit(const LogRecord& record) {
-    // Once the worker is gone nothing drains the queue, so anything logged
-    // during or after shutdown -- a fatal record above all -- has to go
-    // straight through, or it would be swallowed.
-    if (!running_.load(std::memory_order_acquire)) {
+    std::unique_lock<std::mutex> lock(mutex_);
+
+    // Checked under the lock, never before it. stop() clears running_ before
+    // joining the worker and draining what is left, all of which needs the
+    // mutex; a check made outside it can go stale while we wait for the lock,
+    // and the record would then land in a queue nobody is left to drain.
+    // Delivering inline is what keeps a fatal record from being swallowed.
+    if (!running_.load(std::memory_order_relaxed)) {
+        lock.unlock();
         deliver(record);
         return;
     }
-
-    std::unique_lock<std::mutex> lock(mutex_);
 
     if (size_ == capacity_) {
         bool should_block = (policy_ == OverflowPolicy::Block) ||
@@ -261,17 +264,18 @@ void AsyncSink::submit(const LogRecord& record) {
         if (should_block) {
             cv_produce_.wait(lock,
                              [this] { return size_ < capacity_ || !running_; });
+
+            // Woken by stop() rather than by space opening up: enqueueing now
+            // would overwrite a live slot and leave the record undelivered.
+            if (size_ == capacity_ || !running_.load(std::memory_order_relaxed)) {
+                lock.unlock();
+                deliver(record);
+                return;
+            }
         } else {
             dropped_records_.fetch_add(1, std::memory_order_relaxed);
             return;
         }
-    }
-
-    // Still full means the wait above was released by stop(), not by space
-    // opening up; enqueueing anyway would overwrite a live slot.
-    if (size_ == capacity_) {
-        dropped_records_.fetch_add(1, std::memory_order_relaxed);
-        return;
     }
 
     queue_[tail_] = record;

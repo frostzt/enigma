@@ -76,6 +76,32 @@ TEST(Log, async_sink_delivers_records_submitted_after_stop) {
     EXPECT_EQ(counter->count.load(), before + 1);
 }
 
+TEST(Log, async_sink_loses_nothing_when_stop_races_submitters) {
+    // A submitter that reads running_ as true just as stop() joins the worker
+    // and drains must not leave its record stranded in a dead queue. With a
+    // blocking policy and room to spare, every record has to arrive.
+    constexpr int kThreads = 4;
+    constexpr int kPerThread = 250;
+
+    for (int trial = 0; trial < 25; ++trial) {
+        auto counter = std::make_shared<CountingSink>();
+        AsyncSink async({counter}, 1024, OverflowPolicy::Block);
+
+        std::vector<std::thread> submitters;
+        for (int t = 0; t < kThreads; ++t) {
+            submitters.emplace_back([&] {
+                for (int i = 0; i < kPerThread; ++i) async.submit(make_record());
+            });
+        }
+        std::this_thread::sleep_for(std::chrono::microseconds(100));
+        async.stop();
+        for (auto& s : submitters) s.join();
+
+        ASSERT_EQ(counter->count.load(), kThreads * kPerThread)
+            << "records lost on trial " << trial;
+    }
+}
+
 TEST(Log, ring_buffer_dump_survives_concurrent_writers) {
     // A small ring wraps constantly, so writers whose sequence numbers are a
     // full lap apart target the same slot at the same time. Each writer emits

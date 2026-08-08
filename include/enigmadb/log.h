@@ -16,6 +16,7 @@
 #include <iterator>
 #include <memory>
 #include <mutex>
+#include <shared_mutex>
 #include <optional>
 #include <string>
 #include <utility>
@@ -114,14 +115,20 @@ class Logger {
 
     using SinkList = std::vector<std::shared_ptr<LogSink>>;
 
+    // The current sink list, safe to iterate for as long as the caller holds
+    // the returned reference even if another thread swaps the list meanwhile.
+    [[nodiscard]] std::shared_ptr<const SinkList> snapshot_sinks() const;
+
     std::array<std::atomic<Level>, static_cast<size_t>(Category::_Count)>
         active_levels_{};
-    // Published as an immutable snapshot. dispatch() grabs it without locking
-    // and works from its own reference, while init() and add_sink() build a
-    // replacement under sinks_mutex_ and swap it in; mutating the live vector
-    // instead would corrupt it under a concurrent dispatch.
-    std::atomic<std::shared_ptr<const SinkList>> sinks_;
-    std::mutex sinks_mutex_;
+    // Published as an immutable snapshot. dispatch() copies the pointer under a
+    // shared lock and then works from its own reference, while init() and
+    // add_sink() build a replacement and swap it in exclusively; mutating the
+    // live vector instead would corrupt it under a concurrent dispatch.
+    // (std::atomic<std::shared_ptr> would suit this better but libc++ does not
+    // implement it yet.)
+    std::shared_ptr<const SinkList> sinks_;
+    mutable std::shared_mutex sinks_mutex_;
     std::atomic<bool> initialized_{false};
     std::atomic<bool> shutdown_{false};
     // Owns the ring for the process lifetime; only ever assigned by init().
