@@ -13,6 +13,35 @@
 
 namespace enigmadb {
 
+// Largest record a crash dump will emit. The buffer it is copied through lives
+// on the stack of whatever thread is crashing, so it stays small; records from
+// a ring configured with larger slots are truncated to this.
+static constexpr size_t kDumpCopyMax = 1024;
+
+// A dump runs concurrently with live writers, so slot payloads move a word at a
+// time through std::atomic_ref instead of memcpy. Relaxed ordering emits the
+// same loads and stores a memcpy would -- the slot's generation counter does
+// the publishing -- but the overlap is defined behaviour rather than a race.
+static_assert(std::atomic_ref<uint64_t>::is_always_lock_free,
+              "ring dumps run from signal handlers and must not take a lock");
+
+static void store_slot_bytes(uint64_t* dst, const char* src, size_t len) {
+    for (size_t w = 0, done = 0; done < len; ++w, done += 8) {
+        uint64_t word = 0;
+        std::memcpy(&word, src + done, std::min<size_t>(8, len - done));
+        std::atomic_ref<uint64_t>(dst[w]).store(word,
+                                                std::memory_order_relaxed);
+    }
+}
+
+static void load_slot_bytes(char* dst, uint64_t* src, size_t len) noexcept {
+    for (size_t w = 0, done = 0; done < len; ++w, done += 8) {
+        uint64_t word =
+            std::atomic_ref<uint64_t>(src[w]).load(std::memory_order_relaxed);
+        std::memcpy(dst + done, &word, std::min<size_t>(8, len - done));
+    }
+}
+
 static const char* level_to_string(Level lvl) {
     // clang-format off
     switch (lvl) {
@@ -124,10 +153,11 @@ void FileSink::flush() {
 // ---------------- RingBufferSink ----------------
 RingBufferSink::RingBufferSink(size_t slots, size_t slot_bytes)
     : slots_cap_(slots == 0 ? 1024 : slots),
-      slot_bytes_(slot_bytes < 64 ? 512 : slot_bytes) {
+      slot_bytes_(slot_bytes < 64 ? 512 : slot_bytes),
+      slot_words_((slot_bytes_ + 7) / 8) {
     ring_ = new Slot[slots_cap_];
     for (size_t i = 0; i < slots_cap_; ++i) {
-        ring_[i].data = new char[slot_bytes_];
+        ring_[i].data = new uint64_t[slot_words_]();
     }
 }
 
@@ -143,25 +173,43 @@ void RingBufferSink::submit(const LogRecord& record) {
     uint64_t seq = write_seq_.fetch_add(1, std::memory_order_relaxed);
     Slot& slot = ring_[seq % slots_cap_];
 
-    size_t copy_len = std::min(formatted.size(), slot_bytes_ - 1);
-    std::memcpy(slot.data, formatted.data(), copy_len);
-    slot.data[copy_len] = '\0';
-    slot.len.store(static_cast<uint32_t>(copy_len), std::memory_order_release);
+    size_t copy_len = std::min(formatted.size(), slot_bytes_);
+
+    // Retire the previous record before touching its bytes, and only claim the
+    // slot once the new one is whole. A dump that looks in between sees
+    // kSlotEmpty and skips the slot rather than emitting a mix of the two.
+    slot.gen.store(kSlotEmpty, std::memory_order_release);
+    store_slot_bytes(slot.data, formatted.data(), copy_len);
+    slot.len.store(static_cast<uint32_t>(copy_len), std::memory_order_relaxed);
+    slot.gen.store(seq, std::memory_order_release);
 }
 
 void RingBufferSink::signal_safe_dump(int fd) const noexcept {
     const char* header = "\n--- CRASH RING BUFFER DUMP ---\n";
     ::write(fd, header, std::strlen(header));
 
+    char buf[kDumpCopyMax];
+
     uint64_t curr_seq = write_seq_.load(std::memory_order_relaxed);
     uint64_t start = (curr_seq > slots_cap_) ? (curr_seq - slots_cap_) : 0;
 
     for (uint64_t i = start; i < curr_seq; ++i) {
         const Slot& slot = ring_[i % slots_cap_];
-        uint32_t len = slot.len.load(std::memory_order_acquire);
-        if (len > 0) {
-            ::write(fd, slot.data, len);
-        }
+
+        // Acquire pairs with the writer's release below, so seeing our own
+        // sequence number means the payload it published is visible too.
+        if (slot.gen.load(std::memory_order_acquire) != i) continue;
+
+        uint32_t len = slot.len.load(std::memory_order_relaxed);
+        if (len == 0) continue;
+        if (len > sizeof(buf)) len = sizeof(buf);
+        load_slot_bytes(buf, slot.data, len);
+
+        // Re-check: a writer that claimed the slot mid-copy leaves us holding
+        // halves of two records, so drop them instead of printing garbage.
+        if (slot.gen.load(std::memory_order_acquire) != i) continue;
+
+        ::write(fd, buf, len);
     }
 }
 

@@ -69,13 +69,25 @@ class RingBufferSink : public LogSink {
     void signal_safe_dump(int fd) const noexcept;
 
    private:
+    // Marks a slot as unreadable: no record sequence ever takes this value, so
+    // a dump that sees it skips the slot.
+    static constexpr uint64_t kSlotEmpty = UINT64_MAX;
+
     struct Slot {
+        // Sequence number of the record living here, or kSlotEmpty while a
+        // writer is mid-copy. Dumps use it as a seqlock: unchanged before and
+        // after the copy means nothing overwrote the record underneath them.
+        std::atomic<uint64_t> gen{kSlotEmpty};
         std::atomic<uint32_t> len{0};
-        char* data{nullptr};
+        // Payload, in words rather than bytes: a dump can run while a writer is
+        // filling this slot, so both sides go through std::atomic_ref and the
+        // access has to be a type that supports it.
+        uint64_t* data{nullptr};
     };
 
     size_t slots_cap_;
     size_t slot_bytes_;
+    size_t slot_words_;
     Slot* ring_;
     std::atomic<uint64_t> write_seq_{0};
 };
