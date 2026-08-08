@@ -97,8 +97,11 @@ void Logger::dispatch(LogRecord record) {
     }
 
     if (record.level == Level::Fatal) {
-        shutdown();
         dump_ring_buffer_to_stderr();
+        for (auto& sink : sinks_) {
+            sink->flush();
+        }
+
         std::abort();
     }
 }

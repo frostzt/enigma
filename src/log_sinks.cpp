@@ -123,7 +123,8 @@ void FileSink::flush() {
 
 // ---------------- RingBufferSink ----------------
 RingBufferSink::RingBufferSink(size_t slots, size_t slot_bytes)
-    : slots_cap_(slots), slot_bytes_(slot_bytes) {
+    : slots_cap_(slots == 0 ? 1024 : slots),
+      slot_bytes_(slot_bytes < 64 ? 512 : slot_bytes) {
     ring_ = new Slot[slots_cap_];
     for (size_t i = 0; i < slots_cap_; ++i) {
         ring_[i].data = new char[slot_bytes_];
