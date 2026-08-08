@@ -107,12 +107,17 @@ TEST(Log, ring_buffer_dump_survives_concurrent_writers) {
     // A small ring wraps constantly, so writers whose sequence numbers are a
     // full lap apart target the same slot at the same time. Each writer emits
     // one repeated letter, so a record spliced from two of them is visible.
-    constexpr size_t kSlots = 4;
+    //
+    // Keep slots above the writer count: a writer owns its slot exclusively
+    // while copying, so every slot of a tiny ring can be mid-write whenever the
+    // dump looks, through no fault of the code under test.
+    constexpr size_t kSlots = 8;
     constexpr size_t kMsgLen = 700;
-    constexpr int kThreads = 8;
+    constexpr int kThreads = 4;
 
     RingBufferSink ring(kSlots, kMsgLen + 200);
     std::atomic<bool> stop{false};
+    std::atomic<long> submitted{0};
 
     std::vector<std::thread> writers;
     for (int t = 0; t < kThreads; ++t) {
@@ -122,8 +127,25 @@ TEST(Log, ring_buffer_dump_survives_concurrent_writers) {
             while (!stop.load(std::memory_order_relaxed)) {
                 rec.ts = std::chrono::system_clock::now();
                 ring.submit(rec);
+                submitted.fetch_add(1, std::memory_order_relaxed);
             }
         });
+    }
+
+    // Dumping an empty ring costs almost nothing, so on a loaded machine the
+    // whole dump loop can finish before a writer is ever scheduled. Wait for
+    // the ring to fill first, otherwise the test proves nothing.
+    // No ASSERT here: it would return with the writer threads still running on
+    // objects this frame owns. Record it and check after the joins.
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::seconds(30);
+    bool populated = false;
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (submitted.load(std::memory_order_relaxed) >= 5000) {
+            populated = true;
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 
     const std::string path = "./ring_dump_test.txt";
@@ -147,6 +169,7 @@ TEST(Log, ring_buffer_dump_survives_concurrent_writers) {
     in.close();
     ::unlink(path.c_str());
 
+    EXPECT_TRUE(populated) << "writers made no progress before the dumps";
     EXPECT_GT(records, 0);
     EXPECT_EQ(spliced, 0);
 }
