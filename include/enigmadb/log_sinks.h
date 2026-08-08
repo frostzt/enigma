@@ -4,6 +4,7 @@
 #include <unistd.h>
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <fstream>
 #include <mutex>
@@ -89,6 +90,13 @@ class AsyncSink : public LogSink {
 
     void submit(const LogRecord& record) override;
     void flush() override;
+
+    // Bounded flush() for the fatal path: waits at most `timeout` for the
+    // worker to drain the queue, and only flushes the downstream sinks if it
+    // did. Returns false when the worker did not keep up, so callers can move
+    // on instead of blocking on a wedged sink.
+    bool drain_for(std::chrono::milliseconds timeout);
+
     void stop();
 
    private:
@@ -102,6 +110,8 @@ class AsyncSink : public LogSink {
     size_t head_{0};
     size_t tail_{0};
     size_t size_{0};
+    // Records the worker pulled off the queue but has not written out yet.
+    size_t inflight_{0};
 
     std::mutex mutex_;
     std::condition_variable cv_produce_;

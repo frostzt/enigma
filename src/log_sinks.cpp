@@ -169,9 +169,9 @@ void RingBufferSink::signal_safe_dump(int fd) const noexcept {
 AsyncSink::AsyncSink(std::vector<std::shared_ptr<LogSink>> sinks,
                      size_t capacity, OverflowPolicy policy)
     : sinks_(std::move(sinks)),
-      capacity_(capacity),
+      capacity_(capacity == 0 ? 8192 : capacity),
       policy_(policy),
-      queue_(capacity) {
+      queue_(capacity_) {
     worker_ = std::thread(&AsyncSink::worker_loop, this);
 }
 
@@ -194,6 +194,13 @@ void AsyncSink::submit(const LogRecord& record) {
         }
     }
 
+    // Still full means the wait above was released by stop(), not by space
+    // opening up; enqueueing anyway would overwrite a live slot.
+    if (size_ == capacity_) {
+        dropped_records_.fetch_add(1, std::memory_order_relaxed);
+        return;
+    }
+
     queue_[tail_] = record;
     tail_ = (tail_ + 1) % capacity_;
     size_++;
@@ -201,9 +208,24 @@ void AsyncSink::submit(const LogRecord& record) {
 }
 
 void AsyncSink::flush() {
-    std::unique_lock<std::mutex> lock(mutex_);
-    cv_produce_.wait(lock, [this] { return size_ == 0; });
+    {
+        std::unique_lock<std::mutex> lock(mutex_);
+        cv_produce_.wait(lock, [this] { return size_ == 0 && inflight_ == 0; });
+    }
     for (auto& sink : sinks_) sink->flush();
+}
+
+bool AsyncSink::drain_for(std::chrono::milliseconds timeout) {
+    {
+        std::unique_lock<std::mutex> lock(mutex_);
+        if (!cv_produce_.wait_for(lock, timeout, [this] {
+                return size_ == 0 && inflight_ == 0;
+            })) {
+            return false;
+        }
+    }
+    for (auto& sink : sinks_) sink->flush();
+    return true;
 }
 
 void AsyncSink::stop() {
@@ -217,9 +239,11 @@ void AsyncSink::worker_loop() {
     std::vector<LogRecord> batch;
     batch.reserve(256);
 
-    while (running_ || size_ > 0) {
+    for (;;) {
         {
             std::unique_lock<std::mutex> lock(mutex_);
+            if (!running_ && size_ == 0) break;
+
             cv_consume_.wait_for(lock, std::chrono::milliseconds(100),
                                  [this] { return size_ > 0 || !running_; });
 
@@ -228,6 +252,9 @@ void AsyncSink::worker_loop() {
                 head_ = (head_ + 1) % capacity_;
                 size_--;
             }
+            // Batch is off the queue but not written yet, so flushers must
+            // keep waiting until the downstream sinks have actually seen it.
+            inflight_ = batch.size();
             if (!batch.empty()) cv_produce_.notify_all();
         }
 
@@ -237,6 +264,12 @@ void AsyncSink::worker_loop() {
             }
         }
         batch.clear();
+
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            inflight_ = 0;
+        }
+        cv_produce_.notify_all();
     }
 }
 

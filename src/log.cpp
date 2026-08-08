@@ -3,6 +3,7 @@
 #include <unistd.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstdlib>
 #include <memory>
 #include <vector>
@@ -10,6 +11,12 @@
 #include "enigmadb/log_sinks.h"
 
 namespace enigmadb {
+
+namespace {
+// How long the fatal path is willing to wait on an async worker before it
+// dumps the crash ring and aborts anyway.
+constexpr std::chrono::milliseconds kFatalDrainTimeout{2000};
+}  // namespace
 
 LogConfig::LogConfig() { category_levels.fill(default_level); }
 
@@ -97,11 +104,18 @@ void Logger::dispatch(LogRecord record) {
     }
 
     if (record.level == Level::Fatal) {
-        dump_ring_buffer_to_stderr();
+        // The crash ring usually sits behind the async worker, so this record
+        // may still be queued. Give the worker a bounded window to hand it
+        // over; a blocked sink must not keep us from dumping and aborting.
         for (auto& sink : sinks_) {
-            sink->flush();
+            if (auto async = std::dynamic_pointer_cast<AsyncSink>(sink)) {
+                async->drain_for(kFatalDrainTimeout);
+            } else {
+                sink->flush();
+            }
         }
 
+        dump_ring_buffer_to_stderr();
         std::abort();
     }
 }
