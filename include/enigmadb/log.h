@@ -2,6 +2,7 @@
 #define ENIGMA_DB_LOG_H
 
 #include <pthread.h>
+#include <sys/syscall.h>
 #include <unistd.h>
 
 #include <array>
