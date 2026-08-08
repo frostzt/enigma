@@ -126,7 +126,10 @@ void Logger::shutdown() {
 }
 
 void Logger::dispatch(LogRecord record) {
-    if (shutdown_.load(std::memory_order_relaxed)) return;
+    if (shutdown_.load(std::memory_order_relaxed) &&
+        record.level != Level::Fatal) {
+        return;
+    }
 
     for (auto& sink : sinks_) {
         if (record.level >= sink->level()) {
