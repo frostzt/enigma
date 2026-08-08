@@ -2,6 +2,7 @@
 #define ENIGMA_DB_LOG_H
 
 #include <pthread.h>
+#include <unistd.h>
 
 #include <array>
 #include <atomic>
@@ -30,9 +31,9 @@ enum class Category : uint8_t {
 };
 
 #ifndef NDEBUG
-inline constexpr Level kCompileMinLevel = Level::Info;
-#else
 inline constexpr Level kCompileMinLevel = Level::Trace;
+#else
+inline constexpr Level kCompileMinLevel = Level::Info;
 #endif
 
 enum class OverflowPolicy { Block, DropNewest, BlockOnWarnPlus };
@@ -79,12 +80,13 @@ inline uint64_t get_current_thread_id() noexcept {
 };
 
 class LogSink;
+class RingBufferSink;
 
 class Logger {
    public:
     static Logger& instance();
 
-    void init(const LogConfig& config);
+    void init(LogConfig& config);
     void shutdown();
     void dispatch(LogRecord record);
 
@@ -110,6 +112,7 @@ class Logger {
     std::vector<std::shared_ptr<LogSink>> sinks_;
     std::atomic<bool> initialized_{false};
     std::atomic<bool> shutdown_{false};
+    std::shared_ptr<RingBufferSink> ring_sink_;
 };
 
 inline bool log_enabled(Category cat, Level lvl) noexcept {

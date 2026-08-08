@@ -29,7 +29,7 @@ Logger::Logger() {
 
 Logger::~Logger() { shutdown(); }
 
-void Logger::init(const LogConfig& config) {
+void Logger::init(LogConfig& config) {
     if (initialized_.exchange(true)) return;
 
     for (size_t i = 0; i < static_cast<size_t>(Category::_Count); ++i) {
@@ -47,13 +47,25 @@ void Logger::init(const LogConfig& config) {
         raw_sinks.push_back(std::make_shared<FileSink>(*config.file_path));
     }
 
+    if (config.ring_slots == 0) {
+        config.ring_slots = 1024;
+    }
+    if (config.ring_slot_bytes < 64) {
+        config.ring_slot_bytes = 512;
+    }
+    if (config.async && config.queue_capacity == 0) {
+        config.queue_capacity = 8192;
+    }
+
     raw_sinks.push_back(std::make_shared<RingBufferSink>(
         config.ring_slots, config.ring_slot_bytes));
 
     sinks_.clear();
     if (config.async) {
-        sinks_.push_back(std::make_shared<AsyncSink>(
-            std::move(raw_sinks), config.queue_capacity, config.overflow));
+        auto ring = std::make_shared<RingBufferSink>(config.ring_slots,
+                                                     config.ring_slot_bytes);
+        ring_sink_ = ring;
+        raw_sinks.push_back(std::move(ring));
     } else {
         sinks_ = std::move(raw_sinks);
     }
@@ -102,11 +114,8 @@ void Logger::set_level(Category cat, Level lvl) noexcept {
 }
 
 void Logger::dump_ring_buffer_to_stderr() {
-    for (auto& sink : sinks_) {
-        if (auto ring = std::dynamic_pointer_cast<RingBufferSink>(sink)) {
-            ring->signal_safe_dump(STDERR_FILENO);
-            return;
-        }
+    if (ring_sink_) {
+        ring_sink_->signal_safe_dump(STDERR_FILENO);
     }
 }
 
