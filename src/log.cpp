@@ -5,7 +5,10 @@
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
+#include <functional>
+#include <future>
 #include <memory>
+#include <thread>
 #include <vector>
 
 #include "enigmadb/log_sinks.h"
@@ -13,9 +16,37 @@
 namespace enigmadb {
 
 namespace {
-// How long the fatal path is willing to wait on an async worker before it
+// How long the fatal path is willing to wait for sinks to flush before it
 // dumps the crash ring and aborts anyway.
-constexpr std::chrono::milliseconds kFatalDrainTimeout{2000};
+constexpr std::chrono::milliseconds kFatalFlushTimeout{2000};
+
+// Runs `fn` on a detached thread and waits at most `timeout` for it to finish.
+// Returns false if it did not. Abandoning the thread is deliberate: the only
+// caller aborts right after, and abort() runs no destructors that a stranded
+// thread could race with.
+bool run_with_deadline(std::chrono::milliseconds timeout,
+                       std::function<void()> fn) {
+    try {
+        auto done = std::make_shared<std::promise<void>>();
+        std::future<void> finished = done->get_future();
+
+        std::thread([done, fn = std::move(fn)]() mutable {
+            try {
+                fn();
+            } catch (...) {
+                // A failing sink must not take the process down before the
+                // crash dump; the deadline handles a hung one.
+            }
+            done->set_value();
+        }).detach();
+
+        return finished.wait_for(timeout) == std::future_status::ready;
+    } catch (...) {
+        // Could not even spawn the helper. Treat it as a missed deadline so
+        // the caller moves straight on to the dump.
+        return false;
+    }
+}
 }  // namespace
 
 LogConfig::LogConfig() { category_levels.fill(default_level); }
@@ -105,15 +136,13 @@ void Logger::dispatch(LogRecord record) {
 
     if (record.level == Level::Fatal) {
         // The crash ring usually sits behind the async worker, so this record
-        // may still be queued. Give the worker a bounded window to hand it
-        // over; a blocked sink must not keep us from dumping and aborting.
-        for (auto& sink : sinks_) {
-            if (auto async = std::dynamic_pointer_cast<AsyncSink>(sink)) {
-                async->drain_for(kFatalDrainTimeout);
-            } else {
-                sink->flush();
-            }
-        }
+        // may still be queued; flushing hands it over. Every step of that can
+        // block forever though -- a worker that never drains, a console or
+        // file write that never returns -- so it runs under a deadline. The
+        // ring dump and abort() must happen either way.
+        run_with_deadline(kFatalFlushTimeout, [this] {
+            for (auto& sink : sinks_) sink->flush();
+        });
 
         dump_ring_buffer_to_stderr();
         std::abort();

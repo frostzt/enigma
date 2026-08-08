@@ -171,7 +171,7 @@ AsyncSink::AsyncSink(std::vector<std::shared_ptr<LogSink>> sinks,
     : sinks_(std::move(sinks)),
       capacity_(capacity == 0 ? 8192 : capacity),
       policy_(policy),
-      queue_(capacity_) {
+      queue_(capacity == 0 ? 8192 : capacity) {
     worker_ = std::thread(&AsyncSink::worker_loop, this);
 }
 
@@ -213,19 +213,6 @@ void AsyncSink::flush() {
         cv_produce_.wait(lock, [this] { return size_ == 0 && inflight_ == 0; });
     }
     for (auto& sink : sinks_) sink->flush();
-}
-
-bool AsyncSink::drain_for(std::chrono::milliseconds timeout) {
-    {
-        std::unique_lock<std::mutex> lock(mutex_);
-        if (!cv_produce_.wait_for(lock, timeout, [this] {
-                return size_ == 0 && inflight_ == 0;
-            })) {
-            return false;
-        }
-    }
-    for (auto& sink : sinks_) sink->flush();
-    return true;
 }
 
 void AsyncSink::stop() {
