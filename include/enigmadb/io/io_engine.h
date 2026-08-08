@@ -34,7 +34,7 @@ inline std::ostream& operator<<(std::ostream& out, const Mode& mode) {
     switch (mode) {
             // clang-format off
             case Mode::Read:      out << "O_RDONLY";                            break;
-            case Mode::Write:     out << "O_RDONLY | O_CREAT";                  break;
+            case Mode::Write:     out << "O_WRONLY | O_CREAT";                  break;
             case Mode::ReadWrite: out << "O_RDWR | O_CREAT";                    break;
             case Mode::Append:    out << "O_WRONLY | O_APPEND | O_CREAT";       break;
             case Mode::Overwrite: out << "O_WRONLY | O_CREAT | O_TRUNC";        break;

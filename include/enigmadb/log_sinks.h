@@ -113,6 +113,8 @@ class AsyncSink : public LogSink {
 
    private:
     void worker_loop();
+    // Hands a record to the downstream sinks on the calling thread.
+    void deliver(const LogRecord& record);
 
     std::vector<std::shared_ptr<LogSink>> sinks_;
     size_t capacity_;

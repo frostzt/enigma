@@ -62,7 +62,9 @@ Logger::Logger() {
         active_levels_[i].store(defaultConfig.default_level,
                                 std::memory_order_relaxed);
     }
-    sinks_.push_back(std::make_shared<ConsoleSink>());
+    auto initial = std::make_shared<SinkList>();
+    initial->push_back(std::make_shared<ConsoleSink>());
+    sinks_.store(std::move(initial), std::memory_order_release);
 }
 
 Logger::~Logger() { shutdown(); }
@@ -98,13 +100,20 @@ void Logger::init(LogConfig& config) {
     auto ring = std::make_shared<RingBufferSink>(config.ring_slots,
                                                  config.ring_slot_bytes);
     ring_sink_ = ring;
+    // Publish for the dump only once the ring is fully constructed and owned.
+    ring_ptr_.store(ring.get(), std::memory_order_release);
     raw_sinks.push_back(std::move(ring));
-    sinks_.clear();
+
+    auto next = std::make_shared<SinkList>();
     if (config.async) {
-        sinks_.push_back(std::make_shared<AsyncSink>(
+        next->push_back(std::make_shared<AsyncSink>(
             std::move(raw_sinks), config.queue_capacity, config.overflow));
     } else {
-        sinks_ = std::move(raw_sinks);
+        *next = std::move(raw_sinks);
+    }
+    {
+        std::lock_guard<std::mutex> lock(sinks_mutex_);
+        sinks_.store(std::move(next), std::memory_order_release);
     }
 
     if (config.enable_crash_handler) {
@@ -117,7 +126,10 @@ void Logger::init(LogConfig& config) {
 void Logger::shutdown() {
     if (shutdown_.exchange(true)) return;
 
-    for (auto& sink : sinks_) {
+    auto sinks = sinks_.load(std::memory_order_acquire);
+    if (!sinks) return;
+
+    for (auto& sink : *sinks) {
         if (auto async = std::dynamic_pointer_cast<AsyncSink>(sink)) {
             async->stop();
         }
@@ -131,9 +143,15 @@ void Logger::dispatch(LogRecord record) {
         return;
     }
 
-    for (auto& sink : sinks_) {
-        if (record.level >= sink->level()) {
-            sink->submit(record);
+    // Work from a snapshot: init() and add_sink() can swap the list at any
+    // moment, and our reference keeps this one alive for the whole dispatch.
+    auto sinks = sinks_.load(std::memory_order_acquire);
+
+    if (sinks) {
+        for (auto& sink : *sinks) {
+            if (record.level >= sink->level()) {
+                sink->submit(record);
+            }
         }
     }
 
@@ -143,8 +161,9 @@ void Logger::dispatch(LogRecord record) {
         // block forever though -- a worker that never drains, a console or
         // file write that never returns -- so it runs under a deadline. The
         // ring dump and abort() must happen either way.
-        run_with_deadline(kFatalFlushTimeout, [this] {
-            for (auto& sink : sinks_) sink->flush();
+        run_with_deadline(kFatalFlushTimeout, [sinks] {
+            if (!sinks) return;
+            for (auto& sink : *sinks) sink->flush();
         });
 
         dump_ring_buffer_to_stderr();
@@ -153,7 +172,12 @@ void Logger::dispatch(LogRecord record) {
 }
 
 void Logger::add_sink(std::shared_ptr<LogSink> sink) {
-    sinks_.push_back(std::move(sink));
+    std::lock_guard<std::mutex> lock(sinks_mutex_);
+    auto current = sinks_.load(std::memory_order_acquire);
+    auto next = current ? std::make_shared<SinkList>(*current)
+                        : std::make_shared<SinkList>();
+    next->push_back(std::move(sink));
+    sinks_.store(std::move(next), std::memory_order_release);
 }
 
 void Logger::set_level(Category cat, Level lvl) noexcept {
@@ -162,8 +186,10 @@ void Logger::set_level(Category cat, Level lvl) noexcept {
 }
 
 void Logger::dump_ring_buffer_to_stderr() {
-    if (ring_sink_) {
-        ring_sink_->signal_safe_dump(STDERR_FILENO);
+    // Deliberately not ring_sink_: this runs from crash signal handlers, where
+    // reading a shared_ptr races init() and is not async-signal-safe.
+    if (auto* ring = ring_ptr_.load(std::memory_order_acquire)) {
+        ring->signal_safe_dump(STDERR_FILENO);
     }
 }
 

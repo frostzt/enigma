@@ -15,6 +15,7 @@
 #include <format>
 #include <iterator>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <utility>
@@ -111,12 +112,24 @@ class Logger {
     Logger(const Logger&) = delete;
     Logger& operator=(const Logger&) = delete;
 
+    using SinkList = std::vector<std::shared_ptr<LogSink>>;
+
     std::array<std::atomic<Level>, static_cast<size_t>(Category::_Count)>
         active_levels_{};
-    std::vector<std::shared_ptr<LogSink>> sinks_;
+    // Published as an immutable snapshot. dispatch() grabs it without locking
+    // and works from its own reference, while init() and add_sink() build a
+    // replacement under sinks_mutex_ and swap it in; mutating the live vector
+    // instead would corrupt it under a concurrent dispatch.
+    std::atomic<std::shared_ptr<const SinkList>> sinks_;
+    std::mutex sinks_mutex_;
     std::atomic<bool> initialized_{false};
     std::atomic<bool> shutdown_{false};
+    // Owns the ring for the process lifetime; only ever assigned by init().
     std::shared_ptr<RingBufferSink> ring_sink_;
+    // The same ring, for the crash dump to read. Signal handlers cannot touch
+    // a shared_ptr -- copying one is neither atomic nor async-signal-safe -- so
+    // the dump path goes through a plain pointer that ring_sink_ keeps alive.
+    std::atomic<RingBufferSink*> ring_ptr_{nullptr};
 };
 
 inline bool log_enabled(Category cat, Level lvl) noexcept {

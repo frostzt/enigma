@@ -243,6 +243,14 @@ AsyncSink::AsyncSink(std::vector<std::shared_ptr<LogSink>> sinks,
 AsyncSink::~AsyncSink() { stop(); }
 
 void AsyncSink::submit(const LogRecord& record) {
+    // Once the worker is gone nothing drains the queue, so anything logged
+    // during or after shutdown -- a fatal record above all -- has to go
+    // straight through, or it would be swallowed.
+    if (!running_.load(std::memory_order_acquire)) {
+        deliver(record);
+        return;
+    }
+
     std::unique_lock<std::mutex> lock(mutex_);
 
     if (size_ == capacity_) {
@@ -280,11 +288,32 @@ void AsyncSink::flush() {
     for (auto& sink : sinks_) sink->flush();
 }
 
+void AsyncSink::deliver(const LogRecord& record) {
+    for (auto& sink : sinks_) {
+        if (record.level >= sink->level()) sink->submit(record);
+    }
+}
+
 void AsyncSink::stop() {
     if (!running_.exchange(false)) return;
     cv_consume_.notify_all();
     cv_produce_.notify_all();
     if (worker_.joinable()) worker_.join();
+
+    // A producer that got past the running_ check just as the worker exited can
+    // leave records behind; deliver them here rather than dropping them.
+    for (;;) {
+        LogRecord rec;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (size_ == 0) break;
+            rec = std::move(queue_[head_]);
+            head_ = (head_ + 1) % capacity_;
+            size_--;
+        }
+        deliver(rec);
+    }
+    cv_produce_.notify_all();
 }
 
 void AsyncSink::worker_loop() {
@@ -310,11 +339,7 @@ void AsyncSink::worker_loop() {
             if (!batch.empty()) cv_produce_.notify_all();
         }
 
-        for (const auto& rec : batch) {
-            for (auto& sink : sinks_) {
-                if (rec.level >= sink->level()) sink->submit(rec);
-            }
-        }
+        for (const auto& rec : batch) deliver(rec);
         batch.clear();
 
         {
