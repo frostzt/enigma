@@ -17,6 +17,7 @@
 
 #include "enigmadb/base.h"
 #include "enigmadb/error.h"
+#include "enigmadb/log.h"
 #include "enigmadb/storage/dazzle_db/compaction/compaction.h"
 #include "enigmadb/storage/dazzle_db/compaction/compaction_policy.h"
 #include "enigmadb/storage/dazzle_db/memtable/memtable.h"

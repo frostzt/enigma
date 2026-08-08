@@ -1,8 +1,7 @@
+#include <string>
 #if defined(__linux__) && !defined(_GNU_SOURCE)
 #define _GNU_SOURCE
 #endif
-
-#include "enigmadb/io/posix_io_engine.h"
 
 #include <sys/fcntl.h>
 #include <sys/stat.h>
@@ -12,11 +11,17 @@
 #include <cerrno>
 #include <cstring>
 #include <filesystem>
+
+#include "enigmadb/io/posix_io_engine.h"
+
+#if defined(__APPLE__)
 #include <vector>
+#endif
 
 #include "enigmadb/base.h"
 #include "enigmadb/error.h"
 #include "enigmadb/io/io_engine.h"
+#include "enigmadb/log.h"
 #include "enigmadb/result.h"
 
 namespace enigmadb::io {
@@ -112,6 +117,9 @@ Result<FileHandle> PosixIOEngine::open(const std::string& path, Mode mode) {
     }
     // clang-format on
 
+    LOG_TRACE(Category::IO, "Opening file at path={} under mode={}", path,
+              mode);
+
     errno = 0;
     int fd = ::open(path.c_str(), flags, 0644);
     if (fd == -1) {
@@ -166,6 +174,8 @@ Result<void> PosixIOEngine::sync_all(const FileHandle& fh) {
 }
 
 Result<void> PosixIOEngine::sync_directory(const std::string& path) {
+    LOG_TRACE(Category::IO, "Sync directory at path={}", path);
+
     errno = 0;
     int fd = ::open(path.c_str(), O_RDONLY);
     if (fd == -1) {
@@ -213,6 +223,7 @@ Result<size_t> PosixIOEngine::read(const FileHandle& fh, size_t count,
         return ExpectResult<size_t, Error>::err(
             Error{ErrorCode::FILE_DESCRIPTOR_ERR, "invalid file descriptor"});
     }
+
     errno = 0;
     size_t bytes_read = 0;
     while (bytes_read < count) {
@@ -247,6 +258,8 @@ Result<size_t> PosixIOEngine::file_size(const FileHandle& fh) {
 
 Result<void> PosixIOEngine::remove(const std::string& path) {
     errno = 0;
+
+    LOG_TRACE(Category::IO, "Removing file at path={}", path);
 
     /* Remove the provided file */
     if (::unlink(path.c_str()) == -1) {

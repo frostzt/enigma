@@ -1,57 +1,36 @@
 #include "enigmadb/error.h"
 
-#include <cxxabi.h>
+#include <execinfo.h>
+#include <unistd.h>
 
-#include <iostream>
+#include <cstring>
 #include <string>
+
+#include "enigmadb/log.h"
 
 namespace enigmadb {
 
 [[noreturn]] void _server_panic_impl(const char* file, int line,
                                      const std::string& msg) {
-    std::cerr << "\n=======================================================\n";
-    std::cerr << "!!! SERVER PANIC !!!\n";
-    std::cerr << "Location: " << file << ":" << line << "\n";
-    std::cerr << "Reason: " << msg << "\n";
-    std::cerr << "=======================================================\n";
-    std::cerr << "Stack Trace:\n";
+    const char* trace_header =
+        "\n=======================================================\nStack "
+        "Trace:\n";
+    ::write(STDERR_FILENO, trace_header, ::strlen(trace_header));
 
     void* callstack[32];
-    int frames = backtrace(callstack, 32);
-    char** symbols = backtrace_symbols(callstack, frames);
+    int frames = ::backtrace(callstack, 32);
+    ::backtrace_symbols_fd(callstack, frames, STDERR_FILENO);
 
-    if (symbols != nullptr) {
-        for (int i = 0; i < frames; i++) {
-            std::string symbol_str(symbols[i]);
+    const char* trace_footer =
+        "=======================================================\n";
+    ::write(STDERR_FILENO, trace_footer, ::strlen(trace_footer));
 
-            size_t begin_mangled = symbol_str.find_first_of("( ");
-            size_t end_mangled = symbol_str.find_first_of("+)", begin_mangled);
+    // LOG_FATAL handles formatted output, ring buffer dump, sink flushing, and
+    // abort()
+    ::enigmadb::log_impl(Category::General, Level::Fatal, file, line,
+                         "server_panic", "SERVER PANIC: {}", msg);
 
-            if (begin_mangled != std::string::npos &&
-                end_mangled != std::string::npos &&
-                begin_mangled < end_mangled) {
-                if (symbol_str[begin_mangled] == '(') begin_mangled++;
-                std::string mangled = symbol_str.substr(
-                    begin_mangled, end_mangled - begin_mangled);
-
-                int status = 0;
-                char* demangled = abi::__cxa_demangle(mangled.c_str(), nullptr,
-                                                      nullptr, &status);
-
-                if (status == 0 && demangled != nullptr) {
-                    std::cerr << "  " << demangled << "\n";
-                    std::free(demangled);
-                    continue;
-                }
-            }
-        }
-        free(symbols);
-    } else {
-        std::cerr << "  (Failed to capture stack trace symbols)\n";
-    }
-    std::cerr << "=======================================================\n";
-
-    std::cerr << "Aborting process immediately.\n" << std::endl;
+    // Unreachable, as LOG_FATAL calls std::abort() inside Logger::dispatch
     std::abort();
 }
 

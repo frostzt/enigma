@@ -5,6 +5,7 @@
 
 #include "enigmadb/base.h"
 #include "enigmadb/io/io_engine.h"
+#include "enigmadb/log.h"
 #include "enigmadb/storage/dazzle_db/merge_iterator.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_common.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_reader.h"
@@ -21,16 +22,34 @@ Result<SSTableId> Compactor::compact(const std::vector<SSTableId>& inputs,
                                      bool is_full_compaction) {
     uint64_t possible_keys = 0;
 
+    LOG_DEBUG(Category::Compaction,
+              "Compaction started for {} inputs next sst seq={} should drop "
+              "tombstones?={}",
+              inputs.size(), next_sst_seq, is_full_compaction);
+
     /* open readers for all the sstable id inputs */
     std::vector<std::unique_ptr<SSTableReader>> readers;
     for (const auto i : inputs) {
         auto r = SSTableReader::create(engine_, sst_path(data_dir_, i.value));
-        if (!r.has_value()) return Result<SSTableId>::err(r.error());
+        if (!r.has_value()) {
+            LOG_ERROR(Category::Compaction,
+                      "Failed to open a SSTable Reader for path={} got "
+                      "err={}",
+                      sst_path(data_dir_, i.value), r.error().message);
+            return Result<SSTableId>::err(r.error());
+        }
 
         /* get an estimate amount for next possible keys */
         auto& reader = r.value();
         auto f = reader.get_footer();
-        if (!f.has_value()) return Result<SSTableId>::err(f.error());
+        if (!f.has_value()) {
+            LOG_ERROR(
+                Category::Compaction,
+                "Failed to fetch footer from a reader for path={} got err={}",
+                sst_path(data_dir_, i.value), r.error().message);
+            return Result<SSTableId>::err(f.error());
+        }
+
         possible_keys += f.value().entry_count;
 
         readers.emplace_back(
@@ -54,7 +73,13 @@ Result<SSTableId> Compactor::compact(const std::vector<SSTableId>& inputs,
     /* new sst writer */
     auto w = SSTableWriter::create(engine_, sst_path(data_dir_, next_sst_seq),
                                    possible_keys);
-    if (!w.has_value()) return Result<SSTableId>::err(w.error());
+    if (!w.has_value()) {
+        LOG_ERROR(Category::Compaction,
+                  "Failed to fetch footer from a writer for path={} got err={}",
+                  sst_path(data_dir_, next_sst_seq), w.error().message);
+        return Result<SSTableId>::err(w.error());
+    }
+
     auto& writer = w.value();
 
     /* construct a merge iterator over itrs and add to writer */
@@ -67,12 +92,22 @@ Result<SSTableId> Compactor::compact(const std::vector<SSTableId>& inputs,
         if (value.is_tombstone && is_full_compaction) continue;
 
         auto ar = writer.add(key, value);
-        if (!ar.has_value()) return Result<SSTableId>::err(ar.error());
+        if (!ar.has_value()) {
+            LOG_ERROR(Category::Compaction,
+                      "Failed to add value to the new writer inside merge "
+                      "iterator under path={}, got err={}",
+                      sst_path(data_dir_, next_sst_seq), ar.error().message);
+            return Result<SSTableId>::err(ar.error());
+        }
     }
 
     /* flush and create this new file; writer.finish calls fsync on the file and
      * directory */
     if (auto f = writer.finish(); !f.has_value()) {
+        LOG_ERROR(
+            Category::Compaction,
+            "Failed to finish and flush the new file under path={}, got={}",
+            sst_path(data_dir_, next_sst_seq), f.error().message);
         return Result<SSTableId>::err(f.error());
     }
 

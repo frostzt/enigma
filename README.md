@@ -52,4 +52,5 @@ Note that this *WILL NOT* compile on Windows machines.
 
 ## Todo's and Fixme's
 
-- [ ] Doesn't compile in `Debug` under ASan in Linux
+- [x] Doesn't compile in `Debug` under ASan in Linux
+- [ ] Most of system is missing logging
