@@ -57,15 +57,14 @@ void Logger::init(LogConfig& config) {
         config.queue_capacity = 8192;
     }
 
-    raw_sinks.push_back(std::make_shared<RingBufferSink>(
-        config.ring_slots, config.ring_slot_bytes));
-
+    auto ring = std::make_shared<RingBufferSink>(config.ring_slots,
+                                                 config.ring_slot_bytes);
+    ring_sink_ = ring;
+    raw_sinks.push_back(std::move(ring));
     sinks_.clear();
     if (config.async) {
-        auto ring = std::make_shared<RingBufferSink>(config.ring_slots,
-                                                     config.ring_slot_bytes);
-        ring_sink_ = ring;
-        raw_sinks.push_back(std::move(ring));
+        sinks_.push_back(std::make_shared<AsyncSink>(
+            std::move(raw_sinks), config.queue_capacity, config.overflow));
     } else {
         sinks_ = std::move(raw_sinks);
     }
