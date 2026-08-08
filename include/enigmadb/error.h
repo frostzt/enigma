@@ -10,12 +10,13 @@
 
 #include <execinfo.h>
 
-#include <cstddef>
+#include <cstdint>
+#include <format>
 #include <string>
 
 namespace enigmadb {
 
-enum class ErrorCode {
+enum class ErrorCode : int8_t {
     NONE = -1,
 
     UNEXPECTED_ERR = 0,
