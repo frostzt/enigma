@@ -16,9 +16,9 @@ Compactor Compactor::create(io::IOEngine& engine, const std::string& data_dir) {
     return Compactor{engine, data_dir};
 }
 
-Result<SSTableId> Compactor::do_size_tiered_compact(
-    const std::vector<SSTableId>& inputs, const uint64_t next_sst_seq,
-    bool is_full_compaction) {
+Result<SSTableId> Compactor::compact(const std::vector<SSTableId>& inputs,
+                                     const uint64_t next_sst_seq,
+                                     bool is_full_compaction) {
     uint64_t possible_keys = 0;
 
     /* open readers for all the sstable id inputs */

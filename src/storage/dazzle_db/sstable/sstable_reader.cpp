@@ -32,29 +32,32 @@ Result<SSTableReader> SSTableReader::create(io::IOEngine& engine,
         return Result<SSTableReader>::err(size_result.error());
     }
     auto file_size = size_result.value();
-    if (file_size < 56) {
+    if (file_size < FOOTER_SIZE) {
         return Result<SSTableReader>::err(
             Error{ErrorCode::BAD_CONFIG, "file too small for SSTable"});
     }
 
     std::vector<uint8_t> footer_buffer;
-    footer_buffer.resize(56);
+    footer_buffer.resize(FOOTER_SIZE);
 
     /* read footer */
-    auto read_footer_result =
-        engine.read(fh, 56, footer_buffer.data(), file_size - 56);
+    auto read_footer_result = engine.read(fh, FOOTER_SIZE, footer_buffer.data(),
+                                          file_size - FOOTER_SIZE);
     if (!read_footer_result.has_value()) {
         return Result<SSTableReader>::err(read_footer_result.error());
     }
 
     /* read and validate magic */
-    if (std::memcmp(footer_buffer.data() + 42, MAGIC.data(), MAGIC_SIZE)) {
+    if (std::memcmp(footer_buffer.data() + MAGIC_BYTES_OFFSET, MAGIC.data(),
+                    MAGIC_SIZE)) {
         return Result<SSTableReader>::err(
             Error{ErrorCode::BAD_MAGIC, "invalid magic"});
     }
 
-    auto stored_checksum = decode_uint32(footer_buffer.data(), 38);
-    auto computed_checksum = compute_crc_32(footer_buffer.data(), 38);
+    auto stored_checksum =
+        decode_uint32(footer_buffer.data(), FOOTER_CHECKSUM_OFFSET);
+    auto computed_checksum =
+        compute_crc_32(footer_buffer.data(), FOOTER_CHECKSUM_OFFSET);
     if (stored_checksum != computed_checksum) {
         return Result<SSTableReader>::err(
             Error{ErrorCode::BAD_CONFIG, "invalid checksum"});
@@ -77,12 +80,12 @@ Result<SSTableReader> SSTableReader::create(io::IOEngine& engine,
     auto entry_count = decode_uint32(footer_buffer.data(), 24);
     auto format_version = decode_uint16(footer_buffer.data(), 28);
     auto highest_sequence = decode_uint64(footer_buffer.data(), 30);
+    auto size_bytes = decode_uint64(footer_buffer.data(), 38);
 
     /* construct footer */
-    MinimalSSTableFooter footer{index_block_offset,  index_block_size,
-                                filter_block_offset, filter_block_size,
-                                entry_count,         format_version,
-                                highest_sequence};
+    SSTFooter footer{index_block_offset, index_block_size, filter_block_offset,
+                     filter_block_size,  entry_count,      format_version,
+                     highest_sequence,   size_bytes};
 
     std::vector<uint8_t> buffer;
     buffer.resize(index_block_size + filter_block_size);

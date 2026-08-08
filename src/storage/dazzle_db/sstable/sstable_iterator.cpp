@@ -1,7 +1,6 @@
 #include "enigmadb/storage/dazzle_db/sstable/sstable_iterator.h"
 
 #include <cassert>
-#include <cstddef>
 #include <vector>
 
 #include "enigmadb/encoding.h"

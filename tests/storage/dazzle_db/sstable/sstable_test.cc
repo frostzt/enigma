@@ -172,3 +172,47 @@ TEST(SSTableWriter, tombstone_record) {
     auto val = read_res.value().value();
     ASSERT_TRUE(val.is_tombstone);
 }
+
+TEST(SSTableWriter, size_bytes_emits_filesize) {
+    io::PosixIOEngine engine;
+    Tempfile testfile("tempfile-XXXXXX");
+
+    auto prev_size = std::filesystem::file_size(testfile.path);
+
+    auto crewriter_result =
+        dazzle::SSTableWriter::create(engine, testfile.path, 250);
+    ASSERT_TRUE(crewriter_result.has_value());
+
+    auto& writer = crewriter_result.value();
+
+    for (size_t i = 10; i < 60; i++) {
+        auto ki = make_key("user:" + std::to_string(i), "2026-01", "age");
+        auto vi = dazzle::InternalValue{
+            string_to_bytes("value_" + std::to_string(i)), false, i};
+        ASSERT_TRUE(writer.add(ki, vi).has_value());
+    }
+
+    auto finish_result = writer.finish();
+    ASSERT_TRUE(finish_result.has_value());
+
+    auto curr_size = std::filesystem::file_size(testfile.path);
+    ASSERT_TRUE(curr_size > prev_size);
+
+    auto crewreader_result =
+        dazzle::SSTableReader::create(engine, testfile.path);
+    ASSERT_TRUE(crewreader_result.has_value());
+
+    auto& reader = crewreader_result.value();
+    for (size_t i = 10; i < 60; i++) {
+        auto ki = make_key("user:" + std::to_string(i), "2026-01", "age");
+        auto read_res = reader.get(ki);
+        ASSERT_TRUE(read_res.has_value());
+        ASSERT_EQ(bytes_to_string(read_res.value().value().data),
+                  "value_" + std::to_string(i));
+    }
+
+    auto file_size = std::filesystem::file_size(testfile.path);
+    ASSERT_TRUE(reader.get_footer().has_value());
+
+    ASSERT_EQ(file_size, reader.get_footer().value().size_bytes);
+}
