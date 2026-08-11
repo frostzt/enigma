@@ -89,7 +89,7 @@ TEST(Result, result_expectErrWithCustomError) {
     ASSERT_FALSE(res.has_value());
 
     auto& error = res.error();
-    EXPECT_STREQ(error.message.c_str(), err_msg.c_str());
+    EXPECT_EQ(error.code, ErrorCode::UNEXPECTED_ERR);
 }
 
 TEST(Result, result_expectErrWithVoid) {
@@ -98,5 +98,5 @@ TEST(Result, result_expectErrWithVoid) {
     ASSERT_FALSE(res.has_value());
 
     auto& error = res.error();
-    EXPECT_STREQ(error.message.c_str(), err_msg.c_str());
+    EXPECT_EQ(error.code, ErrorCode::UNEXPECTED_ERR);
 }

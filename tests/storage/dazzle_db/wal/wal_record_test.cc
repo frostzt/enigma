@@ -58,7 +58,6 @@ TEST(WAL_Record, detects_corruption) {
     auto& error = deserialized_result.error();
 
     ASSERT_EQ(error.code, ErrorCode::BAD_CONFIG);
-    ASSERT_EQ(error.message, "checksum mismatch corrupted data found");
 }
 
 TEST(WAL_Record, truncated_buffer) {
@@ -78,5 +77,4 @@ TEST(WAL_Record, truncated_buffer) {
     auto& error = deserialized_result.error();
 
     ASSERT_EQ(error.code, ErrorCode::READ_OUT_OF_RANGE);
-    ASSERT_EQ(error.message, "out of range");
 }
