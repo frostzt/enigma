@@ -1,0 +1,19 @@
+tests/result_test.cc
+  s_3836a6ef44bba5::t_2a80e1e8368b68 92,101
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "40315666d07064a968d48a57485f08d8c56ea184",
+  "prompts": {},
+  "sessions": {
+    "s_3836a6ef44bba5": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_12f7ad815ffeZfQK6ay1QBigP6",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "frostzt <aidenfrostbite@gmail.com>"
+    }
+  }
+}
