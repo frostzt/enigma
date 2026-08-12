@@ -134,8 +134,8 @@ Result<std::unique_ptr<Dazzle>> Dazzle::open(io::IOEngine& engine, const std::st
         }
     }
 
-    std::map<SSTableId, std::unique_ptr<SSTableReader>, SSTableIdComparator> sst_readers;
-    std::map<SSTableId, std::unique_ptr<SSTableMeta>, SSTableIdComparator> sst_meta;
+    std::map<SSTableId, std::shared_ptr<SSTableReader>, SSTableIdComparator> sst_readers;
+    std::map<SSTableId, std::shared_ptr<SSTableMeta>, SSTableIdComparator> sst_meta;
 
     uint64_t max_sst_sequence_found = 0;
 
@@ -327,6 +327,8 @@ Result<void> Dazzle::install_flushed_sst(SSTableId new_id, std::shared_ptr<SSTab
     next_version->sst_meta[new_id] = std::move(meta);
 
     version_set_->append_version(next_version);
+
+    return Result<void>::ok();
 }
 
 Result<void> Dazzle::install(const CompactionTask& task) {
@@ -414,7 +416,20 @@ Result<void> Dazzle::flush() {
         return Result<void>::err(walwrr.error());
     }
 
-    add_sst_reader(SSTableId{new_sequence}, std::move(sstrr.value()));
+    auto& reader = sstrr.value();
+    auto footer = reader.get_footer().value();
+
+    auto current = version_set_->get_current();
+    auto next_version = std::make_shared<Version>();
+
+    next_version->sst_readers = current->sst_readers;
+    next_version->sst_meta = current->sst_meta;
+
+    auto new_id = SSTableId{new_sequence};
+    next_version->sst_readers[new_id] = std::make_shared<SSTableReader>(std::move(reader));
+    next_version->sst_meta[new_id] =
+        std::make_shared<SSTableMeta>(new_id, footer.size_bytes, footer.entry_count, footer.highest_sequence);
+
     wal_writer_.emplace(std::move(walwrr.value()));
 
     /* replace with a new empty memtable */
@@ -428,8 +443,7 @@ Result<void> Dazzle::flush() {
 
     /* check if we need to compact */
     auto cres = do_compact_work();
-    // @TODO: This should later move to a background thread right now
-    //        compaction sits on a HOT PATH
+    // @TODO: This should later move to a background thread right now compaction sits on a HOT PATH
     if (!cres.has_value()) {
         std::cerr << "[COMPACTION] Failed to compact file: " << cres.error().message << std::endl;
     }
