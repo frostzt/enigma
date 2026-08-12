@@ -1,0 +1,31 @@
+TESTS_TODO.md
+  s_ac4e0186b5fd76::t_1eb587ef6eb9c5 23,35,99-102
+tests/catalog/key_encoding_test.cc
+  s_ac4e0186b5fd76::t_19cfc744be7e42 1-130
+tests/test_support/keys.h
+  s_aebadbc159b228::t_b863bbe656d926 4,6,22-25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "2cdf230ec2601c091663d28bb4868c2d181a2233",
+  "prompts": {},
+  "sessions": {
+    "s_ac4e0186b5fd76": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_00d2e7357ffej5bYgJpQuefFMY",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "frostzt <aidenfrostbite@gmail.com>"
+    },
+    "s_aebadbc159b228": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_0142f195dffeKcbWRdgJxLaa46",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "frostzt <aidenfrostbite@gmail.com>"
+    }
+  }
+}
