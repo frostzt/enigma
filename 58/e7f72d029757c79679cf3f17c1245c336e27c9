@@ -1,0 +1,21 @@
+include/enigmadb/storage/dazzle_db/dazzle_engine.h
+  s_3836a6ef44bba5::t_ea065984b39ebe 18,45,69-70
+src/storage/dazzle_db/dazzle_engine.cpp
+  s_3836a6ef44bba5::t_09dc0ce9131c27 361-362,364
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "58e7f72d029757c79679cf3f17c1245c336e27c9",
+  "prompts": {},
+  "sessions": {
+    "s_3836a6ef44bba5": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_12f7ad815ffeZfQK6ay1QBigP6",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "frostzt <aidenfrostbite@gmail.com>"
+    }
+  }
+}
