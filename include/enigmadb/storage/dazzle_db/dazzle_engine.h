@@ -11,8 +11,10 @@
 
 #include <atomic>
 #include <cstdint>
+#include <filesystem>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
@@ -20,6 +22,7 @@
 #include "enigmadb/base.h"
 #include "enigmadb/hlc.h"
 #include "enigmadb/io/io_engine.h"
+#include "enigmadb/log.h"
 #include "enigmadb/storage/dazzle_db/compaction/compaction.h"
 #include "enigmadb/storage/dazzle_db/compaction/compaction_policy.h"
 #include "enigmadb/storage/dazzle_db/memtable/memtable.h"
@@ -30,7 +33,58 @@
 #include "enigmadb/storage/storage_engine.h"
 #include "enigmadb/storage/value.h"
 
+namespace fs = std::filesystem;
+
 namespace enigmadb::dazzle {
+
+class Version {
+   public:
+    std::map<SSTableId, std::shared_ptr<SSTableReader>, SSTableIdComparator> sst_readers;
+    std::map<SSTableId, std::shared_ptr<SSTableMeta>, SSTableIdComparator> sst_meta;
+
+    std::vector<std::string> obsolete_file_paths;
+
+    Version() = default;
+    ~Version() {
+        for (const auto& path : obsolete_file_paths) {
+            if (fs::exists(path)) {
+                std::error_code ec;
+                auto removed = fs::remove(path, ec);
+                if (ec) {
+                    LOG_ERROR(Category::ENGINE_DAZZLE, "Failed to remove SSTable File error={}", ec.message());
+                } else if (removed) {
+                    /* we're good :) */
+                } else {
+                    LOG_INFO(Category::ENGINE_DAZZLE, "File does not exist nothing to delete!");
+                }
+            }
+        }
+    };
+
+    Result<std::optional<storage::Value>> lookup(const storage::Key& key) const;
+    Result<std::optional<InternalValue>> lookup_internal(const storage::Key& key) const;
+};
+
+class VersionSet {
+   public:
+    VersionSet() : current_version_(std::make_shared<Version>()) {}
+
+    ~VersionSet() = default;
+
+    std::shared_ptr<Version> get_current() {
+        std::lock_guard<std::mutex> lk(mu_);
+        return current_version_;
+    };
+
+    void append_version(std::shared_ptr<Version> new_version) {
+        std::shared_ptr<Version> old_version = nullptr;
+        current_version_ = std::move(new_version);
+    }
+
+   private:
+    std::shared_ptr<Version> current_version_;
+    std::mutex mu_;
+};
 
 /**
  * @brief Core storage engine implementing an LSM-tree write path with
@@ -54,19 +108,12 @@ class Dazzle : public storage::StorageEngine {
     TimestampGenerator hlc_;
 
     /* --------------------------------------------------
-     * SSTables
+     * Version management
      * --------------------------------------------------*/
-    /// SSTable readers
-    std::map<SSTableId, std::unique_ptr<SSTableReader>, SSTableIdComparator>
-        sst_readers_;
+    std::unique_ptr<VersionSet> version_set_;
 
-    /// SSTable metadata
-    std::map<SSTableId, std::unique_ptr<SSTableMeta>, SSTableIdComparator>
-        sst_meta_;
-
-    std::vector<const SSTableMeta*> sst_meta_to_vector() const;
-
-    Result<void> add_sst_reader(SSTableId, SSTableReader);
+    Result<void> install_flushed_sst(SSTableId new_id, std::shared_ptr<SSTableReader> reader,
+                                     std::shared_ptr<SSTableMeta> meta);
 
     /* --------------------------------------------------
      * Sequences
@@ -78,28 +125,11 @@ class Dazzle : public storage::StorageEngine {
     /// Sequence number for the next SSTable file.
     std::atomic<uint64_t> next_sst_seq_{0};
 
-    /**
-     * @brief Bumps LSN sequence by one
-     */
-    uint64_t bump_lsn_sequence() {
-        return lsn_.fetch_add(1, std::memory_order_relaxed);
-    }
-
-    uint64_t mint_sst_id() {
-        return next_sst_seq_.fetch_add(1, std::memory_order_relaxed);
-    }
-
-    uint64_t peek_sst_id() const {
-        return next_sst_seq_.load(std::memory_order_relaxed);
-    }
-
-    uint64_t mint_wal_id() {
-        return next_wal_seq_.fetch_add(1, std::memory_order_relaxed);
-    }
-
-    uint64_t peek_wal_id() const {
-        return next_wal_seq_.load(std::memory_order_relaxed);
-    }
+    uint64_t bump_lsn_sequence() { return lsn_.fetch_add(1, std::memory_order_relaxed); }
+    uint64_t mint_sst_id() { return next_sst_seq_.fetch_add(1, std::memory_order_relaxed); }
+    uint64_t peek_sst_id() const { return next_sst_seq_.load(std::memory_order_relaxed); }
+    uint64_t mint_wal_id() { return next_wal_seq_.fetch_add(1, std::memory_order_relaxed); }
+    uint64_t peek_wal_id() const { return next_wal_seq_.load(std::memory_order_relaxed); }
 
     /* --------------------------------------------------
      * Compaction
@@ -119,32 +149,35 @@ class Dazzle : public storage::StorageEngine {
     /// Executes the compaction task and performs sst swap and cleanup
     Result<std::optional<SSTableId>> run_task(const CompactionTask&);
 
+    std::vector<const SSTableMeta*> sst_meta_to_vector() const;
+
     /**
      * @brief Private constructor; use Dazzle::open() instead.
      */
-    Dazzle(
-        io::IOEngine& engine, std::string data_dir, WalWriter wal_writer,
-        uint64_t memtable_size, Memtable active_memtable,
-        std::map<SSTableId, std::unique_ptr<SSTableReader>, SSTableIdComparator>
-            sst_readers,
-        std::map<SSTableId, std::unique_ptr<SSTableMeta>, SSTableIdComparator>
-            sst_meta,
-        uint64_t next_wal_seq, uint64_t next_sst_seq,
-        uint64_t highest_sequence = 0,
-        std::unique_ptr<CompactionPolicy> policy = nullptr)
+    Dazzle(io::IOEngine& engine, std::string data_dir, WalWriter wal_writer, uint64_t memtable_size,
+           Memtable active_memtable,
+           std::map<SSTableId, std::shared_ptr<SSTableReader>, SSTableIdComparator> sst_readers,
+           std::map<SSTableId, std::shared_ptr<SSTableMeta>, SSTableIdComparator> sst_meta, uint64_t next_wal_seq,
+           uint64_t next_sst_seq, uint64_t highest_sequence = 0, std::unique_ptr<CompactionPolicy> policy = nullptr)
         : engine_(engine),
           data_dir_(data_dir),
           wal_writer_(std::move(wal_writer)),
           memtable_size_(memtable_size),
           active_memtable_(std::move(active_memtable)),
-          sst_readers_(std::move(sst_readers)),
-          sst_meta_(std::move(sst_meta)),
           lsn_{highest_sequence},
           next_wal_seq_{next_wal_seq},
           next_sst_seq_{next_sst_seq},
-          policy_(policy ? std::move(policy)
-                         : std::make_unique<SizeTieredCompactionPolicy>(4, 32)),
-          compactor_(Compactor::create(engine, data_dir)) {}
+          policy_(policy ? std::move(policy) : std::make_unique<SizeTieredCompactionPolicy>(4, 32)),
+          compactor_(Compactor::create(engine, data_dir)) {
+        /* setup base version */
+        auto boot_version = std::make_shared<Version>();
+        boot_version->sst_readers = std::move(sst_readers);
+        boot_version->sst_meta = std::move(sst_meta);
+
+        /* create a version set out of the above */
+        version_set_ = std::make_unique<VersionSet>();
+        version_set_->append_version(std::move(boot_version));
+    }
 
     /**
      * @brief Returns the filesystem path for a WAL segment with the
@@ -173,9 +206,7 @@ class Dazzle : public storage::StorageEngine {
      * applies the mutation to the memtable, and triggers a flush if
      * the memtable has exceeded its size threshold.
      */
-    Result<void> put(const storage::Key& key,
-                     std::optional<std::span<const uint8_t>> value,
-                     bool remove);
+    Result<void> put(const storage::Key& key, std::optional<std::span<const uint8_t>> value, bool remove);
 
     /**
      * @brief Replays old WAL segments into the memtable and flushes
@@ -213,8 +244,7 @@ class Dazzle : public storage::StorageEngine {
     /**
      * @brief Overrides the current compaction policy and sets it as active
      */
-    Result<void> set_compaction_policy(
-        std::unique_ptr<CompactionPolicy> policy);
+    Result<void> set_compaction_policy(std::unique_ptr<CompactionPolicy> policy);
 
     /**
      * @brief Returns the latest LSN available
@@ -239,10 +269,9 @@ class Dazzle : public storage::StorageEngine {
      * number), opens a new WAL segment for writes, and runs crash
      * recovery by replaying any old WAL segments.
      */
-    static Result<std::unique_ptr<Dazzle>> open(
-        io::IOEngine& engine, const std::string& data_dir,
-        const uint64_t memtable_size,
-        std::unique_ptr<CompactionPolicy> policy = nullptr);
+    static Result<std::unique_ptr<Dazzle>> open(io::IOEngine& engine, const std::string& data_dir,
+                                                const uint64_t memtable_size,
+                                                std::unique_ptr<CompactionPolicy> policy = nullptr);
 
     /**
      * @brief Writes a column value.
@@ -251,8 +280,7 @@ class Dazzle : public storage::StorageEngine {
      * the active memtable. If the memtable exceeds its size threshold
      * a flush is triggered automatically.
      */
-    Result<void> put(const storage::Key& key,
-                     std::span<const uint8_t> value) override;
+    Result<void> put(const storage::Key& key, std::span<const uint8_t> value) override;
 
     /**
      * @brief Deletes a column by writing a tombstone.
