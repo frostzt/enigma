@@ -11,18 +11,17 @@
 
 #include <atomic>
 #include <cstdint>
-#include <filesystem>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
 #include "enigmadb/base.h"
 #include "enigmadb/hlc.h"
 #include "enigmadb/io/io_engine.h"
-#include "enigmadb/log.h"
 #include "enigmadb/storage/dazzle_db/compaction/compaction.h"
 #include "enigmadb/storage/dazzle_db/compaction/compaction_policy.h"
 #include "enigmadb/storage/dazzle_db/memtable/memtable.h"
@@ -32,8 +31,6 @@
 #include "enigmadb/storage/key.h"
 #include "enigmadb/storage/storage_engine.h"
 #include "enigmadb/storage/value.h"
-
-namespace fs = std::filesystem;
 
 namespace enigmadb::dazzle {
 
@@ -45,21 +42,7 @@ class Version {
     std::vector<std::string> obsolete_file_paths;
 
     Version() = default;
-    ~Version() {
-        for (const auto& path : obsolete_file_paths) {
-            if (fs::exists(path)) {
-                std::error_code ec;
-                auto removed = fs::remove(path, ec);
-                if (ec) {
-                    LOG_ERROR(Category::ENGINE_DAZZLE, "Failed to remove SSTable File error={}", ec.message());
-                } else if (removed) {
-                    /* we're good :) */
-                } else {
-                    LOG_INFO(Category::ENGINE_DAZZLE, "File does not exist nothing to delete!");
-                }
-            }
-        }
-    };
+    ~Version() = default;
 
     Result<std::optional<storage::Value>> lookup(const storage::Key& key) const;
     Result<std::optional<InternalValue>> lookup_internal(const storage::Key& key) const;
@@ -83,6 +66,8 @@ class VersionSet {
 
    private:
     std::shared_ptr<Version> current_version_;
+    std::vector<std::shared_ptr<Version>> live_versions_;
+    std::set<std::string> pending_obsolete_files_;
     std::mutex mu_;
 };
 

@@ -17,7 +17,6 @@
 
 #include "enigmadb/base.h"
 #include "enigmadb/error.h"
-#include "enigmadb/log.h"
 #include "enigmadb/storage/dazzle_db/compaction/compaction.h"
 #include "enigmadb/storage/dazzle_db/compaction/compaction_policy.h"
 #include "enigmadb/storage/dazzle_db/memtable/memtable.h"
@@ -359,7 +358,10 @@ Result<void> Dazzle::install(const CompactionTask& task) {
     }
 
     /* Remove the sst readers that are no longer needed */
+    std::vector<std::string> removed_paths;
+    removed_paths.reserve(to_erase.size());
     for (auto it : to_erase) {
+        removed_paths.push_back(sst_path(it->first.value));
         next_version->sst_meta.erase(it->first);
         next_version->sst_readers.erase(it);
     }
