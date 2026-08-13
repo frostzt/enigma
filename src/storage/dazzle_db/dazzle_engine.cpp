@@ -374,7 +374,7 @@ Result<void> Dazzle::install(const CompactionTask& task) {
         std::make_shared<SSTableMeta>(task.output_id, footer.size_bytes, footer.entry_count, footer.highest_sequence);
 
     /* update version */
-    version_set_->append_version(next_version);
+    version_set_->append_version(next_version, removed_paths);
 
     return Result<void>::ok();
 }

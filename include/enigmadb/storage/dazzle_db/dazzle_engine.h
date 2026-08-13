@@ -9,14 +9,17 @@
 #ifndef ENIGMA_DB_DAZZLE_H
 #define ENIGMA_DB_DAZZLE_H
 
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
+#include <filesystem>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "enigmadb/base.h"
@@ -31,6 +34,8 @@
 #include "enigmadb/storage/key.h"
 #include "enigmadb/storage/storage_engine.h"
 #include "enigmadb/storage/value.h"
+
+namespace fs = std::filesystem;
 
 namespace enigmadb::dazzle {
 
@@ -59,12 +64,49 @@ class VersionSet {
         return current_version_;
     };
 
-    void append_version(std::shared_ptr<Version> new_version) {
-        std::shared_ptr<Version> old_version = nullptr;
+    void append_version(std::shared_ptr<Version> new_version, std::vector<std::string> obsolete_files = {}) {
+        std::lock_guard<std::mutex> lock(mu_);
+
         current_version_ = std::move(new_version);
+        live_versions_.push_back(new_version);
+
+        if (!obsolete_files.empty()) {
+            pending_obsolete_files_.insert(obsolete_files.begin(), obsolete_files.end());
+        }
+
+        purge_obsolete_files();
+    }
+
+    void purge_obsolete_files() {
+        /* remove versions that no longer have a read iterator attached to them */
+        live_versions_.erase(std::remove_if(live_versions_.begin(), live_versions_.end(),
+                                            /* 1 here means only VersionSet is the one owning it */
+                                            [](const std::shared_ptr<Version>& v) { return v.use_count() == 1; }),
+                             live_versions_.end());
+
+        /* ssts needed by surviving versions */
+        std::set<std::string_view> live_files;
+        for (const auto& ver : live_versions_) {
+            for (const auto& [_, reader] : ver->sst_readers) {
+                live_files.insert(reader->get_path());
+            }
+        }
+
+        for (auto it = pending_obsolete_files_.begin(); it != pending_obsolete_files_.end();) {
+            if (live_files.find(*it) == live_files.end()) {
+                std::error_code ec;
+                fs::remove(*it, ec);
+                if (!ec) {
+                    it = pending_obsolete_files_.erase(it);
+                    continue;
+                }
+            }
+            ++it;
+        }
     }
 
    private:
+    const std::string data_dir_;
     std::shared_ptr<Version> current_version_;
     std::vector<std::shared_ptr<Version>> live_versions_;
     std::set<std::string> pending_obsolete_files_;
@@ -152,7 +194,7 @@ class Dazzle : public storage::StorageEngine {
           lsn_{highest_sequence},
           next_wal_seq_{next_wal_seq},
           next_sst_seq_{next_sst_seq},
-          policy_(policy ? std::move(policy) : std::make_unique<SizeTieredCompactionPolicy>(4, 32)),
+          policy_(policy ? std::move(policy) : std::make_unique<SizeTieredCompactionPolicy>(4, 8)),
           compactor_(Compactor::create(engine, data_dir)) {
         /* setup base version */
         auto boot_version = std::make_shared<Version>();
