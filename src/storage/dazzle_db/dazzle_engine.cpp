@@ -432,6 +432,7 @@ Result<void> Dazzle::flush() {
     next_version->sst_meta[new_id] =
         std::make_shared<SSTableMeta>(new_id, footer.size_bytes, footer.entry_count, footer.highest_sequence);
 
+    version_set_->append_version(next_version);
     wal_writer_.emplace(std::move(walwrr.value()));
 
     /* replace with a new empty memtable */

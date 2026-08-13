@@ -68,7 +68,7 @@ class VersionSet {
         std::lock_guard<std::mutex> lock(mu_);
 
         current_version_ = std::move(new_version);
-        live_versions_.push_back(new_version);
+        live_versions_.push_back(current_version_);
 
         if (!obsolete_files.empty()) {
             pending_obsolete_files_.insert(obsolete_files.begin(), obsolete_files.end());
