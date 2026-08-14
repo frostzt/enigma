@@ -40,7 +40,7 @@ class Compactor {
    public:
     static Compactor create(io::IOEngine& engine, const std::string& data_dir);
 
-    Result<SSTableId> compact(std::shared_ptr<Version> snapshot, const std::vector<SSTableId>& inputs,
+    Result<SSTableId> compact(std::shared_ptr<const Version> snapshot, const std::vector<SSTableId>& inputs,
                               const uint64_t next_sst_seq, bool is_full_compaction);
 };
 

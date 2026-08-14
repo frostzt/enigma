@@ -16,7 +16,7 @@ namespace enigmadb::dazzle {
 
 Compactor Compactor::create(io::IOEngine& engine, const std::string& data_dir) { return Compactor{engine, data_dir}; }
 
-Result<SSTableId> Compactor::compact(std::shared_ptr<Version> snapshot, const std::vector<SSTableId>& inputs,
+Result<SSTableId> Compactor::compact(std::shared_ptr<const Version> snapshot, const std::vector<SSTableId>& inputs,
                                      const uint64_t next_sst_seq, bool is_full_compaction) {
     uint64_t possible_keys = 0;
     std::vector<std::shared_ptr<SSTableReader>> readers;

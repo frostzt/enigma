@@ -15,11 +15,11 @@ namespace enigmadb::dazzle {
 
 class VersionSet {
    public:
-    VersionSet() : current_version_(std::make_shared<Version>()) {}
+    VersionSet() : current_version_(std::make_shared<const Version>()) {}
 
     ~VersionSet() = default;
 
-    std::shared_ptr<Version> get_current() {
+    std::shared_ptr<const Version> get_current() {
         std::lock_guard<std::mutex> lk(mu_);
         return current_version_;
     };
@@ -38,8 +38,8 @@ class VersionSet {
     }
 
    private:
-    std::shared_ptr<Version> current_version_;
-    std::vector<std::shared_ptr<Version>> live_versions_;
+    std::shared_ptr<const Version> current_version_;
+    std::vector<std::shared_ptr<const Version>> live_versions_;
     std::set<std::string> pending_obsolete_files_;
     std::mutex mu_;
 
@@ -47,7 +47,7 @@ class VersionSet {
         /* remove versions that no longer have a read iterator attached to them */
         live_versions_.erase(std::remove_if(live_versions_.begin(), live_versions_.end(),
                                             /* 1 here means only VersionSet is the one owning it */
-                                            [](const std::shared_ptr<Version>& v) { return v.use_count() == 1; }),
+                                            [](const std::shared_ptr<const Version>& v) { return v.use_count() == 1; }),
                              live_versions_.end());
 
         /* ssts needed by surviving versions */
