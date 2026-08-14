@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "enigmadb/io/io_engine.h"
+#include "enigmadb/storage/dazzle_db/core/version.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_common.h"
 
 namespace enigmadb::dazzle {
@@ -34,15 +35,13 @@ class Compactor {
     io::IOEngine& engine_;
     const std::string data_dir_;
 
-    Compactor(io::IOEngine& engine, std::string data_dir)
-        : engine_(engine), data_dir_(std::move(data_dir)) {}
+    Compactor(io::IOEngine& engine, std::string data_dir) : engine_(engine), data_dir_(std::move(data_dir)) {}
 
    public:
     static Compactor create(io::IOEngine& engine, const std::string& data_dir);
 
-    Result<SSTableId> compact(const std::vector<SSTableId>& inputs,
-                              const uint64_t next_sst_seq,
-                              bool is_full_compaction);
+    Result<SSTableId> compact(std::shared_ptr<Version> snapshot, const std::vector<SSTableId>& inputs,
+                              const uint64_t next_sst_seq, bool is_full_compaction);
 };
 
 }  // namespace enigmadb::dazzle

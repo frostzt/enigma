@@ -67,9 +67,6 @@ Result<std::optional<InternalValue>> Version::lookup_internal(const storage::Key
 
         auto found = lookup_result.value();
         if (found.has_value()) {
-            if (found.value().is_tombstone) {
-                return Result<std::optional<InternalValue>>::ok(std::nullopt);
-            }
             return Result<std::optional<InternalValue>>::ok(std::move(found.value()));
         }
     }
@@ -273,11 +270,10 @@ std::vector<const SSTableMeta*> Dazzle::sst_meta_to_vector() const {
 }
 
 Result<std::optional<SSTableId>> Dazzle::do_compact_work() {
-    auto c_can = policy_->pick(sst_meta_to_vector());
-    if (!c_can.has_value()) {
-        return Result<std::optional<SSTableId>>::ok(std::nullopt);
-    }
-    const auto& candidate = c_can.value();
+    auto task_opt = policy_->pick(sst_meta_to_vector());
+    if (!task_opt.has_value()) return Result<std::optional<SSTableId>>::ok(std::nullopt);
+
+    const auto& candidate = task_opt.value();
     return run_task(CompactionTask{candidate.inputs, SSTableId{mint_sst_id()}, candidate.can_drop_tombstone});
 }
 
@@ -311,7 +307,8 @@ Result<std::optional<SSTableId>> Dazzle::run_task(const CompactionTask& task) {
 }
 
 Result<SSTableId> Dazzle::execute(const CompactionTask& task) {
-    return compactor_.compact(task.inputs, task.output_id.value, task.can_drop_tombstone);
+    auto snapshot = version_set_->get_current();
+    return compactor_.compact(snapshot, task.inputs, task.output_id.value, task.can_drop_tombstone);
 }
 
 Result<void> Dazzle::install_flushed_sst(SSTableId new_id, std::shared_ptr<SSTableReader> reader,
@@ -368,7 +365,9 @@ Result<void> Dazzle::install(const CompactionTask& task) {
 
     /* add the newly generated files */
     auto& reader = sstrr.value();
-    auto footer = reader.get_footer().value();
+    auto f = reader.get_footer();
+    if (!f.has_value()) return Result<void>::err(f.error());
+    auto footer = f.value();
     next_version->sst_readers[task.output_id] = std::make_shared<SSTableReader>(std::move(reader));
     next_version->sst_meta[task.output_id] =
         std::make_shared<SSTableMeta>(task.output_id, footer.size_bytes, footer.entry_count, footer.highest_sequence);
@@ -419,7 +418,9 @@ Result<void> Dazzle::flush() {
     }
 
     auto& reader = sstrr.value();
-    auto footer = reader.get_footer().value();
+    auto f = reader.get_footer();
+    if (!f.has_value()) return Result<void>::err(f.error());
+    auto footer = f.value();
 
     auto current = version_set_->get_current();
     auto next_version = std::make_shared<Version>();
