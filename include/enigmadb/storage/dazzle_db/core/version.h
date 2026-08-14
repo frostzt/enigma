@@ -4,8 +4,6 @@
 #include <map>
 #include <memory>
 #include <optional>
-#include <string>
-#include <vector>
 
 #include "enigmadb/base.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_common.h"
@@ -19,8 +17,6 @@ class Version {
    public:
     std::map<SSTableId, std::shared_ptr<SSTableReader>, SSTableIdComparator> sst_readers;
     std::map<SSTableId, std::shared_ptr<SSTableMeta>, SSTableIdComparator> sst_meta;
-
-    std::vector<std::string> obsolete_file_paths;
 
     Version() = default;
     ~Version() = default;

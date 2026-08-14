@@ -37,6 +37,12 @@ class VersionSet {
         purge_obsolete_files();
     }
 
+   private:
+    std::shared_ptr<Version> current_version_;
+    std::vector<std::shared_ptr<Version>> live_versions_;
+    std::set<std::string> pending_obsolete_files_;
+    std::mutex mu_;
+
     void purge_obsolete_files() {
         /* remove versions that no longer have a read iterator attached to them */
         live_versions_.erase(std::remove_if(live_versions_.begin(), live_versions_.end(),
@@ -64,12 +70,6 @@ class VersionSet {
             ++it;
         }
     }
-
-   private:
-    std::shared_ptr<Version> current_version_;
-    std::vector<std::shared_ptr<Version>> live_versions_;
-    std::set<std::string> pending_obsolete_files_;
-    std::mutex mu_;
 };
 
 }  // namespace enigmadb::dazzle

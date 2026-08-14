@@ -75,26 +75,14 @@ Result<std::optional<InternalValue>> Version::lookup_internal(const storage::Key
 }
 
 Result<std::optional<storage::Value>> Version::lookup(const storage::Key& key) const {
-    for (auto it = sst_readers.rbegin(); it != sst_readers.rend(); ++it) {
-        auto lookup_result = it->second->get(key);
-        if (!lookup_result.has_value()) {
-            return Result<std::optional<storage::Value>>::err(lookup_result.error());
-        }
+    auto result = lookup_internal(key);
+    if (!result.has_value()) return Result<std::optional<storage::Value>>::err(result.error());
 
-        /* TODO: Optimization here once we add more in SST Metadata to check if this key exists here */
-        // auto id = it->first;
-        // if (sst_meta.count(id)) {}
+    auto value = result.value();
+    if (value == std::nullopt) return Result<std::optional<storage::Value>>::ok(std::nullopt);
+    if (value->is_tombstone) return Result<std::optional<storage::Value>>::ok(std::nullopt);
 
-        auto found = lookup_result.value();
-        if (found.has_value()) {
-            if (found.value().is_tombstone) {
-                return Result<std::optional<storage::Value>>::ok(std::nullopt);
-            }
-            return Result<std::optional<storage::Value>>::ok(storage::Value{std::move(found.value().data)});
-        }
-    }
-
-    return Result<std::optional<storage::Value>>::ok(std::nullopt);
+    return Result<std::optional<storage::Value>>::ok(storage::Value{std::move(value->data)});
 }
 
 Result<std::unique_ptr<Dazzle>> Dazzle::open(io::IOEngine& engine, const std::string& data_dir,
@@ -422,18 +410,14 @@ Result<void> Dazzle::flush() {
     if (!f.has_value()) return Result<void>::err(f.error());
     auto footer = f.value();
 
-    auto current = version_set_->get_current();
-    auto next_version = std::make_shared<Version>();
-
-    next_version->sst_readers = current->sst_readers;
-    next_version->sst_meta = current->sst_meta;
-
+    /* Create and install new sstable */
     auto new_id = SSTableId{new_sequence};
-    next_version->sst_readers[new_id] = std::make_shared<SSTableReader>(std::move(reader));
-    next_version->sst_meta[new_id] =
-        std::make_shared<SSTableMeta>(new_id, footer.size_bytes, footer.entry_count, footer.highest_sequence);
+    auto insresult = install_flushed_sst(
+        new_id, std::make_shared<SSTableReader>(std::move(reader)),
+        std::make_shared<SSTableMeta>(new_id, footer.size_bytes, footer.entry_count, footer.highest_sequence));
 
-    version_set_->append_version(next_version);
+    if (!insresult.has_value()) return Result<void>::err(insresult.error());
+
     wal_writer_.emplace(std::move(walwrr.value()));
 
     /* replace with a new empty memtable */
