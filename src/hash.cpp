@@ -37,4 +37,8 @@ uint32_t Hash(const uint8_t* data, size_t n, uint32_t seed) {
     return h;
 }
 
+uint32_t Hash(const char* data, size_t n, uint32_t seed) {
+    return Hash(reinterpret_cast<const uint8_t*>(data), n, seed);
+}
+
 }  // namespace enigmadb
