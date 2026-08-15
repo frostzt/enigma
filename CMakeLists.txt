@@ -35,6 +35,10 @@ else()
   add_compile_options(-O3)
 endif()
 
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  target_compile_options(-Wthread-safety)
+endif()
+
 # --- Testing ---
 
 enable_testing()
