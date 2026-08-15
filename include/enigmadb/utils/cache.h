@@ -58,7 +58,7 @@ class Cache {
     virtual size_t total_charge() const = 0;
 };
 
-Cache* NewLRUCache(size_t capacity);
+Cache* NewLRUCache(size_t capacity, size_t num_shards);
 
 }  // namespace enigmadb::utils
 

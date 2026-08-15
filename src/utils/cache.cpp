@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
 #include <mutex>
 #include <string_view>
 
@@ -266,23 +267,22 @@ void LRUCache::prune() {
     }
 }
 
-static const int kNumShardsBits = 4;
-static const int kNumShards = 1 << kNumShardsBits;
-
 class ShardedLRUCache : public Cache {
    private:
-    LRUCache shard_[kNumShards];
+    size_t num_shards_;
+    std::unique_ptr<LRUCache[]> shard_;
     std::mutex id_mu_;
     uint64_t last_id_;
 
     static inline uint32_t hash_sv(const std::string_view k) { return Hash(k.data(), k.size(), 0); }
 
-    static uint32_t shard(uint32_t hash) { return hash >> (32 - kNumShardsBits); };
+    uint32_t shard(uint32_t hash) { return hash % num_shards_; };
 
    public:
-    explicit ShardedLRUCache(size_t capacity) : last_id_(0) {
-        const size_t per_shard = (capacity + (kNumShards - 1)) / kNumShards;
-        for (size_t i = 0; i < kNumShards; i++) {
+    explicit ShardedLRUCache(size_t capacity, size_t num_shards = 4) : num_shards_(num_shards), last_id_(0) {
+        shard_ = std::make_unique<LRUCache[]>(num_shards_);
+        const size_t per_shard = (capacity + (num_shards_ - 1)) / num_shards_;
+        for (size_t i = 0; i < num_shards_; i++) {
             shard_[i].set_capacity(per_shard);
         }
     }
@@ -318,14 +318,14 @@ class ShardedLRUCache : public Cache {
     }
 
     void prune() override {
-        for (size_t i = 0; i < kNumShards; i++) {
+        for (size_t i = 0; i < num_shards_; i++) {
             shard_[i].prune();
         }
     }
 
     size_t total_charge() const override {
         size_t total = 0;
-        for (size_t i = 0; i < kNumShards; i++) {
+        for (size_t i = 0; i < num_shards_; i++) {
             total += shard_[i].total_charge();
         }
         return total;
@@ -334,6 +334,6 @@ class ShardedLRUCache : public Cache {
 
 }  // end namespace
 
-Cache* NewLRUCache(size_t capacity) { return new ShardedLRUCache(capacity); };
+Cache* NewLRUCache(size_t capacity, size_t num_shards = 4) { return new ShardedLRUCache(capacity, num_shards); };
 
 }  // namespace enigmadb::utils
