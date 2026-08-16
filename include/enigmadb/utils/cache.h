@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <string_view>
 
 namespace enigmadb::utils {
@@ -58,7 +59,7 @@ class Cache {
     virtual size_t total_charge() const = 0;
 };
 
-Cache* NewLRUCache(size_t capacity, size_t num_shards);
+std::unique_ptr<Cache> NewLRUCache(size_t capacity, size_t num_shards);
 
 }  // namespace enigmadb::utils
 

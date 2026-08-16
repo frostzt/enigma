@@ -334,6 +334,8 @@ class ShardedLRUCache : public Cache {
 
 }  // end namespace
 
-Cache* NewLRUCache(size_t capacity, size_t num_shards = 4) { return new ShardedLRUCache(capacity, num_shards); };
+std::unique_ptr<Cache> NewLRUCache(size_t capacity, size_t num_shards = 4) {
+    return std::make_unique<ShardedLRUCache>(capacity, num_shards);
+};
 
 }  // namespace enigmadb::utils
