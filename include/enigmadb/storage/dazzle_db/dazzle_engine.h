@@ -27,6 +27,7 @@
 #include "enigmadb/storage/dazzle_db/memtable/memtable.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_common.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_reader.h"
+#include "enigmadb/storage/dazzle_db/sstable/table_cache.h"
 #include "enigmadb/storage/dazzle_db/wal/wal_writer.h"
 #include "enigmadb/storage/key.h"
 #include "enigmadb/storage/storage_engine.h"
@@ -59,6 +60,8 @@ class Dazzle : public storage::StorageEngine {
      * Version management
      * --------------------------------------------------*/
     std::unique_ptr<VersionSet> version_set_;
+
+    std::unique_ptr<TableCache> table_cache_;
 
     Result<void> install_flushed_sst(SSTableId new_id, std::shared_ptr<SSTableReader> reader,
                                      std::shared_ptr<SSTableMeta> meta);
@@ -106,12 +109,14 @@ class Dazzle : public storage::StorageEngine {
            Memtable active_memtable,
            std::map<SSTableId, std::shared_ptr<SSTableReader>, SSTableIdComparator> sst_readers,
            std::map<SSTableId, std::shared_ptr<SSTableMeta>, SSTableIdComparator> sst_meta, uint64_t next_wal_seq,
-           uint64_t next_sst_seq, uint64_t highest_sequence = 0, std::unique_ptr<CompactionPolicy> policy = nullptr)
+           uint64_t next_sst_seq, std::unique_ptr<TableCache> tc, uint64_t highest_sequence = 0,
+           std::unique_ptr<CompactionPolicy> policy = nullptr)
         : engine_(engine),
           data_dir_(data_dir),
           wal_writer_(std::move(wal_writer)),
           memtable_size_(memtable_size),
           active_memtable_(std::move(active_memtable)),
+          table_cache_(std::move(tc)),
           lsn_{highest_sequence},
           next_wal_seq_{next_wal_seq},
           next_sst_seq_{next_sst_seq},
@@ -170,11 +175,17 @@ class Dazzle : public storage::StorageEngine {
      */
     Result<uint64_t> recover();
 
+    /* TODO: Stats */
+
    public:
     Dazzle(const Dazzle&) = delete;
     Dazzle& operator=(const Dazzle&) = delete;
     Dazzle(Dazzle&&) = delete;
     Dazzle& operator=(Dazzle&&) = delete;
+
+    /* --------------------------------------------------
+     * Stats
+     * --------------------------------------------------*/
 
     /* --------------------------------------------------
      * Compaction
@@ -219,7 +230,8 @@ class Dazzle : public storage::StorageEngine {
      */
     static Result<std::unique_ptr<Dazzle>> open(io::IOEngine& engine, const std::string& data_dir,
                                                 const uint64_t memtable_size,
-                                                std::unique_ptr<CompactionPolicy> policy = nullptr);
+                                                std::unique_ptr<CompactionPolicy> policy = nullptr,
+                                                size_t max_table_cache_bytes_mb = 32, size_t max_file_shards = 16);
 
     /**
      * @brief Writes a column value.
