@@ -23,12 +23,15 @@
 #include "enigmadb/storage/dazzle_db/sstable/sstable_common.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_reader.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_writer.h"
+#include "enigmadb/storage/dazzle_db/sstable/table_cache.h"
 #include "enigmadb/storage/dazzle_db/wal/wal_reader.h"
 #include "enigmadb/storage/dazzle_db/wal/wal_record.h"
 #include "enigmadb/storage/dazzle_db/wal/wal_writer.h"
 #include "enigmadb/storage/key.h"
 #include "enigmadb/storage/value.h"
 #include "enigmadb/utils.h"
+#include "enigmadb/utils/cache.h"
+#include "enigmadb/utils/numbers.h"
 
 namespace fs = std::filesystem;
 
@@ -86,7 +89,8 @@ Result<std::optional<storage::Value>> Version::lookup(const storage::Key& key) c
 }
 
 Result<std::unique_ptr<Dazzle>> Dazzle::open(io::IOEngine& engine, const std::string& data_dir,
-                                             const uint64_t memtable_size, std::unique_ptr<CompactionPolicy> policy) {
+                                             const uint64_t memtable_size, std::unique_ptr<CompactionPolicy> policy,
+                                             size_t max_table_cache_bytes_mb, size_t max_file_shards) {
     if (trim_string(data_dir) == "") {
         return Result<std::unique_ptr<Dazzle>>::err(Error{ErrorCode::BAD_CONFIG, "Data directory was not specified."});
     }
@@ -177,11 +181,17 @@ Result<std::unique_ptr<Dazzle>> Dazzle::open(io::IOEngine& engine, const std::st
         return Result<std::unique_ptr<Dazzle>>::err(wal_writer_res.error());
     }
 
+    /* Init LRU Cache for TableCache */
+    auto cache = utils::NewLRUCache(mb_to_b(max_table_cache_bytes_mb), max_file_shards);
+    auto tcr = TableCache::create(engine, data_dir, std::move(cache));
+    if (!tcr.has_value()) return Result<std::unique_ptr<Dazzle>>::err(tcr.error());
+
     /* FIXME: Need to revisit this later right now its really bad here with the
      * sequences */
-    auto storage_engine = std::unique_ptr<Dazzle>(new Dazzle(
-        engine, data_dir, std::move(wal_writer_res.value()), memtable_size, std::move(mtable), std::move(sst_readers),
-        std::move(sst_meta), highest_wal_seq + 1, highest_sst_seq + 1, max_sst_sequence_found + 1, std::move(policy)));
+    auto storage_engine = std::unique_ptr<Dazzle>(
+        new Dazzle(engine, data_dir, std::move(wal_writer_res.value()), memtable_size, std::move(mtable),
+                   std::move(sst_readers), std::move(sst_meta), highest_wal_seq + 1, highest_sst_seq + 1,
+                   std::move(tcr.value()), max_sst_sequence_found + 1, std::move(policy)));
 
     /* try and recover */
     auto recover_result = storage_engine->recover();

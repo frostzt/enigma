@@ -47,11 +47,13 @@ Result<std::shared_ptr<SSTableReader>> TableCache::get(SSTableId id) {
     auto h = cache_->lookup(key);
     if (h != nullptr) {
         /* HIT: return */
+        stats_.total_cache_hits_++;
         return make_reader_return(h);
     }
 
     /* MISS: create a new reader and insert into cache
      * NOTE: If two threads were to miss both will open this file and write it */
+    stats_.total_cache_miss_++;
     auto r = SSTableReader::create(engine_, sst_path(data_dir_, id.value));
     if (!r.has_value()) return Result<std::shared_ptr<SSTableReader>>::err(r.error());
 
@@ -64,12 +66,10 @@ Result<std::shared_ptr<SSTableReader>> TableCache::get(SSTableId id) {
 
 /* stops serving this sstable from cache, this doesn't mean if any reader holds it would be destroyed too */
 void TableCache::evict(SSTableId id) {
-    /* construct the key */
     uint8_t buf[sizeof(id.value)];
-
     auto key = encode_key(id, buf);
-
     cache_->erase(key);
+    stats_.total_evicted_++;
 }
 
 }  // namespace enigmadb::dazzle

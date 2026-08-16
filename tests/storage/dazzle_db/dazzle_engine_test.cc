@@ -19,8 +19,7 @@ TEST(Dazzle, basic_flow) {
     std::string data_dir_path = "./storage_engine_tests";
     Tempdir testdir(data_dir_path);
 
-    auto storage_engine_result =
-        dazzle::Dazzle::open(engine, data_dir_path, 1024);
+    auto storage_engine_result = dazzle::Dazzle::open(engine, data_dir_path, 1024);
     ASSERT_TRUE(storage_engine_result.has_value());
 
     auto& storage_engine = storage_engine_result.value();
@@ -41,23 +40,18 @@ TEST(Dazzle, flush_and_read_sstable) {
     std::string data_dir_path = "./storage_engine_tests";
     Tempdir testdir(data_dir_path);
 
-    auto storage_engine_result =
-        dazzle::Dazzle::open(engine, data_dir_path, 512);
+    auto storage_engine_result = dazzle::Dazzle::open(engine, data_dir_path, 512);
     ASSERT_TRUE(storage_engine_result.has_value());
 
     auto& storage_engine = storage_engine_result.value();
 
     for (size_t i = 10; i < 160; ++i) {
-        auto ki = make_key("alice", "2026-" + std::to_string(i),
-                           "age" + std::to_string(i));
-        ASSERT_TRUE(
-            storage_engine->put(ki, string_to_bytes("12" + std::to_string(i)))
-                .has_value());
+        auto ki = make_key("alice", "2026-" + std::to_string(i), "age" + std::to_string(i));
+        ASSERT_TRUE(storage_engine->put(ki, string_to_bytes("12" + std::to_string(i))).has_value());
     }
 
     for (size_t i = 10; i < 160; ++i) {
-        auto ki = make_key("alice", "2026-" + std::to_string(i),
-                           "age" + std::to_string(i));
+        auto ki = make_key("alice", "2026-" + std::to_string(i), "age" + std::to_string(i));
         auto result = storage_engine->get(ki);
 
         ASSERT_TRUE(result.has_value());
@@ -75,22 +69,19 @@ TEST(Dazzle, crash_recovery) {
         /* store and crash */
         std::string data_dir_path = "./storage_engine_tests";
         io::PosixIOEngine engine;
-        auto storage_engine_result =
-            dazzle::Dazzle::open(engine, data_dir_path, 500000);
+        auto storage_engine_result = dazzle::Dazzle::open(engine, data_dir_path, 500000);
         ASSERT_TRUE(storage_engine_result.has_value());
 
         auto& storage_engine = storage_engine_result.value();
 
         auto key = make_key("alice", "2026-05", "age");
-        ASSERT_TRUE(
-            storage_engine->put(key, string_to_bytes("12")).has_value());
+        ASSERT_TRUE(storage_engine->put(key, string_to_bytes("12")).has_value());
     }
 
     {
         std::string data_dir_path = "./storage_engine_tests";
         io::PosixIOEngine engine;
-        auto storage_engine_result =
-            dazzle::Dazzle::open(engine, data_dir_path, 500000);
+        auto storage_engine_result = dazzle::Dazzle::open(engine, data_dir_path, 500000);
 
         ASSERT_TRUE(storage_engine_result.has_value());
 
@@ -112,8 +103,7 @@ TEST(Dazzle, delete_shadowing_across_layers) {
     std::string data_dir_path = "./storage_engine_tests";
     Tempdir testdir(data_dir_path);
 
-    auto storage_engine_result =
-        dazzle::Dazzle::open(engine, data_dir_path, 512);
+    auto storage_engine_result = dazzle::Dazzle::open(engine, data_dir_path, 512);
     ASSERT_TRUE(storage_engine_result.has_value());
 
     auto& storage_engine = storage_engine_result.value();
@@ -145,8 +135,7 @@ TEST(Dazzle, handle_empty_memtable_flush) {
     std::string data_dir_path = "./storage_engine_tests";
     Tempdir testdir(data_dir_path);
 
-    auto storage_engine_result =
-        dazzle::Dazzle::open(engine, data_dir_path, 512);
+    auto storage_engine_result = dazzle::Dazzle::open(engine, data_dir_path, 512);
     ASSERT_TRUE(storage_engine_result.has_value());
 
     auto& storage_engine = storage_engine_result.value();
@@ -155,8 +144,7 @@ TEST(Dazzle, handle_empty_memtable_flush) {
 
     std::filesystem::path p = "./storage_engine_tests/sst";
 
-    auto count = std::distance(std::filesystem::directory_iterator(p),
-                               std::filesystem::directory_iterator{});
+    auto count = std::distance(std::filesystem::directory_iterator(p), std::filesystem::directory_iterator{});
     ASSERT_TRUE(count == 0);
 }
 
@@ -166,8 +154,7 @@ TEST(Dazzle, high_water_mark_from_sstable) {
 
     {
         io::PosixIOEngine engine;
-        auto storage_engine_result =
-            dazzle::Dazzle::open(engine, "./storage_engine_tests", 512);
+        auto storage_engine_result = dazzle::Dazzle::open(engine, "./storage_engine_tests", 512);
         ASSERT_TRUE(storage_engine_result.has_value());
 
         auto& storage_engine = storage_engine_result.value();
@@ -184,8 +171,7 @@ TEST(Dazzle, high_water_mark_from_sstable) {
 
     {
         io::PosixIOEngine engine;
-        auto storage_engine_result =
-            dazzle::Dazzle::open(engine, "./storage_engine_tests", 512);
+        auto storage_engine_result = dazzle::Dazzle::open(engine, "./storage_engine_tests", 512);
         ASSERT_TRUE(storage_engine_result.has_value());
 
         auto& storage_engine = storage_engine_result.value();
@@ -193,8 +179,7 @@ TEST(Dazzle, high_water_mark_from_sstable) {
         ASSERT_EQ(storage_engine->latest_lsn(), 5);
 
         auto k1 = make_key("bob", "2026-05", "name");
-        ASSERT_TRUE(storage_engine->put(k1, string_to_bytes("Bob the Builder"))
-                        .has_value());
+        ASSERT_TRUE(storage_engine->put(k1, string_to_bytes("Bob the Builder")).has_value());
 
         ASSERT_EQ(storage_engine->latest_lsn(), 6);
 
@@ -223,8 +208,7 @@ TEST(Dazzle, high_water_mark_from_wal_replay) {
 
     {
         io::PosixIOEngine engine;
-        auto storage_engine_result =
-            dazzle::Dazzle::open(engine, "./storage_engine_tests", 512);
+        auto storage_engine_result = dazzle::Dazzle::open(engine, "./storage_engine_tests", 512);
         ASSERT_TRUE(storage_engine_result.has_value());
 
         auto& storage_engine = storage_engine_result.value();
@@ -240,8 +224,7 @@ TEST(Dazzle, high_water_mark_from_wal_replay) {
 
     {
         io::PosixIOEngine engine;
-        auto storage_engine_result =
-            dazzle::Dazzle::open(engine, "./storage_engine_tests", 512);
+        auto storage_engine_result = dazzle::Dazzle::open(engine, "./storage_engine_tests", 512);
         ASSERT_TRUE(storage_engine_result.has_value());
 
         auto& storage_engine = storage_engine_result.value();
@@ -253,8 +236,7 @@ TEST(Dazzle, high_water_mark_from_wal_replay) {
         auto k2 = make_key("john", "2026-05", "age");
         auto k3 = make_key("sourav", "2026-05", "age");
 
-        ASSERT_TRUE(storage_engine->put(kb, string_to_bytes("Bob the Builder"))
-                        .has_value());
+        ASSERT_TRUE(storage_engine->put(kb, string_to_bytes("Bob the Builder")).has_value());
 
         ASSERT_EQ(storage_engine->latest_lsn(), 5);
 
@@ -279,8 +261,7 @@ TEST(Dazzle, high_water_mark_from_sstable_and_wal_replay) {
 
     {
         io::PosixIOEngine engine;
-        auto storage_engine_result =
-            dazzle::Dazzle::open(engine, "./storage_engine_tests", 512);
+        auto storage_engine_result = dazzle::Dazzle::open(engine, "./storage_engine_tests", 512);
         ASSERT_TRUE(storage_engine_result.has_value());
 
         auto& storage_engine = storage_engine_result.value();
@@ -303,8 +284,7 @@ TEST(Dazzle, high_water_mark_from_sstable_and_wal_replay) {
 
     {
         io::PosixIOEngine engine;
-        auto storage_engine_result =
-            dazzle::Dazzle::open(engine, "./storage_engine_tests", 512);
+        auto storage_engine_result = dazzle::Dazzle::open(engine, "./storage_engine_tests", 512);
         ASSERT_TRUE(storage_engine_result.has_value());
 
         auto& storage_engine = storage_engine_result.value();
@@ -318,8 +298,7 @@ TEST(Dazzle, high_water_mark_from_sstable_and_wal_replay) {
         auto k4 = make_key("gourav", "2026-05", "age");
         auto k5 = make_key("tuffy", "2026-05", "age");
 
-        ASSERT_TRUE(storage_engine->put(kb, string_to_bytes("Bob the Builder"))
-                        .has_value());
+        ASSERT_TRUE(storage_engine->put(kb, string_to_bytes("Bob the Builder")).has_value());
 
         ASSERT_EQ(storage_engine->latest_lsn(), 7);
 
@@ -352,17 +331,12 @@ TEST(Dazzle, high_water_mark_from_sstable_and_wal_replay_with_tombstone) {
 
     {
         io::PosixIOEngine engine;
-        auto storage_engine_result =
-            dazzle::Dazzle::open(engine, "./storage_engine_tests", 512);
+        auto storage_engine_result = dazzle::Dazzle::open(engine, "./storage_engine_tests", 512);
         ASSERT_TRUE(storage_engine_result.has_value());
 
         auto& storage_engine = storage_engine_result.value();
-        ASSERT_TRUE(
-            storage_engine
-                ->set_compaction_policy(
-                    std::make_unique<dazzle::SizeTieredCompactionPolicy>(16,
-                                                                         20))
-                .has_value());
+        ASSERT_TRUE(storage_engine->set_compaction_policy(std::make_unique<dazzle::SizeTieredCompactionPolicy>(16, 20))
+                        .has_value());
 
         auto k1 = make_key("alice", "2026-05", "age");
         auto k2 = make_key("john", "2026-05", "age");
@@ -383,17 +357,12 @@ TEST(Dazzle, high_water_mark_from_sstable_and_wal_replay_with_tombstone) {
 
     {
         io::PosixIOEngine engine;
-        auto storage_engine_result =
-            dazzle::Dazzle::open(engine, "./storage_engine_tests", 512);
+        auto storage_engine_result = dazzle::Dazzle::open(engine, "./storage_engine_tests", 512);
         ASSERT_TRUE(storage_engine_result.has_value());
 
         auto& storage_engine = storage_engine_result.value();
-        ASSERT_TRUE(
-            storage_engine
-                ->set_compaction_policy(
-                    std::make_unique<dazzle::SizeTieredCompactionPolicy>(16,
-                                                                         20))
-                .has_value());
+        ASSERT_TRUE(storage_engine->set_compaction_policy(std::make_unique<dazzle::SizeTieredCompactionPolicy>(16, 20))
+                        .has_value());
         ASSERT_EQ(storage_engine->latest_lsn(), 7);
 
         auto kb = make_key("bob", "2025-05", "name");
@@ -403,8 +372,7 @@ TEST(Dazzle, high_water_mark_from_sstable_and_wal_replay_with_tombstone) {
         auto k4 = make_key("gourav", "2026-05", "age");
         auto k5 = make_key("tuffy", "2026-05", "age");
 
-        ASSERT_TRUE(storage_engine->put(kb, string_to_bytes("Bob the Builder"))
-                        .has_value());
+        ASSERT_TRUE(storage_engine->put(kb, string_to_bytes("Bob the Builder")).has_value());
 
         ASSERT_EQ(storage_engine->latest_lsn(), 8);
 
