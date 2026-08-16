@@ -42,10 +42,10 @@ class SSTableReader {
     io::IOEngine& engine_;
     io::FileHandle fh_;
     std::string path_;
-    std::vector<IndexEntry>
-        index_entries_;  ///< In-memory copy of the index block.
+    std::vector<IndexEntry> index_entries_;  ///< In-memory copy of the index block.
     BloomFilter bloom_filter_;
     SSTFooter footer_;
+    size_t memory_usage_;
 
     /**
      * @brief Private constructor; use SSTableReader::create() instead.
@@ -55,17 +55,19 @@ class SSTableReader {
      * @param path         Filesystem path of the SSTable.
      * @param idx_entries  Decoded index entries (ownership is moved in).
      */
-    SSTableReader(io::IOEngine& engine, io::FileHandle fh,
-                  const std::string& path, std::vector<IndexEntry> idx_entries,
-                  BloomFilter blf, SSTFooter footer)
+    SSTableReader(io::IOEngine& engine, io::FileHandle fh, const std::string& path, std::vector<IndexEntry> idx_entries,
+                  BloomFilter blf, SSTFooter footer, size_t mem_consumed)
         : engine_(engine),
           fh_(std::move(fh)),
           path_(path),
           index_entries_(std::move(idx_entries)),
           bloom_filter_(std::move(blf)),
-          footer_(std::move(footer)) {}
+          footer_(std::move(footer)),
+          memory_usage_(mem_consumed) {}
 
    public:
+    size_t approximate_memory_usage() const;
+
     /**
      * @brief Opens an SSTable file and returns a ready-to-use reader.
      *
@@ -81,8 +83,7 @@ class SSTableReader {
      *         cannot be opened, is too small, has invalid magic, a
      *         checksum mismatch, or a malformed index block.
      */
-    static Result<SSTableReader> create(io::IOEngine& engine,
-                                        const std::string& path);
+    static Result<SSTableReader> create(io::IOEngine& engine, const std::string& path);
 
     /**
      * @brief Point lookup for a single composite key.
@@ -106,15 +107,11 @@ class SSTableReader {
      */
     Result<std::optional<InternalValue>> get(const storage::Key& key);
 
-    Result<SSTFooter> get_footer() const {
-        return Result<SSTFooter>::ok(footer_);
-    };
+    Result<SSTFooter> get_footer() const { return Result<SSTFooter>::ok(footer_); };
 
     std::string_view get_path() const { return path_; }
 
-    SSTableIterator iterator() const {
-        return SSTableIterator(engine_, fh_, index_entries_);
-    }
+    SSTableIterator iterator() const { return SSTableIterator(engine_, fh_, index_entries_); }
 };
 
 }  // namespace enigmadb::dazzle
