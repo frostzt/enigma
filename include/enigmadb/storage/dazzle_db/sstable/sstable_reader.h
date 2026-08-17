@@ -21,8 +21,8 @@
 #include "enigmadb/base.h"
 #include "enigmadb/bloom_filter.h"
 #include "enigmadb/io/io_engine.h"
+#include "enigmadb/storage/dazzle_db/internal_value.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_common.h"
-#include "enigmadb/storage/dazzle_db/sstable/sstable_iterator.h"
 
 namespace enigmadb::dazzle {
 
@@ -109,9 +109,12 @@ class SSTableReader {
 
     Result<SSTFooter> get_footer() const { return Result<SSTFooter>::ok(footer_); };
 
+    /// Get path returns a NON-OWNING std::string_view to the path of this reader's sstfile
     std::string_view get_path() const { return path_; }
 
-    SSTableIterator iterator() const { return SSTableIterator(engine_, fh_, index_entries_); }
+    io::IOEngine& engine() const { return engine_; };
+    const io::FileHandle& file_handle() const { return fh_; };
+    const std::vector<IndexEntry>& index_entries() const { return index_entries_; };
 };
 
 }  // namespace enigmadb::dazzle

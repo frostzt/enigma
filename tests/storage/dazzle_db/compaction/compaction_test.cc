@@ -5,6 +5,8 @@
 #include "enigmadb/io/posix_io_engine.h"
 #include "enigmadb/storage/dazzle_db/compaction/compaction_policy.h"
 #include "enigmadb/storage/dazzle_db/dazzle_engine.h"
+#include "enigmadb/storage/dazzle_db/sstable/sstable_iterator.h"
+#include "enigmadb/storage/dazzle_db/sstable/sstable_reader.h"
 #include "enigmadb/tempdir.h"
 #include "enigmadb/utils.h"
 #include "gtest/gtest.h"
@@ -145,11 +147,12 @@ TEST(compaction, full_compaction_manual) {
     auto sstr = dazzle::SSTableReader::create(engine, dazzle::sst_path(testdir.path, c_res.value().value().value));
     ASSERT_TRUE(sstr.has_value());
     auto& sst_reader = sstr.value();
-    auto sst_itr = sst_reader.iterator();
+    auto sst_itr =
+        std::make_unique<dazzle::SSTableIterator>(std::make_shared<dazzle::SSTableReader>(std::move(sst_reader)));
 
     size_t found = 0;
-    for (sst_itr.seek_to_first(); sst_itr.valid(); sst_itr.next()) {
-        const auto value = sst_itr.value();
+    for (sst_itr->seek_to_first(); sst_itr->valid(); sst_itr->next()) {
+        const auto value = sst_itr->value();
         ASSERT_FALSE(value.is_tombstone);
         found++;
     }

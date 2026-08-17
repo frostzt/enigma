@@ -9,6 +9,7 @@
 #include "enigmadb/storage/dazzle_db/core/version.h"
 #include "enigmadb/storage/dazzle_db/merge_iterator.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_common.h"
+#include "enigmadb/storage/dazzle_db/sstable/sstable_iterator.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_reader.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_writer.h"
 
@@ -50,7 +51,7 @@ Result<SSTableId> Compactor::compact(std::shared_ptr<const Version> snapshot, co
     std::vector<std::unique_ptr<SSTableIterator>> owned_itrs;
     owned_itrs.reserve(readers.size());
     for (const auto& reader : readers) {
-        owned_itrs.push_back(std::make_unique<SSTableIterator>(reader->iterator()));
+        owned_itrs.push_back(std::make_unique<SSTableIterator>(reader));
     }
 
     /* borrows from readers above, heap stable tho */

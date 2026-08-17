@@ -33,12 +33,12 @@ void SSTableIterator::set_error(Error err) {
 }
 
 bool SSTableIterator::load_block() {
-    const auto& entry = index_entries_[current_block_idx_];
+    const auto& entry = reader_->index_entries()[current_block_idx_];
     block_buffer_.resize(entry.block_size);
     block_offset_ = 0;
 
-    auto res = engine_.read(fh_, entry.block_size, block_buffer_.data(),
-                            entry.block_offset);
+    auto res =
+        reader_->engine().read(reader_->file_handle(), entry.block_size, block_buffer_.data(), entry.block_offset);
     if (!res.has_value()) {
         set_error(res.error());
         return false;
@@ -53,7 +53,7 @@ void SSTableIterator::seek_to_first() {
     error_ = std::nullopt;
     valid_ = false;
 
-    if (index_entries_.empty()) {
+    if (reader_->index_entries().empty()) {
         return;
     }
 
@@ -68,12 +68,11 @@ void SSTableIterator::next() {
     if (error_.has_value()) return;
 
     /* exhausted the current block, move to the next one */
-    if (!block_buffer_.empty() &&
-        block_offset_ >= index_entries_[current_block_idx_].block_size) {
+    if (!block_buffer_.empty() && block_offset_ >= reader_->index_entries()[current_block_idx_].block_size) {
         current_block_idx_++;
 
         /* no more blocks, iteration complete */
-        if (current_block_idx_ >= index_entries_.size()) {
+        if (current_block_idx_ >= reader_->index_entries().size()) {
             valid_ = false;
             return;
         }
@@ -89,12 +88,11 @@ void SSTableIterator::next() {
         return;
     }
 
-    auto block_size = index_entries_[current_block_idx_].block_size;
+    auto block_size = reader_->index_entries()[current_block_idx_].block_size;
 
     /* extract the key */
     if (block_offset_ + 4 > block_size) {
-        set_error(
-            Error{ErrorCode::BAD_FILE, "out of range read for key length"});
+        set_error(Error{ErrorCode::BAD_FILE, "out of range read for key length"});
         return;
     }
 
@@ -107,15 +105,13 @@ void SSTableIterator::next() {
     }
 
     /* assign key as the current key */
-    current_key_.assign(block_buffer_.data() + block_offset_,
-                        block_buffer_.data() + block_offset_ + key_len);
+    current_key_.assign(block_buffer_.data() + block_offset_, block_buffer_.data() + block_offset_ + key_len);
 
     block_offset_ += key_len;
 
     /* extract the value */
     if (block_offset_ + 4 > block_size) {
-        set_error(
-            Error{ErrorCode::BAD_FILE, "out of range read for value length"});
+        set_error(Error{ErrorCode::BAD_FILE, "out of range read for value length"});
         return;
     }
 
@@ -128,20 +124,17 @@ void SSTableIterator::next() {
     }
 
     /* assign value as the current value */
-    current_value_.data.assign(block_buffer_.data() + block_offset_,
-                               block_buffer_.data() + block_offset_ + v_len);
+    current_value_.data.assign(block_buffer_.data() + block_offset_, block_buffer_.data() + block_offset_ + v_len);
 
     block_offset_ += v_len;
 
     /* decode tombstone flag */
     if (block_offset_ + 1 > block_size) {
-        set_error(
-            Error{ErrorCode::BAD_FILE, "out of range read for tombstone"});
+        set_error(Error{ErrorCode::BAD_FILE, "out of range read for tombstone"});
         return;
     }
 
-    current_value_.is_tombstone =
-        decode_uint8(block_buffer_.data(), block_offset_);
+    current_value_.is_tombstone = decode_uint8(block_buffer_.data(), block_offset_);
     block_offset_ += 1;
 
     /* decode sequence */
@@ -150,8 +143,7 @@ void SSTableIterator::next() {
         return;
     }
 
-    current_value_.sequence =
-        decode_uint64(block_buffer_.data(), block_offset_);
+    current_value_.sequence = decode_uint64(block_buffer_.data(), block_offset_);
     block_offset_ += 8;
 
     valid_ = true;
