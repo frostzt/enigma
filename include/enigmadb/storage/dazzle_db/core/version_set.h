@@ -8,14 +8,17 @@
 #include <utility>
 #include <vector>
 
+#include "enigmadb/base.h"
 #include "enigmadb/storage/dazzle_db/core/version.h"
+#include "enigmadb/storage/dazzle_db/core/version_edit.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_common.h"
 
 namespace enigmadb::dazzle {
 
 class VersionSet {
    public:
-    VersionSet() : current_version_(std::make_shared<const Version>()) {}
+    VersionSet(std::map<SSTableId, SSTableMeta, SSTableIdComparator> sst_meta)
+        : current_version_(std::make_shared<const Version>(std::move(sst_meta))) {}
 
     ~VersionSet() = default;
 
@@ -36,6 +39,26 @@ class VersionSet {
         }
 
         return purge_obsolete_files();
+    }
+
+    Result<std::vector<SSTableId>> apply(VersionEdit edit) {
+        std::lock_guard<std::mutex> lock(mu_);
+
+        auto new_map = current_version_->files();
+
+        /* remove all the removed files */
+        for (const auto& id : edit.removed) {
+            new_map.erase(id);
+        }
+
+        for (const auto& meta : edit.added) {
+            new_map[meta.id] = meta;
+        }
+
+        auto next_version = std::make_shared<Version>(std::move(new_map));
+        auto published = append_version(next_version);
+
+        return Result<std::vector<SSTableId>>::ok(published);
     }
 
    private:

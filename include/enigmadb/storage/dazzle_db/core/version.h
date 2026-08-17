@@ -15,7 +15,7 @@ namespace enigmadb::dazzle {
 
 class Version {
    public:
-    Version() = default;
+    Version(std::map<SSTableId, SSTableMeta, SSTableIdComparator> sst_meta) : sst_meta_(std::move(sst_meta)) {};
     ~Version() = default;
 
     Result<std::optional<storage::Value>> lookup(const storage::Key& key, TableCache& cache) const;
@@ -23,16 +23,16 @@ class Version {
 
     std::vector<SSTableMeta> sst_meta_to_vector() const {
         std::vector<SSTableMeta> metas;
-        for (const auto& [id, meta] : sst_meta) {
+        for (const auto& [id, meta] : sst_meta_) {
             metas.push_back(meta);
         }
         return metas;
     }
 
-    const std::map<SSTableId, SSTableMeta, SSTableIdComparator>& files() const { return sst_meta; }
+    const std::map<SSTableId, SSTableMeta, SSTableIdComparator>& files() const { return sst_meta_; }
 
    private:
-    std::map<SSTableId, SSTableMeta, SSTableIdComparator> sst_meta;
+    std::map<SSTableId, SSTableMeta, SSTableIdComparator> sst_meta_;
 };
 
 }  // namespace enigmadb::dazzle
