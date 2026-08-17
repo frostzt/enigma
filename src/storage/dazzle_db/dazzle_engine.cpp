@@ -92,7 +92,7 @@ Result<std::unique_ptr<Dazzle>> Dazzle::open(io::IOEngine& engine, const std::st
                                              const uint64_t memtable_size, std::unique_ptr<CompactionPolicy> policy,
                                              size_t max_table_cache_bytes_mb, size_t max_file_shards) {
     if (trim_string(data_dir) == "") {
-        return Result<std::unique_ptr<Dazzle>>::err(Error{ErrorCode::BAD_CONFIG, "Data directory was not specified."});
+        return Result<std::unique_ptr<Dazzle>>::err(Error::bad_config("Data directory was not specified."));
     }
 
     /* create dirs if they don't exist */
@@ -100,13 +100,13 @@ Result<std::unique_ptr<Dazzle>> Dazzle::open(io::IOEngine& engine, const std::st
     fs::path sst_dir_path = data_dir + "/sst";
     if (!fs::is_directory(wal_dir_path)) {
         if (!fs::create_directory(wal_dir_path)) {
-            return Result<std::unique_ptr<Dazzle>>::err(Error{ErrorCode::UNEXPECTED_ERR, "failed to create wal dir"});
+            return Result<std::unique_ptr<Dazzle>>::err(Error::unexpected("failed to create wal dir"));
         }
     }
 
     if (!fs::is_directory(sst_dir_path)) {
         if (!fs::create_directory(sst_dir_path)) {
-            return Result<std::unique_ptr<Dazzle>>::err(Error{ErrorCode::UNEXPECTED_ERR, "failed to create sst dir"});
+            return Result<std::unique_ptr<Dazzle>>::err(Error::unexpected("failed to create sst dir"));
         }
     }
 
