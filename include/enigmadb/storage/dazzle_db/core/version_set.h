@@ -53,12 +53,12 @@ class VersionSet {
 
         /* ssts needed by surviving versions */
         std::set<SSTableId> live_ids;
-        for (const auto& [id, _] : current_version_->sst_meta) {
+        for (const auto& [id, _] : current_version_->files()) {
             live_ids.insert(id);
         }
 
         for (const auto& ver : live_versions_) {
-            for (const auto& [id, _] : ver->sst_meta) {
+            for (const auto& [id, _] : ver->files()) {
                 live_ids.insert(id);
             }
         }

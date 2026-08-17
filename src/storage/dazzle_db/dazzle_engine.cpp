@@ -57,9 +57,13 @@ std::string Dazzle::sst_path(uint64_t seq) {
     return ss.str();
 }
 
-Result<std::optional<InternalValue>> Version::lookup_internal(const storage::Key& key) const {
-    for (auto it = sst_readers.rbegin(); it != sst_readers.rend(); ++it) {
-        auto lookup_result = it->second->get(key);
+Result<std::optional<InternalValue>> Version::lookup_internal(const storage::Key& key, TableCache& cache) const {
+    for (auto it = sst_meta.rbegin(); it != sst_meta.rend(); ++it) {
+        auto rr = cache.get(it->first);
+        if (!rr.has_value()) return Result<std::optional<InternalValue>>::err(rr.error());
+        auto& reader = rr.value();
+
+        auto lookup_result = reader->get(key);
         if (!lookup_result.has_value()) {
             return Result<std::optional<InternalValue>>::err(lookup_result.error());
         }
@@ -77,8 +81,8 @@ Result<std::optional<InternalValue>> Version::lookup_internal(const storage::Key
     return Result<std::optional<InternalValue>>::ok(std::nullopt);
 }
 
-Result<std::optional<storage::Value>> Version::lookup(const storage::Key& key) const {
-    auto result = lookup_internal(key);
+Result<std::optional<storage::Value>> Version::lookup(const storage::Key& key, TableCache& cache) const {
+    auto result = lookup_internal(key, cache);
     if (!result.has_value()) return Result<std::optional<storage::Value>>::err(result.error());
 
     auto value = result.value();
@@ -258,13 +262,9 @@ Result<void> Dazzle::put(const storage::Key& key, const std::optional<std::span<
     return Result<void>::ok();
 }
 
-std::vector<const SSTableMeta*> Dazzle::sst_meta_to_vector() const {
-    std::vector<const SSTableMeta*> metas;
+std::vector<SSTableMeta> Dazzle::sst_meta_to_vector() const {
     auto current = version_set_->get_current();
-    for (const auto& [id, meta] : current->sst_meta) {
-        metas.push_back(meta.get());
-    }
-    return metas;
+    return current->sst_meta_to_vector();
 }
 
 Result<std::optional<SSTableId>> Dazzle::do_compact_work() {

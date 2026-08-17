@@ -100,7 +100,7 @@ class Dazzle : public storage::StorageEngine {
     /// Executes the compaction task and performs sst swap and cleanup
     Result<std::optional<SSTableId>> run_task(const CompactionTask&);
 
-    std::vector<const SSTableMeta*> sst_meta_to_vector() const;
+    std::vector<SSTableMeta> sst_meta_to_vector() const;
 
     /**
      * @brief Private constructor; use Dazzle::open() instead.
