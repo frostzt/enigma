@@ -339,7 +339,12 @@ Why the other tests missed it: two of them had no duplicate keys at all, and two
 
 ---
 
-## Module 11 — Future modules (write these alongside the feature)
+## Module 11 — Utils/cache
+- [] **TEST-NNN*** [UNIT] Need to create a entire test suite for tests
+
+---
+
+## Module 12 — Future modules (write these alongside the feature)
 
 ### Manifest (1L)
 - [ ] **TEST-400** Crash after appending a manifest record but before deleting files → orphans reclaimed, no data loss.

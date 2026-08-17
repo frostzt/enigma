@@ -29,6 +29,8 @@ class TableCache {
     static Result<std::unique_ptr<TableCache>> create(io::IOEngine& engine, const std::string& data_dir,
                                                       std::shared_ptr<utils::Cache> cache);
 
+    utils::Cache::Stats get_stats() const { return cache_->get_stats(); };
+
    private:
     /// IO Engine handles the io required for disk access
     io::IOEngine& engine_;

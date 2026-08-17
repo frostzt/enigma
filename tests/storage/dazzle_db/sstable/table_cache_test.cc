@@ -63,22 +63,22 @@ TEST(TableCache, opens_file_once) {
     auto& tc = tcr.value();
 
     auto first_stats = tc->get_stats();
-    ASSERT_EQ(first_stats.total_cache_hits_, 0);
-    ASSERT_EQ(first_stats.total_cache_miss_, 0);
+    ASSERT_EQ(first_stats.total_hits, 0);
+    ASSERT_EQ(first_stats.total_misses, 0);
 
     auto sstfound = tc->get(dazzle::SSTableId{1});
     ASSERT_TRUE(sstfound.has_value());
 
     auto second_stats = tc->get_stats();
-    ASSERT_EQ(second_stats.total_cache_hits_, 0);
-    ASSERT_EQ(second_stats.total_cache_miss_, 1);
+    ASSERT_EQ(second_stats.total_hits, 0);
+    ASSERT_EQ(second_stats.total_misses, 1);
 
     sstfound = tc->get(dazzle::SSTableId{1});
     ASSERT_TRUE(sstfound.has_value());
 
     auto third_stats = tc->get_stats();
-    ASSERT_EQ(third_stats.total_cache_hits_, 1);
-    ASSERT_EQ(third_stats.total_cache_miss_, 1);
+    ASSERT_EQ(third_stats.total_hits, 1);
+    ASSERT_EQ(third_stats.total_misses, 1);
 }
 
 TEST(TableCache, auto_eviction) {
@@ -94,8 +94,8 @@ TEST(TableCache, auto_eviction) {
     auto& tc = tcr.value();
 
     auto first_stats = tc->get_stats();
-    ASSERT_EQ(first_stats.total_cache_hits_, 0);
-    ASSERT_EQ(first_stats.total_cache_miss_, 0);
+    ASSERT_EQ(first_stats.total_hits, 0);
+    ASSERT_EQ(first_stats.total_misses, 0);
 
     {
         auto sstfound1 = tc->get(dazzle::SSTableId{1});
@@ -106,16 +106,16 @@ TEST(TableCache, auto_eviction) {
         ASSERT_TRUE(sstfound3.has_value());
 
         auto second_stats = tc->get_stats();
-        ASSERT_EQ(second_stats.total_cache_hits_, 0);
-        ASSERT_EQ(second_stats.total_cache_miss_, 3);
-        ASSERT_EQ(second_stats.total_evicted_, 0);
+        ASSERT_EQ(second_stats.total_hits, 0);
+        ASSERT_EQ(second_stats.total_misses, 3);
+        ASSERT_EQ(second_stats.total_evictions, 0);
     }
 
     auto sstfound4 = tc->get(dazzle::SSTableId{4});
     ASSERT_TRUE(sstfound4.has_value());
 
     auto third_stats = tc->get_stats();
-    ASSERT_EQ(third_stats.total_cache_hits_, 0);
-    ASSERT_EQ(third_stats.total_cache_miss_, 5);
-    ASSERT_EQ(third_stats.total_evicted_, 1);
+    ASSERT_EQ(third_stats.total_hits, 0);
+    ASSERT_EQ(third_stats.total_misses, 4);
+    ASSERT_EQ(third_stats.total_evictions, 1);
 }

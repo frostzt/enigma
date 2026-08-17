@@ -234,6 +234,7 @@ Cache::Handle* LRUCache::insert(const std::string_view key, uint32_t hash, void*
         LRU_append(&in_use_, e);
         usage_ += charge;
         finish_erase(table_.insert(e));
+        stats_.total_inserts++;
     } else {
         e->next = nullptr;
     }
@@ -241,8 +242,9 @@ Cache::Handle* LRUCache::insert(const std::string_view key, uint32_t hash, void*
     while (usage_ > capacity_ && lru_.next != &lru_) {
         LRUHandle* old = lru_.next;
         assert(old->refs == 1);
-        stats_.total_evictions++;
-        finish_erase(table_.remove(old->key(), old->hash));
+        if (finish_erase(table_.remove(old->key(), old->hash))) {
+            stats_.total_evictions++;
+        }
     }
 
     return reinterpret_cast<Cache::Handle*>(e);
@@ -337,11 +339,23 @@ class ShardedLRUCache : public Cache {
         }
         return total;
     }
+
+    Cache::Stats get_stats() const override {
+        Stats total;
+        for (size_t i = 0; i < num_shards_; i++) {
+            auto s = shard_[i].stats_snapshot();
+            total.total_evictions += s.total_evictions;
+            total.total_inserts += s.total_inserts;
+            total.total_misses += s.total_misses;
+            total.total_hits += s.total_hits;
+        }
+        return total;
+    }
 };
 
 }  // end namespace
 
-std::unique_ptr<Cache> NewLRUCache(size_t capacity, size_t num_shards = 4) {
+std::unique_ptr<Cache> NewLRUCache(size_t capacity, size_t num_shards) {
     return std::make_unique<ShardedLRUCache>(capacity, num_shards);
 };
 

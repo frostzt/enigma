@@ -64,9 +64,12 @@ class Cache {
 
     /* Returns an estimate of total capacity consumed (charge) by the entries within the cache */
     virtual size_t total_charge() const = 0;
+
+    /* Returns statistics for cache */
+    virtual Stats get_stats() const = 0;
 };
 
-std::unique_ptr<Cache> NewLRUCache(size_t capacity, size_t num_shards);
+std::unique_ptr<Cache> NewLRUCache(size_t capacity, size_t num_shards = 4);
 
 }  // namespace enigmadb::utils
 
