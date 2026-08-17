@@ -22,6 +22,13 @@ class Cache {
      */
     struct Handle {};
 
+    struct Stats {
+        uint64_t total_evictions{0};
+        uint64_t total_inserts{0};
+        uint64_t total_misses{0};
+        uint64_t total_hits{0};
+    };
+
     /**
      * Inserts a kv pair into the cache and gives it a charge against total capacity.
      *
@@ -49,6 +56,8 @@ class Cache {
      * Erase deletes a key from cache if it exists
      */
     virtual void erase(const std::string_view key) = 0;
+
+    virtual Stats get_stats() const = 0;
 
     virtual uint64_t new_id() = 0;
 

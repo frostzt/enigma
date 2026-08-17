@@ -11,8 +11,7 @@
 
 namespace enigmadb::dazzle {
 
-std::optional<CompactionCandidate> FullCompactionPolicy::pick(
-    const std::vector<const SSTableMeta*>& live) {
+std::optional<CompactionCandidate> FullCompactionPolicy::pick(const std::vector<const SSTableMeta*>& live) {
     if (live.size() == 0) {
         return std::optional<CompactionCandidate>(std::nullopt);
     }
@@ -24,14 +23,12 @@ std::optional<CompactionCandidate> FullCompactionPolicy::pick(
     }
 
     /* Picks all the inputs and drops every tombstone */
-    return std::optional<CompactionCandidate>(
-        CompactionCandidate{inputs, true});
+    return std::optional<CompactionCandidate>(CompactionCandidate{inputs, true});
 }
 
 /* the core idea here is that we use the bucket to group file size_bytes
  * between an inclusive [bucket_low, bucket_high] of curr bucket average */
-std::optional<CompactionCandidate> SizeTieredCompactionPolicy::pick(
-    const std::vector<const SSTableMeta*>& live) {
+std::optional<CompactionCandidate> SizeTieredCompactionPolicy::pick(const std::vector<const SSTableMeta*>& live) {
     if (live.size() == 0) {
         return std::optional<CompactionCandidate>(std::nullopt);
     }
@@ -41,9 +38,7 @@ std::optional<CompactionCandidate> SizeTieredCompactionPolicy::pick(
     /* sort by file size_bytes */
     std::vector<const SSTableMeta*> sorted_live = live;
     std::sort(sorted_live.begin(), sorted_live.end(),
-              [](const SSTableMeta* a, const SSTableMeta* b) -> bool {
-                  return a->size_bytes < b->size_bytes;
-              });
+              [](const SSTableMeta* a, const SSTableMeta* b) -> bool { return a->size_bytes < b->size_bytes; });
 
     /* sort metas into buckets */
     struct bucket {
@@ -55,9 +50,7 @@ std::optional<CompactionCandidate> SizeTieredCompactionPolicy::pick(
     std::vector<bucket> buckets;
     buckets.reserve(sorted_live.size());
 
-    buckets.push_back(bucket{sorted_live[0]->id,
-                             static_cast<double>(sorted_live[0]->size_bytes),
-                             {sorted_live[0]}});
+    buckets.push_back(bucket{sorted_live[0]->id, static_cast<double>(sorted_live[0]->size_bytes), {sorted_live[0]}});
     size_t current_bucket = 0;
     double current_sum = sorted_live[0]->size_bytes;
     for (size_t i = 1; i < sorted_live.size(); i++) {
@@ -69,8 +62,7 @@ std::optional<CompactionCandidate> SizeTieredCompactionPolicy::pick(
         if (sz >= (bucket_low_ * c_avg) && sz <= (bucket_high_ * c_avg)) {
             current_sum += sorted_live[i]->size_bytes;
             buckets[current_bucket].metas.push_back(sorted_live[i]);
-            buckets[current_bucket].average =
-                current_sum / buckets[current_bucket].metas.size();
+            buckets[current_bucket].average = current_sum / buckets[current_bucket].metas.size();
             if (sorted_live[i]->id < buckets[current_bucket].oldest) {
                 buckets[current_bucket].oldest = sorted_live[i]->id;
             }
@@ -78,9 +70,7 @@ std::optional<CompactionCandidate> SizeTieredCompactionPolicy::pick(
             current_bucket++;
             current_sum = sorted_live[i]->size_bytes;
             buckets.push_back(
-                bucket{sorted_live[i]->id,
-                       static_cast<double>(sorted_live[i]->size_bytes),
-                       {sorted_live[i]}});
+                bucket{sorted_live[i]->id, static_cast<double>(sorted_live[i]->size_bytes), {sorted_live[i]}});
         }
     }
 
@@ -97,15 +87,10 @@ std::optional<CompactionCandidate> SizeTieredCompactionPolicy::pick(
     }
 
     std::sort(found_buckets.begin(), found_buckets.end(),
-              [](const bucket& a, const bucket& b) -> bool {
-                  return a.oldest < b.oldest;
-              });
+              [](const bucket& a, const bucket& b) -> bool { return a.oldest < b.oldest; });
 
     auto& chosen = found_buckets[0].metas;
-    std::sort(chosen.begin(), chosen.end(),
-              [](const SSTableMeta* a, const SSTableMeta* b) {
-                  return a->id < b->id;
-              });
+    std::sort(chosen.begin(), chosen.end(), [](const SSTableMeta* a, const SSTableMeta* b) { return a->id < b->id; });
 
     /* finalize the buckets */
     std::vector<SSTableId> inputs;
@@ -124,8 +109,7 @@ std::optional<CompactionCandidate> SizeTieredCompactionPolicy::pick(
 
     auto drop_tombstones = can_drop_tombstones(live_inputs, inputs);
 
-    return std::optional<CompactionCandidate>(
-        CompactionCandidate{inputs, drop_tombstones});
+    return std::optional<CompactionCandidate>(CompactionCandidate{inputs, drop_tombstones});
 }
 
 }  // namespace enigmadb::dazzle

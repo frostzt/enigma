@@ -12,9 +12,7 @@
 
 namespace enigmadb::dazzle {
 
-Result<SSTableWriter> SSTableWriter::create(io::IOEngine& engine,
-                                            const std::string& path,
-                                            size_t estimated_keys) {
+Result<SSTableWriter> SSTableWriter::create(io::IOEngine& engine, const std::string& path, size_t estimated_keys) {
     auto open_result = engine.open(path, io::Mode::Write);
     if (!open_result.has_value()) {
         return Result<SSTableWriter>::err(open_result.error());
@@ -25,8 +23,7 @@ Result<SSTableWriter> SSTableWriter::create(io::IOEngine& engine,
     return Result<SSTableWriter>::ok(std::move(writer));
 }
 
-Result<void> SSTableWriter::add(const storage::Key& key,
-                                const InternalValue& value) {
+Result<void> SSTableWriter::add(const storage::Key& key, const InternalValue& value) {
     auto key_len = key.size();
     auto value_len = value.data.size();
     auto required_size = /* key len */ 4 + /* key */ key_len +
@@ -78,19 +75,18 @@ Result<void> SSTableWriter::flush_block() {
     }
 
     if (write_result.value() != buffer_.size()) {
-        return Result<void>::err(
-            Error{ErrorCode::UNEXPECTED_ERR, "failed to write full block"});
+        return Result<void>::err(Error{ErrorCode::UNEXPECTED_ERR, "failed to write full block"});
     }
 
     /* update index entries */
-    index_entries_.push_back(IndexEntry{
-        current_block_first_key_, current_block_start_offset_, buffer_.size()});
+    index_entries_.push_back(IndexEntry{current_block_first_key_, current_block_start_offset_, buffer_.size()});
     current_file_offset_ += buffer_.size();
 
     buffer_.clear(); /* clear keeps the mem allocated so good for us */
     return Result<void>::ok();
 }
 
+/* TODO: It would be great if this returns total bytes written */
 Result<void> SSTableWriter::finish() {
     if (!buffer_.empty()) {
         auto flush_block_result = flush_block();
@@ -112,23 +108,18 @@ Result<void> SSTableWriter::finish() {
     for (const auto& current_index : index_entries_) {
         auto keylen = current_index.first_key.size();
         offset = encode_uint32(keylen, index_buffer.data(), offset);
-        offset = encode_bytes(current_index.first_key.bytes().data(), keylen,
-                              index_buffer.data(), offset);
-        offset = encode_uint64(current_index.block_offset, index_buffer.data(),
-                               offset);
-        offset = encode_uint32(current_index.block_size, index_buffer.data(),
-                               offset);
+        offset = encode_bytes(current_index.first_key.bytes().data(), keylen, index_buffer.data(), offset);
+        offset = encode_uint64(current_index.block_offset, index_buffer.data(), offset);
+        offset = encode_uint32(current_index.block_size, index_buffer.data(), offset);
     }
 
-    auto write_idx_block_result =
-        engine_.append(fh_, index_buffer.data(), index_buffer.size());
+    auto write_idx_block_result = engine_.append(fh_, index_buffer.data(), index_buffer.size());
     if (!write_idx_block_result.has_value()) {
         return Result<void>::err(write_idx_block_result.error());
     }
 
     if (write_idx_block_result.value() != index_buffer.size()) {
-        return Result<void>::err(
-            Error{ErrorCode::UNEXPECTED_ERR, "failed to write index block"});
+        return Result<void>::err(Error{ErrorCode::UNEXPECTED_ERR, "failed to write index block"});
     }
 
     size_bytes += index_buffer.size();
@@ -137,18 +128,15 @@ Result<void> SSTableWriter::finish() {
     size_t filter_size = bloom_filter_.size_bytes();
     std::vector<uint8_t> filter_buffer(filter_size + 1);
     encode_uint8(bloom_filter_.num_hashes(), filter_buffer.data(), 0);
-    encode_bytes(bloom_filter_.data().data(), filter_size, filter_buffer.data(),
-                 1);
+    encode_bytes(bloom_filter_.data().data(), filter_size, filter_buffer.data(), 1);
 
-    auto write_filter_block_result =
-        engine_.append(fh_, filter_buffer.data(), filter_buffer.size());
+    auto write_filter_block_result = engine_.append(fh_, filter_buffer.data(), filter_buffer.size());
     if (!write_filter_block_result.has_value()) {
         return Result<void>::err(write_filter_block_result.error());
     }
 
     if (write_filter_block_result.value() != filter_buffer.size()) {
-        return Result<void>::err(
-            Error{ErrorCode::UNEXPECTED_ERR, "failed to write filter block"});
+        return Result<void>::err(Error{ErrorCode::UNEXPECTED_ERR, "failed to write filter block"});
     }
 
     size_bytes += filter_buffer.size();
@@ -161,36 +149,24 @@ Result<void> SSTableWriter::finish() {
     /* This size is always consistent */
     size_bytes += FOOTER_SIZE;
 
-    footer_offset =
-        encode_uint64(index_block_start, footer_buffer.data(), footer_offset);
-    footer_offset =
-        encode_uint32(index_buffer.size(), footer_buffer.data(), footer_offset);
-    footer_offset = encode_uint64(index_block_start + index_buffer.size(),
-                                  footer_buffer.data(), footer_offset);
-    footer_offset = encode_uint32(filter_buffer.size(), footer_buffer.data(),
-                                  footer_offset);
-    footer_offset =
-        encode_uint32(entry_count_, footer_buffer.data(), footer_offset);
-    footer_offset = encode_uint16(SSTABLE_FORMAT_VERSION, footer_buffer.data(),
-                                  footer_offset);
-    footer_offset =
-        encode_uint64(highest_sequence_, footer_buffer.data(), footer_offset);
-    footer_offset =
-        encode_uint64(size_bytes, footer_buffer.data(), footer_offset);
+    footer_offset = encode_uint64(index_block_start, footer_buffer.data(), footer_offset);
+    footer_offset = encode_uint32(index_buffer.size(), footer_buffer.data(), footer_offset);
+    footer_offset = encode_uint64(index_block_start + index_buffer.size(), footer_buffer.data(), footer_offset);
+    footer_offset = encode_uint32(filter_buffer.size(), footer_buffer.data(), footer_offset);
+    footer_offset = encode_uint32(entry_count_, footer_buffer.data(), footer_offset);
+    footer_offset = encode_uint16(SSTABLE_FORMAT_VERSION, footer_buffer.data(), footer_offset);
+    footer_offset = encode_uint64(highest_sequence_, footer_buffer.data(), footer_offset);
+    footer_offset = encode_uint64(size_bytes, footer_buffer.data(), footer_offset);
 
     /* calculate checksum */
-    auto checksum =
-        compute_crc_32(footer_buffer.data(), FOOTER_CHECKSUM_OFFSET);
-    footer_offset = encode_uint32(checksum, footer_buffer.data(),
-                                  footer_offset); /* checksum */
-    footer_offset = encode_bytes(MAGIC.data(), MAGIC_SIZE, footer_buffer.data(),
-                                 footer_offset); /* magic */
+    auto checksum = compute_crc_32(footer_buffer.data(), FOOTER_CHECKSUM_OFFSET);
+    footer_offset = encode_uint32(checksum, footer_buffer.data(), footer_offset);                /* checksum */
+    footer_offset = encode_bytes(MAGIC.data(), MAGIC_SIZE, footer_buffer.data(), footer_offset); /* magic */
     /* pad with 6 bytes */
     footer_offset = encode_uint32(0, footer_buffer.data(), footer_offset);
     footer_offset = encode_uint16(0, footer_buffer.data(), footer_offset);
 
-    auto write_footer_block_result =
-        engine_.append(fh_, footer_buffer.data(), footer_buffer.size());
+    auto write_footer_block_result = engine_.append(fh_, footer_buffer.data(), footer_buffer.size());
     if (!write_footer_block_result.has_value()) {
         return Result<void>::err(write_footer_block_result.error());
     }

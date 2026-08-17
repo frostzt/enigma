@@ -1,7 +1,6 @@
 #ifndef ENIGMADB_DAZZLEDB_INCLUDE_SSTABLE_TABLECACHE_H_
 #define ENIGMADB_DAZZLEDB_INCLUDE_SSTABLE_TABLECACHE_H_
 
-#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -30,17 +29,6 @@ class TableCache {
     static Result<std::unique_ptr<TableCache>> create(io::IOEngine& engine, const std::string& data_dir,
                                                       std::shared_ptr<utils::Cache> cache);
 
-    /* --------------------------------------------------
-     * Stats
-     * --------------------------------------------------*/
-    struct Stats {
-        uint64_t total_cache_hits_{0};
-        uint64_t total_cache_miss_{0};
-        uint64_t total_evicted_{0};
-    };
-
-    Stats get_stats() const { return stats_; };
-
    private:
     /// IO Engine handles the io required for disk access
     io::IOEngine& engine_;
@@ -55,9 +43,6 @@ class TableCache {
         : engine_(engine), cache_(std::move(cache)), data_dir_(data_dir) {}
 
     Result<std::shared_ptr<SSTableReader>> make_reader_return(utils::Cache::Handle* h);
-
-    /// Public stats for TableCache
-    Stats stats_;
 };
 
 }  // namespace enigmadb::dazzle
