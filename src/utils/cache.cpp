@@ -6,7 +6,6 @@
 #include <cstring>
 #include <memory>
 #include <mutex>
-#include <span>
 #include <string_view>
 
 #include "enigmadb/hash.h"
@@ -129,8 +128,6 @@ class LRUCache {
         }
     }
 
-    Cache::Stats stats;
-
     void set_capacity(size_t capacity) { capacity_ = capacity; };
 
     Cache::Handle* insert(const std::string_view key, uint32_t hash, void* value, size_t charge,
@@ -142,6 +139,11 @@ class LRUCache {
     size_t total_charge() const {
         std::lock_guard<std::mutex> lock(mu_);
         return usage_;
+    }
+
+    Cache::Stats stats_snapshot() const {
+        std::lock_guard<std::mutex> lock(mu_);
+        return stats_;
     }
 
    private:
@@ -160,6 +162,7 @@ class LRUCache {
     LRUHandle in_use_;
 
     HashMap table_;
+    Cache::Stats stats_;
 };
 
 void LRUCache::ref(LRUHandle* e) {
@@ -199,10 +202,10 @@ Cache::Handle* LRUCache::lookup(const std::string_view key, uint32_t hash) {
     std::lock_guard<std::mutex> lock(mu_);
     auto e = table_.lookup(key, hash);
     if (e != nullptr) {
-        stats.total_hits++;
+        stats_.total_hits++;
         ref(e);
     } else {
-        stats.total_misses++;
+        stats_.total_misses++;
     }
     return reinterpret_cast<Cache::Handle*>(e);
 }
@@ -238,7 +241,7 @@ Cache::Handle* LRUCache::insert(const std::string_view key, uint32_t hash, void*
     while (usage_ > capacity_ && lru_.next != &lru_) {
         LRUHandle* old = lru_.next;
         assert(old->refs == 1);
-        stats.total_evictions++;
+        stats_.total_evictions++;
         finish_erase(table_.remove(old->key(), old->hash));
     }
 
@@ -292,20 +295,6 @@ class ShardedLRUCache : public Cache {
     }
 
     ~ShardedLRUCache() override {}
-
-    Stats get_stats() const override {
-        uint64_t total_evicts = 0;
-        uint64_t total_inserts = 0;
-        uint64_t total_misses = 0;
-        uint64_t total_hits = 0;
-        for (auto& cache : std::span(shard_.get(), num_shards_)) {
-            total_evicts += cache.stats.total_evictions;
-            total_inserts += cache.stats.total_inserts;
-            total_misses += cache.stats.total_misses;
-            total_hits += cache.stats.total_hits;
-        }
-        return Stats{total_evicts, total_inserts, total_misses, total_hits};
-    }
 
     Cache::Handle* insert(const std::string_view key, void* value, size_t charge,
                           void (*deleter)(const std::string_view key, void* value)) override {

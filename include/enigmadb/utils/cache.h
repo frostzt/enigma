@@ -57,8 +57,6 @@ class Cache {
      */
     virtual void erase(const std::string_view key) = 0;
 
-    virtual Stats get_stats() const = 0;
-
     virtual uint64_t new_id() = 0;
 
     /* Removes keys from the cache that are NOT actively being used */
