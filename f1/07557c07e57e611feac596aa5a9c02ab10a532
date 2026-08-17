@@ -1,0 +1,37 @@
+include/enigmadb/storage/dazzle_db/sstable/sstable_common.h
+  s_aebadbc159b228::t_5bbcda653ade26 34,58,78,80,85,88
+include/enigmadb/utils/cache.h
+  s_3836a6ef44bba5::t_78d15e0350c88b 25-31,60-61
+include/enigmadb/utils/numbers.h
+  s_3836a6ef44bba5::t_f0ebfe7bb33d0e 8-9
+src/storage/dazzle_db/compaction/compaction_policy.cpp
+  s_aebadbc159b228::t_11bb1ca7297d4f 14,26,31,41,53,65,73,90,93,112
+tests/storage/dazzle_db/memtable/memtable_test.cc
+  s_aebadbc159b228::t_a75cdd3a9648c1 106
+tests/storage/dazzle_db/sstable/table_cache_test.cc
+  s_3836a6ef44bba5::t_851cd80287379f 1-2,5-115,117-121
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "f107557c07e57e611feac596aa5a9c02ab10a532",
+  "prompts": {},
+  "sessions": {
+    "s_3836a6ef44bba5": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_12f7ad815ffeZfQK6ay1QBigP6",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "frostzt <aidenfrostbite@gmail.com>"
+    },
+    "s_aebadbc159b228": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_0142f195dffeKcbWRdgJxLaa46",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "frostzt <aidenfrostbite@gmail.com>"
+    }
+  }
+}
