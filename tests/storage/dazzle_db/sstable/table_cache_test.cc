@@ -119,3 +119,41 @@ TEST(TableCache, auto_eviction) {
     ASSERT_EQ(third_stats.total_misses, 4);
     ASSERT_EQ(third_stats.total_evictions, 1);
 }
+
+TEST(TableCache, manual_eviction) {
+    Tempdir dir_path("./table_cache_unit_tests");
+    setup_dir_and_files("./table_cache_unit_tests", 5);
+
+    io::PosixIOEngine engine;
+
+    auto cache = utils::NewLRUCache(22000, 1);  // 7242 each sstreader in cache
+    auto tcr = dazzle::TableCache::create(engine, "./table_cache_unit_tests", std::move(cache));
+    ASSERT_TRUE(tcr.has_value());
+
+    auto& tc = tcr.value();
+
+    auto stats = tc->get_stats();
+    ASSERT_EQ(stats.total_hits, 0);
+    ASSERT_EQ(stats.total_misses, 0);
+
+    {
+        auto sstfound1 = tc->get(dazzle::SSTableId{1});
+        ASSERT_TRUE(sstfound1.has_value());
+        auto sstfound2 = tc->get(dazzle::SSTableId{2});
+        ASSERT_TRUE(sstfound2.has_value());
+        auto sstfound3 = tc->get(dazzle::SSTableId{3});
+        ASSERT_TRUE(sstfound3.has_value());
+
+        auto second_stats = tc->get_stats();
+        ASSERT_EQ(second_stats.total_hits, 0);
+        ASSERT_EQ(second_stats.total_misses, 3);
+        ASSERT_EQ(second_stats.total_evictions, 0);
+    }
+
+    tc->evict(dazzle::SSTableId{3});
+
+    stats = tc->get_stats();
+    ASSERT_EQ(stats.total_hits, 0);
+    ASSERT_EQ(stats.total_misses, 3);
+    ASSERT_EQ(stats.total_evictions, 1);
+}
