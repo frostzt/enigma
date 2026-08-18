@@ -24,9 +24,6 @@ using namespace enigmadb::TESTNAMESPACE;
 
 void setup_dir_and_files(std::string dir_path, size_t n, size_t num_kvs = 1000, size_t expected_keys_per_file = 5000) {
     io::PosixIOEngine engine;
-
-    std::filesystem::create_directory(
-        "./table_test_unit_tests");                       /* throws exception on failure so kinda fine in gtest */
     std::filesystem::create_directory(dir_path + "/sst"); /* sst dir */
 
     /* create n sst files - remember that the sst_path function creates ssts under data_dir/sst so this will follow the
