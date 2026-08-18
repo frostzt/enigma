@@ -7,8 +7,7 @@
 
 namespace enigmadb::dazzle {
 
-Result<WalWriter> WalWriter::create(io::IOEngine& engine,
-                                    const std::string& path) {
+Result<WalWriter> WalWriter::create(io::IOEngine& engine, const std::string& path) {
     auto open_result = engine.open(path, io::Mode::Append);
     if (!open_result.has_value()) {
         return Result<WalWriter>::err(open_result.error());
@@ -23,8 +22,7 @@ Result<void> WalWriter::append(const WalRecord& record) {
     auto serialized = serialize_wal_record(record);
     assert(serialized.size() == get_record_size(record));
 
-    auto append_result =
-        engine_.append(fh_, serialized.data(), serialized.size());
+    auto append_result = engine_.append(fh_, serialized.data(), serialized.size());
     if (!append_result.has_value()) {
         return Result<void>::err(append_result.error());
     }

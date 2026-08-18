@@ -63,8 +63,7 @@ Result<WalRecord> deserialize_wal_record(const uint8_t* buffer, size_t length) {
 
     constexpr size_t MIN_RECORD_SIZE = 33;
     if (length < MIN_RECORD_SIZE) {
-        return Result<WalRecord>::err(Error{ErrorCode::READ_OUT_OF_RANGE,
-                                            "buffer too small for WAL record"});
+        return Result<WalRecord>::err(Error{ErrorCode::READ_OUT_OF_RANGE, "buffer too small for WAL record"});
     }
 
     /* --- read header --- */
@@ -74,15 +73,13 @@ Result<WalRecord> deserialize_wal_record(const uint8_t* buffer, size_t length) {
     offset += 4;
 
     if (body_length > length - 8) {
-        return Result<WalRecord>::err(
-            Error{ErrorCode::READ_OUT_OF_RANGE, "out of range"});
+        return Result<WalRecord>::err(Error{ErrorCode::READ_OUT_OF_RANGE, "out of range"});
     }
 
     /* validate checksum */
     auto gen_checksum = compute_crc_32(buffer + 8, body_length);
     if (checksum != gen_checksum) {
-        return Result<WalRecord>::err(Error{
-            ErrorCode::BAD_CONFIG, "checksum mismatch corrupted data found"});
+        return Result<WalRecord>::err(Error{ErrorCode::BAD_CONFIG, "checksum mismatch corrupted data found"});
     }
 
     /* --- read body fixed parts --- */
@@ -97,8 +94,7 @@ Result<WalRecord> deserialize_wal_record(const uint8_t* buffer, size_t length) {
     auto key_len = decode_uint32(buffer, offset);
     offset += 4;
     if (offset + key_len > length) {
-        return Result<WalRecord>::err(
-            Error{ErrorCode::READ_OUT_OF_RANGE, "key out of range"});
+        return Result<WalRecord>::err(Error{ErrorCode::READ_OUT_OF_RANGE, "key out of range"});
     }
     record.key.assign(buffer + offset, buffer + offset + key_len);
     offset += key_len;
@@ -107,8 +103,7 @@ Result<WalRecord> deserialize_wal_record(const uint8_t* buffer, size_t length) {
     auto value_len = decode_uint32(buffer, offset);
     offset += 4;
     if (offset + value_len > length) {
-        return Result<WalRecord>::err(
-            Error{ErrorCode::READ_OUT_OF_RANGE, "value out of range"});
+        return Result<WalRecord>::err(Error{ErrorCode::READ_OUT_OF_RANGE, "value out of range"});
     }
     record.value.assign(buffer + offset, buffer + offset + value_len);
     offset += value_len;

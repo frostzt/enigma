@@ -24,8 +24,7 @@ constexpr std::chrono::milliseconds kFatalFlushTimeout{2000};
 // Returns false if it did not. Abandoning the thread is deliberate: the only
 // caller aborts right after, and abort() runs no destructors that a stranded
 // thread could race with.
-bool run_with_deadline(std::chrono::milliseconds timeout,
-                       std::function<void()> fn) {
+bool run_with_deadline(std::chrono::milliseconds timeout, std::function<void()> fn) {
     try {
         auto done = std::make_shared<std::promise<void>>();
         std::future<void> finished = done->get_future();
@@ -59,8 +58,7 @@ Logger& Logger::instance() {
 Logger::Logger() {
     LogConfig defaultConfig;
     for (size_t i = 0; i < static_cast<size_t>(Category::_Count); ++i) {
-        active_levels_[i].store(defaultConfig.default_level,
-                                std::memory_order_relaxed);
+        active_levels_[i].store(defaultConfig.default_level, std::memory_order_relaxed);
     }
     auto initial = std::make_shared<SinkList>();
     initial->push_back(std::make_shared<ConsoleSink>());
@@ -73,8 +71,7 @@ void Logger::init(LogConfig& config) {
     if (initialized_.exchange(true)) return;
 
     for (size_t i = 0; i < static_cast<size_t>(Category::_Count); ++i) {
-        active_levels_[i].store(config.category_levels[i],
-                                std::memory_order_relaxed);
+        active_levels_[i].store(config.category_levels[i], std::memory_order_relaxed);
     }
 
     std::vector<std::shared_ptr<LogSink>> raw_sinks;
@@ -97,8 +94,7 @@ void Logger::init(LogConfig& config) {
         config.queue_capacity = 8192;
     }
 
-    auto ring = std::make_shared<RingBufferSink>(config.ring_slots,
-                                                 config.ring_slot_bytes);
+    auto ring = std::make_shared<RingBufferSink>(config.ring_slots, config.ring_slot_bytes);
     ring_sink_ = ring;
     // Publish for the dump only once the ring is fully constructed and owned.
     ring_ptr_.store(ring.get(), std::memory_order_release);
@@ -106,8 +102,7 @@ void Logger::init(LogConfig& config) {
 
     auto next = std::make_shared<SinkList>();
     if (config.async) {
-        next->push_back(std::make_shared<AsyncSink>(
-            std::move(raw_sinks), config.queue_capacity, config.overflow));
+        next->push_back(std::make_shared<AsyncSink>(std::move(raw_sinks), config.queue_capacity, config.overflow));
     } else {
         *next = std::move(raw_sinks);
     }
@@ -138,8 +133,7 @@ void Logger::shutdown() {
 }
 
 void Logger::dispatch(LogRecord record) {
-    if (shutdown_.load(std::memory_order_relaxed) &&
-        record.level != Level::Fatal) {
+    if (shutdown_.load(std::memory_order_relaxed) && record.level != Level::Fatal) {
         return;
     }
 
@@ -178,15 +172,13 @@ std::shared_ptr<const Logger::SinkList> Logger::snapshot_sinks() const {
 
 void Logger::add_sink(std::shared_ptr<LogSink> sink) {
     std::unique_lock<std::shared_mutex> lock(sinks_mutex_);
-    auto next = sinks_ ? std::make_shared<SinkList>(*sinks_)
-                       : std::make_shared<SinkList>();
+    auto next = sinks_ ? std::make_shared<SinkList>(*sinks_) : std::make_shared<SinkList>();
     next->push_back(std::move(sink));
     sinks_ = std::move(next);
 }
 
 void Logger::set_level(Category cat, Level lvl) noexcept {
-    active_levels_[static_cast<size_t>(cat)].store(lvl,
-                                                   std::memory_order_relaxed);
+    active_levels_[static_cast<size_t>(cat)].store(lvl, std::memory_order_relaxed);
 }
 
 void Logger::dump_ring_buffer_to_stderr() {

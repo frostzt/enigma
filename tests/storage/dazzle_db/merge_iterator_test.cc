@@ -13,16 +13,14 @@
 using namespace enigmadb;
 using namespace enigmadb::TESTNAMESPACE;
 
-std::pair<storage::Key, dazzle::InternalValue> make_entry(
-    std::string name, size_t sequence, bool is_tombstone = false) {
+std::pair<storage::Key, dazzle::InternalValue> make_entry(std::string name, size_t sequence,
+                                                          bool is_tombstone = false) {
     auto k = make_key(name, name, name);
-    return std::make_pair(k, dazzle::InternalValue{string_to_bytes(name),
-                                                   is_tombstone, sequence});
+    return std::make_pair(k, dazzle::InternalValue{string_to_bytes(name), is_tombstone, sequence});
 }
 
 TEST(merge_iterator, iterator_compare) {
-    std::vector<std::string> a_to_f = {"ada",    "basic",  "cobol",
-                                       "delphi", "elixir", "fortran"};
+    std::vector<std::string> a_to_f = {"ada", "basic", "cobol", "delphi", "elixir", "fortran"};
 
     auto ada = make_entry("ada", 1);
     auto basic = make_entry("basic", 2);
@@ -57,8 +55,7 @@ TEST(merge_iterator, iterator_compare) {
 }
 
 TEST(merge_iterator, uneven_lengths) {
-    std::vector<std::string> a_to_f = {"ada",    "basic",  "cobol",
-                                       "delphi", "elixir", "fortran"};
+    std::vector<std::string> a_to_f = {"ada", "basic", "cobol", "delphi", "elixir", "fortran"};
 
     auto ada = make_entry("ada", 1);
     auto basic = make_entry("basic", 2);
@@ -95,8 +92,7 @@ TEST(merge_iterator, uneven_lengths) {
 }
 
 TEST(merge_iterator, deduplication) {
-    std::vector<std::string> a_to_f = {"ada",    "basic",  "cobol",
-                                       "delphi", "elixir", "fortran"};
+    std::vector<std::string> a_to_f = {"ada", "basic", "cobol", "delphi", "elixir", "fortran"};
 
     auto ada = make_entry("ada", 1);
     auto basic = make_entry("basic", 2);
@@ -138,8 +134,7 @@ TEST(merge_iterator, deduplication) {
 }
 
 TEST(merge_iterator, tombstone) {
-    std::vector<std::string> a_to_f = {"ada",    "basic",  "cobol",
-                                       "delphi", "elixir", "fortran"};
+    std::vector<std::string> a_to_f = {"ada", "basic", "cobol", "delphi", "elixir", "fortran"};
 
     auto ada = make_entry("ada", 1);
     auto basic = make_entry("basic", 2);
@@ -183,8 +178,7 @@ TEST(merge_iterator, tombstone) {
 }
 
 TEST(merge_iterator, insert_beats_tombstone) {
-    std::vector<std::string> a_to_f = {"ada",    "basic",  "cobol",
-                                       "delphi", "elixir", "fortran"};
+    std::vector<std::string> a_to_f = {"ada", "basic", "cobol", "delphi", "elixir", "fortran"};
 
     auto ada = make_entry("ada", 1);
     auto basic = make_entry("basic", 2);

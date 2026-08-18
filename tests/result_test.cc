@@ -44,8 +44,7 @@ TEST(Result, result_expectOkWithVoid) {
 
 TEST(Result, result_expectErr) {
     const std::string err_msg = "failed with a runtime error";
-    auto res =
-        ExpectResult<int, std::runtime_error>::err(std::runtime_error(err_msg));
+    auto res = ExpectResult<int, std::runtime_error>::err(std::runtime_error(err_msg));
     ASSERT_FALSE(res.has_value());
 
     auto& error = res.error();
@@ -55,8 +54,7 @@ TEST(Result, result_expectErr) {
 TEST(Result, result_expectErrInvalidAccessToData) {
     const std::string expected_err_msg = "invalid access to data";
     const std::string err_msg = "failed with a runtime error";
-    auto res =
-        ExpectResult<int, std::runtime_error>::err(std::runtime_error(err_msg));
+    auto res = ExpectResult<int, std::runtime_error>::err(std::runtime_error(err_msg));
     ASSERT_FALSE(res.has_value());
 
     try {
@@ -68,8 +66,7 @@ TEST(Result, result_expectErrInvalidAccessToData) {
 
 TEST(Result, result_expectErrMoveSemantics) {
     const std::string err_msg = "failed with a runtime error";
-    auto res =
-        ExpectResult<int, std::runtime_error>::err(std::runtime_error(err_msg));
+    auto res = ExpectResult<int, std::runtime_error>::err(std::runtime_error(err_msg));
     ASSERT_FALSE(res.has_value());
 
     auto& error = res.error();
@@ -84,8 +81,7 @@ TEST(Result, result_expectErrMoveSemantics) {
 
 TEST(Result, result_expectErrWithCustomError) {
     const std::string err_msg = "failed with an unexpected error";
-    auto res =
-        ExpectResult<std::string, Error>::err(Error::unexpected(err_msg));
+    auto res = ExpectResult<std::string, Error>::err(Error::unexpected(err_msg));
     ASSERT_FALSE(res.has_value());
 
     auto& error = res.error();

@@ -14,18 +14,12 @@
 using namespace enigmadb;
 using namespace enigmadb::TESTNAMESPACE;
 
-dazzle::WalRecord get_test_record(
-    dazzle::WalOpType type = dazzle::WalOpType::PUT_ROW) {
+dazzle::WalRecord get_test_record(dazzle::WalOpType type = dazzle::WalOpType::PUT_ROW) {
     auto now = std::chrono::system_clock::now().time_since_epoch();
-    auto ts =
-        std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
+    auto ts = std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
 
     return dazzle::WalRecord{
-        type,
-        static_cast<uint64_t>(ts),
-        1,
-        make_key("user", "123", "name"),
-        string_to_bytes("2026_2_APR"),
+        type, static_cast<uint64_t>(ts), 1, make_key("user", "123", "name"), string_to_bytes("2026_2_APR"),
     };
 }
 
@@ -34,8 +28,7 @@ TEST(WAL, full_flow_serialized) {
     io::PosixIOEngine engine;
 
     /* create writer */
-    auto create_writer_result =
-        dazzle::WalWriter::create(engine, testfile.path);
+    auto create_writer_result = dazzle::WalWriter::create(engine, testfile.path);
     ASSERT_TRUE(create_writer_result.has_value());
     auto& writer = create_writer_result.value();
 
@@ -51,8 +44,7 @@ TEST(WAL, full_flow_serialized) {
     ASSERT_TRUE(sync_res.has_value());
 
     /* create reader */
-    auto create_reader_result =
-        dazzle::WalReader::create(engine, testfile.path);
+    auto create_reader_result = dazzle::WalReader::create(engine, testfile.path);
     ASSERT_TRUE(create_reader_result.has_value());
     auto& reader = create_reader_result.value();
 
@@ -83,8 +75,7 @@ TEST(WAL, crash_recovery) {
     io::PosixIOEngine engine;
 
     /* create writer */
-    auto create_writer_result =
-        dazzle::WalWriter::create(engine, testfile.path);
+    auto create_writer_result = dazzle::WalWriter::create(engine, testfile.path);
     ASSERT_TRUE(create_writer_result.has_value());
     auto& writer = create_writer_result.value();
 
@@ -116,8 +107,7 @@ TEST(WAL, crash_recovery) {
     }
 
     /* create reader */
-    auto create_reader_result =
-        dazzle::WalReader::create(engine, testfile.path);
+    auto create_reader_result = dazzle::WalReader::create(engine, testfile.path);
     ASSERT_TRUE(create_reader_result.has_value());
     auto& reader = create_reader_result.value();
 

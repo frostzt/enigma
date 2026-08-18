@@ -15,8 +15,7 @@ class FakeInternalIterator : public dazzle::InternalIterator {
    public:
     using Entry = std::pair<storage::Key, dazzle::InternalValue>;
 
-    explicit FakeInternalIterator(std::vector<Entry> entries)
-        : entries_(std::move(entries)) {}
+    explicit FakeInternalIterator(std::vector<Entry> entries) : entries_(std::move(entries)) {}
 
     bool valid() const override { return curr_idx_ < entries_.size(); }
     void seek_to_first() override { curr_idx_ = 0; }

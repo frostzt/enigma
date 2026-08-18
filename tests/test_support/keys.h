@@ -11,10 +11,8 @@ using namespace enigmadb;
 
 namespace enigmadb::TESTNAMESPACE {
 
-inline storage::Key make_key(std::string_view pk, std::string_view ck,
-                             std::string_view col) {
-    return storage::Key{catalog::encode_composite_key(
-        as_bytes(pk), as_bytes(ck), as_bytes(col))};
+inline storage::Key make_key(std::string_view pk, std::string_view ck, std::string_view col) {
+    return storage::Key{catalog::encode_composite_key(as_bytes(pk), as_bytes(ck), as_bytes(col))};
 }
 
 }  // namespace enigmadb::TESTNAMESPACE

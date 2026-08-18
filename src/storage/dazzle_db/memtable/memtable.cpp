@@ -10,10 +10,8 @@
 
 namespace enigmadb::dazzle {
 
-void Memtable::put(const storage::Key& key, std::span<const uint8_t> value,
-                   uint64_t sequence) {
-    InternalValue memtable_value{
-        std::vector<uint8_t>(value.begin(), value.end()), false, sequence};
+void Memtable::put(const storage::Key& key, std::span<const uint8_t> value, uint64_t sequence) {
+    InternalValue memtable_value{std::vector<uint8_t>(value.begin(), value.end()), false, sequence};
 
     size_t to_add = memtable_value.data.size();
     size_t to_remove = 0;

@@ -9,8 +9,7 @@
 
 namespace enigmadb::dazzle {
 
-Result<WalReader> WalReader::create(io::IOEngine& engine,
-                                    const std::string& path) {
+Result<WalReader> WalReader::create(io::IOEngine& engine, const std::string& path) {
     auto open_result = engine.open(path, io::Mode::Read);
     if (!open_result.has_value()) {
         return Result<WalReader>::err(open_result.error());
@@ -30,27 +29,23 @@ Result<WalRecord> WalReader::next() {
 
     auto bytes_read = hread_result.value();
     if (bytes_read == 0) {
-        return Result<WalRecord>::err(
-            Error{ErrorCode::ERR_EOF, "end of WAL file"});
+        return Result<WalRecord>::err(Error{ErrorCode::ERR_EOF, "end of WAL file"});
     }
 
     auto body_length = decode_uint32(header_buffer, 0);
     if (body_length < 25) {
-        return Result<WalRecord>::err(
-            Error{ErrorCode::ERR_EOF, "wal reader encountered eof"});
+        return Result<WalRecord>::err(Error{ErrorCode::ERR_EOF, "wal reader encountered eof"});
     }
 
     std::vector<uint8_t> record_buffer(body_length + 8);
-    auto full_read_result =
-        engine_.read(fh_, body_length + 8, record_buffer.data(), offset_);
+    auto full_read_result = engine_.read(fh_, body_length + 8, record_buffer.data(), offset_);
     if (!full_read_result.has_value()) {
         return Result<WalRecord>::err(full_read_result.error());
     }
 
     offset_ += 8 + body_length;
 
-    auto deserialize_result =
-        deserialize_wal_record(record_buffer.data(), record_buffer.size());
+    auto deserialize_result = deserialize_wal_record(record_buffer.data(), record_buffer.size());
     if (!deserialize_result.has_value()) {
         return Result<WalRecord>::err(deserialize_result.error());
     }

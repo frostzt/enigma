@@ -11,15 +11,13 @@
 
 namespace enigmadb::catalog {
 
-std::vector<uint8_t> encode_composite_key(
-    std::span<const uint8_t> partition_key,
-    std::span<const uint8_t> clustering_key,
-    std::span<const uint8_t> column_name) {
+std::vector<uint8_t> encode_composite_key(std::span<const uint8_t> partition_key,
+                                          std::span<const uint8_t> clustering_key,
+                                          std::span<const uint8_t> column_name) {
     std::vector<uint8_t> out;
 
     /* pre-emptively calculate worst-case allocation required */
-    out.reserve((partition_key.size() * 2) + (clustering_key.size() * 2) +
-                (column_name.size() * 2) +
+    out.reserve((partition_key.size() * 2) + (clustering_key.size() * 2) + (column_name.size() * 2) +
                 /* 2 pterm + 2 cterm + 2colterm */ 6);
 
     /* copy escaped partition key */
@@ -96,25 +94,21 @@ Result<CompositeKey> decode_composite_key(std::span<const uint8_t> encoded) {
 
     /* decode partition key */
     if (!decode_field(partition_key)) {
-        return Result<CompositeKey>::err(
-            Error{ErrorCode::READ_ERR, "Malformed partition key"});
+        return Result<CompositeKey>::err(Error{ErrorCode::READ_ERR, "Malformed partition key"});
     }
 
     /* decode clustering key */
     if (!decode_field(clustering_key)) {
-        return Result<CompositeKey>::err(
-            Error{ErrorCode::READ_ERR, "Malformed clustering key"});
+        return Result<CompositeKey>::err(Error{ErrorCode::READ_ERR, "Malformed clustering key"});
     }
 
     /* decode column name */
     if (!decode_field(column_name)) {
-        return Result<CompositeKey>::err(
-            Error{ErrorCode::READ_ERR, "Malformed column name"});
+        return Result<CompositeKey>::err(Error{ErrorCode::READ_ERR, "Malformed column name"});
     }
 
-    return Result<CompositeKey>::ok(CompositeKey{std::move(partition_key),
-                                                 std::move(clustering_key),
-                                                 std::move(column_name)});
+    return Result<CompositeKey>::ok(
+        CompositeKey{std::move(partition_key), std::move(clustering_key), std::move(column_name)});
 }
 
 }  // namespace enigmadb::catalog

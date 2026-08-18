@@ -90,16 +90,14 @@ TEST(Log, async_sink_loses_nothing_when_stop_races_submitters) {
         std::vector<std::thread> submitters;
         for (int t = 0; t < kThreads; ++t) {
             submitters.emplace_back([&] {
-                for (int i = 0; i < kPerThread; ++i)
-                    async.submit(make_record());
+                for (int i = 0; i < kPerThread; ++i) async.submit(make_record());
             });
         }
         std::this_thread::sleep_for(std::chrono::microseconds(100));
         async.stop();
         for (auto& s : submitters) s.join();
 
-        ASSERT_EQ(counter->count.load(), kThreads * kPerThread)
-            << "records lost on trial " << trial;
+        ASSERT_EQ(counter->count.load(), kThreads * kPerThread) << "records lost on trial " << trial;
     }
 }
 
@@ -122,8 +120,7 @@ TEST(Log, ring_buffer_dump_survives_concurrent_writers) {
     std::vector<std::thread> writers;
     for (int t = 0; t < kThreads; ++t) {
         writers.emplace_back([&, t] {
-            LogRecord rec =
-                make_record(Level::Info, std::string(kMsgLen, 'a' + t));
+            LogRecord rec = make_record(Level::Info, std::string(kMsgLen, 'a' + t));
             while (!stop.load(std::memory_order_relaxed)) {
                 rec.ts = std::chrono::system_clock::now();
                 ring.submit(rec);
@@ -137,8 +134,7 @@ TEST(Log, ring_buffer_dump_survives_concurrent_writers) {
     // the ring to fill first, otherwise the test proves nothing.
     // No ASSERT here: it would return with the writer threads still running on
     // objects this frame owns. Record it and check after the joins.
-    const auto deadline =
-        std::chrono::steady_clock::now() + std::chrono::seconds(30);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
     bool populated = false;
     while (std::chrono::steady_clock::now() < deadline) {
         if (submitted.load(std::memory_order_relaxed) >= 5000) {

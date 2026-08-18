@@ -17,16 +17,11 @@ BloomFilter::BloomFilter(size_t expected_keys, double false_positive_rate) {
     auto ln2 = std::log(2.0);
 
     // bit_count = -(expected_keys * ln(false_positive_rate)) / (ln(2)^2)
-    auto m =
-        -(static_cast<double>(expected_keys) * std::log(false_positive_rate)) /
-        (ln2 * ln2);
-    bit_count_ =
-        ((static_cast<size_t>(m) + 7) / 8) * 8;  // round up to byte boundary
+    auto m = -(static_cast<double>(expected_keys) * std::log(false_positive_rate)) / (ln2 * ln2);
+    bit_count_ = ((static_cast<size_t>(m) + 7) / 8) * 8;  // round up to byte boundary
 
     // num_hashes = (bit_count / expected_key) * ln(2)
-    auto k = static_cast<size_t>(
-        (static_cast<double>(bit_count_) / static_cast<double>(expected_keys)) *
-        ln2);
+    auto k = static_cast<size_t>((static_cast<double>(bit_count_) / static_cast<double>(expected_keys)) * ln2);
     num_hashes_ = k;
 
     num_hashes_ = std::max(size_t{1}, std::min(num_hashes_, size_t{30}));
@@ -64,14 +59,11 @@ bool BloomFilter::may_contain(const storage::Key& key) const {
 
 const std::vector<uint8_t>& BloomFilter::data() const { return bit_array_; }
 
-uint8_t BloomFilter::num_hashes() const {
-    return static_cast<uint8_t>(num_hashes_);
-}
+uint8_t BloomFilter::num_hashes() const { return static_cast<uint8_t>(num_hashes_); }
 
 size_t BloomFilter::size_bytes() const { return bit_array_.size(); }
 
-BloomFilter BloomFilter::from_keys(const std::vector<storage::Key>& keys,
-                                   double false_positive_rate) {
+BloomFilter BloomFilter::from_keys(const std::vector<storage::Key>& keys, double false_positive_rate) {
     BloomFilter filter(keys.size(), false_positive_rate);
     for (const auto& key : keys) {
         filter.add(key);

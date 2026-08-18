@@ -7,18 +7,12 @@
 using namespace enigmadb;
 using namespace enigmadb::TESTNAMESPACE;
 
-dazzle::WalRecord get_record(
-    dazzle::WalOpType type = dazzle::WalOpType::PUT_ROW) {
+dazzle::WalRecord get_record(dazzle::WalOpType type = dazzle::WalOpType::PUT_ROW) {
     auto now = std::chrono::system_clock::now().time_since_epoch();
-    auto ts =
-        std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
+    auto ts = std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
 
     return dazzle::WalRecord{
-        type,
-        static_cast<uint64_t>(ts),
-        1,
-        make_key("user", "123", "name"),
-        string_to_bytes("2026_2_APR"),
+        type, static_cast<uint64_t>(ts), 1, make_key("user", "123", "name"), string_to_bytes("2026_2_APR"),
     };
 }
 
@@ -29,8 +23,7 @@ TEST(WAL_Record, roundtrip) {
     auto size = get_record_size(record);
     ASSERT_EQ(size, serialized_record.size());
 
-    auto deserialized_result =
-        dazzle::deserialize_wal_record(serialized_record.data(), size);
+    auto deserialized_result = dazzle::deserialize_wal_record(serialized_record.data(), size);
 
     ASSERT_TRUE(deserialized_result.has_value());
     auto deserialized_record = deserialized_result.value();
@@ -51,8 +44,7 @@ TEST(WAL_Record, detects_corruption) {
     serialized_record[32] ^= 0xFF;
     serialized_record[33] ^= 0xFF;
 
-    auto deserialized_result =
-        dazzle::deserialize_wal_record(serialized_record.data(), size);
+    auto deserialized_result = dazzle::deserialize_wal_record(serialized_record.data(), size);
 
     ASSERT_FALSE(deserialized_result.has_value());
     auto& error = deserialized_result.error();
@@ -68,11 +60,9 @@ TEST(WAL_Record, truncated_buffer) {
     auto size = get_record_size(record);
     ASSERT_EQ(size, serialized_record.size());
 
-    std::vector<uint8_t> truncated(serialized_record.begin(),
-                                   serialized_record.begin() + size / 1.25);
+    std::vector<uint8_t> truncated(serialized_record.begin(), serialized_record.begin() + size / 1.25);
 
-    auto deserialized_result =
-        dazzle::deserialize_wal_record(truncated.data(), truncated.size());
+    auto deserialized_result = dazzle::deserialize_wal_record(truncated.data(), truncated.size());
 
     ASSERT_FALSE(deserialized_result.has_value());
     auto& error = deserialized_result.error();

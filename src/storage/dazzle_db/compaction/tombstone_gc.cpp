@@ -8,8 +8,7 @@
 
 namespace enigmadb::dazzle {
 
-bool can_drop_tombstones(const std::vector<SSTableId>& live,
-                         const std::vector<SSTableId>& inputs) {
+bool can_drop_tombstones(const std::vector<SSTableId>& live, const std::vector<SSTableId>& inputs) {
     assert(std::is_sorted(live.begin(), live.end()));
 
     if (inputs.size() == 0 || live.size() < inputs.size()) {
