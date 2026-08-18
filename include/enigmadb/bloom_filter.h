@@ -38,8 +38,7 @@ class BloomFilter {
     void add(const storage::Key& key);
     bool may_contain(const storage::Key& key) const;
 
-    static BloomFilter from_keys(const std::vector<storage::Key>& keys,
-                                 double false_positive_rate);
+    static BloomFilter from_keys(const std::vector<storage::Key>& keys, double false_positive_rate);
 
     // For serializing into SSTable
     const std::vector<uint8_t>& data() const;

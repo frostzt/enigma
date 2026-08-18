@@ -61,8 +61,7 @@ class Memtable {
      * If a tombstone previously existed for this key it is replaced
      * with the live value.
      */
-    void put(const storage::Key& key, std::span<const uint8_t> value,
-             uint64_t sequence);
+    void put(const storage::Key& key, std::span<const uint8_t> value, uint64_t sequence);
 
     /**
      * @brief Marks a column as deleted by writing a tombstone.

@@ -24,10 +24,9 @@ struct CompositeKey {
     std::vector<uint8_t> column_name;
 };
 
-std::vector<uint8_t> encode_composite_key(
-    std::span<const uint8_t> partition_key,
-    std::span<const uint8_t> clustering_key,
-    std::span<const uint8_t> column_name);
+std::vector<uint8_t> encode_composite_key(std::span<const uint8_t> partition_key,
+                                          std::span<const uint8_t> clustering_key,
+                                          std::span<const uint8_t> column_name);
 
 Result<CompositeKey> decode_composite_key(std::span<const uint8_t> encoded);
 

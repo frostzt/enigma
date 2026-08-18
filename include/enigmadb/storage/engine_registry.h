@@ -14,8 +14,7 @@ namespace enigmadb::storage {
 
 using EngineConfig = std::map<std::string, std::string>;
 
-using EngineFactory = std::function<Result<std::unique_ptr<StorageEngine>>(
-    io::IOEngine&, const EngineConfig&)>;
+using EngineFactory = std::function<Result<std::unique_ptr<StorageEngine>>(io::IOEngine&, const EngineConfig&)>;
 
 class EngineRegistry {
    public:
@@ -23,9 +22,7 @@ class EngineRegistry {
 
     void register_engine(std::string name, EngineFactory factory);
 
-    Result<std::unique_ptr<StorageEngine>> create(std::string_view,
-                                                  io::IOEngine&,
-                                                  const EngineConfig&) const;
+    Result<std::unique_ptr<StorageEngine>> create(std::string_view, io::IOEngine&, const EngineConfig&) const;
 
    private:
     std::unordered_map<std::string, EngineFactory> factories_;

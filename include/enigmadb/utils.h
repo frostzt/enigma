@@ -18,13 +18,9 @@
 
 namespace enigmadb {
 
-inline std::vector<uint8_t> string_to_bytes(std::string_view str) {
-    return {str.begin(), str.end()};
-}
+inline std::vector<uint8_t> string_to_bytes(std::string_view str) { return {str.begin(), str.end()}; }
 
-inline std::string bytes_to_string(const std::vector<uint8_t>& vec) {
-    return std::string(vec.begin(), vec.end());
-}
+inline std::string bytes_to_string(const std::vector<uint8_t>& vec) { return std::string(vec.begin(), vec.end()); }
 
 inline void clear_dir(const std::filesystem::path& p) {
     for (const auto& entry : std::filesystem::directory_iterator(p)) {
@@ -49,13 +45,8 @@ inline std::string trim_string(const std::string& s) {
 }
 
 inline void trim_in_place(std::string& s) {
-    s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](unsigned char ch) {
-                return !std::isspace(ch);
-            }));
-    s.erase(std::find_if(s.rbegin(), s.rend(),
-                         [](unsigned char ch) { return !std::isspace(ch); })
-                .base(),
-            s.end());
+    s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](unsigned char ch) { return !std::isspace(ch); }));
+    s.erase(std::find_if(s.rbegin(), s.rend(), [](unsigned char ch) { return !std::isspace(ch); }).base(), s.end());
 }
 
 }  // namespace enigmadb

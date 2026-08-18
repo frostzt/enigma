@@ -81,8 +81,7 @@ class WalWriter {
      * @return A WalWriter on success, or an error if the file cannot
      *         be opened.
      */
-    static Result<WalWriter> create(io::IOEngine& engine,
-                                    const std::string& path);
+    static Result<WalWriter> create(io::IOEngine& engine, const std::string& path);
 };
 
 }  // namespace enigmadb::dazzle

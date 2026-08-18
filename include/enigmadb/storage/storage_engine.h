@@ -24,8 +24,7 @@ class StorageEngine {
     StorageEngine(const StorageEngine&) = delete;
     StorageEngine& operator=(const StorageEngine&) = delete;
 
-    virtual Result<void> put(const Key& key,
-                             std::span<const uint8_t> value) = 0;
+    virtual Result<void> put(const Key& key, std::span<const uint8_t> value) = 0;
     virtual Result<void> remove(const Key& key) = 0;
     virtual Result<std::optional<Value>> get(const Key& key) = 0;
 
