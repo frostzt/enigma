@@ -339,18 +339,106 @@ Why the other tests missed it: two of them had no duplicate keys at all, and two
 
 ---
 
-## Module 11 — Utils/cache
-- [] **TEST-NNN*** [UNIT] Need to create a entire test suite for tests
+## Module 11 — `utils/cache` (byte-charged sharded LRU)
+
+Ported from LevelDB. Two fatal bugs were already found here under ASan/LSan — an unsized hash table (SEGV on the *first* insert) and a handle leak on every eviction — so this module has a track record of hiding things that only sanitizers surface.
+
+**Testability blocker, do this first:**
+- [ ] **TEST-500** [UNIT] ⭐ Expose a **single-shard** cache for tests. `LRUCache` lives in an anonymous namespace and `ShardedLRUCache` splits capacity 16 ways, so every eviction assertion is currently at the mercy of which shard a key hashes into. Either a `detail/` header or a shard-count constructor parameter. **Nearly every test below is imprecise without this.**
+
+**Contract every cache test must respect:**
+- `insert` returns a reference you must `release`, exactly like `lookup`. Dropping an insert handle pins the entry in `in_use_` forever, and `~LRUCache`'s assert only catches it if the cache is actually destroyed.
+- Wrap `NewLRUCache` in a `unique_ptr` — it returns an owning pointer.
+- Assert on a `live_values` counter the deleter decrements, **not** on `std::cout`. The deleter only fires when refs hit zero, which needs the entry to leave the cache *and* every handle released — it is very easy to write a test where neither happens and conclude the cache is broken.
+
+### 11.1 Basic behaviour
+- [x] **TEST-501** [UNIT] Insert then lookup returns the same value.
+- [x] **TEST-502** [UNIT] Lookup of an absent key returns nullptr.
+- [ ] **TEST-503** [UNIT] Insert with a duplicate key replaces the old entry; the old value's deleter runs exactly once.
+- [ ] **TEST-504** [UNIT] `erase` removes the entry; a subsequent lookup misses.
+- [ ] **TEST-505** [UNIT] `erase` on an absent key is a no-op, not a crash.
+- [ ] **TEST-506** [UNIT] `new_id()` returns strictly increasing values, and is safe under concurrent calls.
+
+### 11.2 Charge accounting and eviction
+- [x] **TEST-507** [UNIT] Eviction is triggered by **bytes**, not entry count.
+- [ ] **TEST-508** [UNIT] `total_charge()` rises by exactly the charge on insert and falls by exactly the charge on eviction.
+- [ ] **TEST-509** [UNIT] LRU ordering: touch A, insert until one entry must go, assert the *untouched* one was evicted.
+- [ ] **TEST-510** [UNIT] ⭐ A single entry whose charge **exceeds capacity** is still inserted and readable. Refusing would mean reopening that file on every access.
+- [ ] **TEST-511** [UNIT] ⭐ **Pinned entries survive eviction.** Hold a handle, flood the cache past capacity, assert the pinned value is still readable and its deleter has not run.
+- [ ] **TEST-512** [UNIT] ⭐ `total_charge()` may legitimately **exceed** capacity when everything is pinned, and the eviction loop terminates rather than spinning. This is the soft-capacity property; a test that asserts `usage <= capacity` unconditionally is wrong.
+- [ ] **TEST-513** [UNIT] `prune()` evicts everything unpinned and nothing pinned.
+- [ ] **TEST-514** [UNIT] Capacity of 0: insert still returns a usable handle, the entry is simply never cached, and releasing it runs the deleter.
+
+### 11.3 Lifetime and hygiene
+- [ ] **TEST-515** [ASAN] ⭐ Full lifecycle under LSan: insert N, release some, evict some, destroy the cache → **zero leaks**. This is the test that would have caught the missing `free(e)`.
+- [ ] **TEST-516** [UNIT] Destroying a cache while handles are outstanding — define the contract and assert it. `~LRUCache` currently asserts `in_use_` is empty.
+- [ ] **TEST-517** [UNIT] Hash table growth: insert enough entries to force several `resize()` rounds, assert every key is still findable. Guards the `resize()` rehash loop.
+- [ ] **TEST-518** [UNIT] Keys containing embedded `0x00` bytes work — the key is an opaque byte range, not a C string.
+- [ ] **TEST-519** [UNIT] Empty key. Degenerate but legal, and the inline-key allocation arithmetic is `sizeof(LRUHandle) - 1 + key.size()`.
+
+### 11.4 Concurrency
+- [ ] **TEST-520** [ASAN] Concurrent `insert`/`lookup`/`release` across N threads under TSan — no data races, no lost releases.
+- [ ] **TEST-521** [UNIT] Two threads racing on the **same** key: both may insert, the second replaces the first, and the first's value stays alive until its holders release. Wasted work, not a bug — assert it isn't a crash.
 
 ---
 
-## Module 12 — Future modules (write these alongside the feature)
+## Module 12 — `dazzle_db/sstable/table_cache`
+
+- [x] **TEST-530** [IO] A miss opens the file exactly once; a subsequent hit does not reopen. (Count opens via a counting `IOEngine`.)
+- [x] **TEST-531** [IO] Auto-eviction: exceed capacity, assert the evicted id reopens on next `get`.
+- [x] **TEST-532** [IO] `evict(id)` then `get(id)` reopens.
+- [ ] **TEST-533** [IO] `get` on a missing or corrupt file returns a clean error — no throw, no half-inserted cache entry.
+- [ ] **TEST-534** [UNIT] ⭐ Dropping the returned `shared_ptr` releases the cache handle. Assert via `total_charge()` after a `prune()` — if the release leaked, the entry stays pinned and prune can't reclaim it.
+- [ ] **TEST-535** [UNIT] ⭐ The reader **outlives the `TableCache`**. Hold a `shared_ptr<SSTableReader>`, destroy the `TableCache`, then read through it. This is what the deleter's `shared_ptr<Cache>` capture buys; without it this is a use-after-free.
+- [ ] **TEST-536** [UNIT] Charge is non-zero and scales with index size — build two SSTables with wildly different entry counts, assert the larger one charges more. Guards against `approximate_memory_usage()` regressing to `sizeof(SSTableReader)`.
+- [ ] **TEST-537** [ASAN] ⭐ **Eviction during an active scan.** Open an `SSTableIterator`, evict its reader, keep iterating. Must be safe — the iterator owns a `shared_ptr` to its reader. This is the regression test for the borrowed-`fh_`/`index_entries_` hazard.
+- [ ] **TEST-538** [IO] Key encoding: two different `SSTableId`s never collide as cache keys, including ids differing only in high-order bytes (guards the big-endian `encode_uint64`).
+
+---
+
+## Module 13 — `dazzle_db/core` (Version / VersionSet / VersionEdit)
+
+None of this is covered today. The machinery is in and the suite is green, but **green here means "nothing else broke"** — every invariant below is currently unasserted.
+
+### 13.1 Version
+- [ ] **TEST-540** [UNIT] A `Version` built from a metadata map reports exactly those files via `files()` and `sst_meta_to_vector()`.
+- [ ] **TEST-541** [IO] `lookup` returns the newest value for a key present in several SSTables.
+- [ ] **TEST-542** [IO] ⭐ `lookup_internal` returns a tombstone **raw**; `lookup` filters it to `nullopt`. Same key, two calls, opposite results.
+- [ ] **TEST-543** [IO] ⭐ **Tombstone parity across a flush.** `get_internal` on a tombstone must behave identically whether it lives in the memtable or in an SSTable. This is the regression test for the `bad optional access` bug — the memtable path returned tombstones raw while the SSTable path suppressed them, and it was invisible until the key was flushed.
+- [ ] **TEST-544** [IO] `lookup` on a version whose file cannot be opened → clean error, and the decision (corruption vs recoverable) is asserted rather than assumed.
+
+### 13.2 VersionSet — reclamation
+- [ ] **TEST-545** [IO] ⭐ **Pin the bootstrap version, then compact → the old files still exist on disk.** Regression test for the constructor that forgot to push the initial version into `live_versions_`; without the fix, a reader holding V0 has its files unlinked underneath it.
+- [ ] **TEST-546** [IO] ⭐ Pin any version → flush + compact → reads through the pinned version still return the old data, and its files are still on disk.
+- [ ] **TEST-547** [IO] Release the pin, apply another edit → the previously-blocked ids are now returned as reclaimable and the files disappear.
+- [ ] **TEST-548** [IO] Two pins on the same version, release one → **nothing** is reclaimed.
+- [ ] **TEST-549** [UNIT] An id already handed out as reclaimable is **not** handed out again on the next `apply` — otherwise the same file is unlinked twice.
+- [ ] **TEST-550** [UNIT] ⭐ Reclamation only happens on `apply`. Compact, then go idle: assert the obsolete files are gone *by the end of the operation*, not one generation later. If this fails, deletion is lagging — see the design note on `use_count()`.
+
+### 13.3 VersionSet — apply as a compare-and-swap
+- [ ] **TEST-551** [UNIT] ⭐ `apply` with a `removed` id that is no longer live → `STALE_VERSION`, and `current_version_` is **completely unchanged** (no partial application).
+- [ ] **TEST-552** [UNIT] `apply` with an empty edit is a no-op that still publishes a new version.
+- [ ] **TEST-553** [UNIT] `apply` adding and removing the same id in one edit — define the semantics and assert them.
+- [ ] **TEST-554** [IO] ⭐ `run_task` converts a `STALE_VERSION` from `install()` into `ok(nullopt)`, **not** an error. A lost race is a supported outcome. Assert on `error.code`, and assert the *other* compaction still succeeded.
+- [ ] **TEST-555** [ASAN] Concurrent `apply` from N threads: every edit either applies cleanly or is rejected with `STALE_VERSION`. **No edit is ever silently lost** — assert the final file set equals the union of what the winners published.
+- [ ] **TEST-556** [UNIT] `apply` never holds the lock across a filesystem call — assert with a counting `IOEngine` that no `remove` happens before `apply` returns.
+
+### 13.4 Known gaps to test *when* they're fixed
+- [ ] **TEST-557** [CRASH] Rejected `apply` leaves its compaction output orphaned; after 1L, assert startup ignores it rather than republishing it.
+- [ ] **TEST-558** [UNIT] After TICKET-1K5-7 (explicit `Ref`/`Unref`), the liveness tests above should pass unchanged. If they need editing, the refactor changed observable behaviour.
+
+---
+
+## Module 14 — Future modules (write these alongside the feature)
 
 ### Manifest (1L)
 - [ ] **TEST-400** Crash after appending a manifest record but before deleting files → orphans reclaimed, no data loss.
 - [ ] **TEST-401** Crash mid-manifest-append → torn record ignored, previous state intact.
 - [ ] **TEST-402** Manifest and directory contents disagree → manifest wins, orphans logged.
 - [ ] **TEST-403** Corrupt manifest → clean error, engine refuses to open rather than opening wrong.
+- [ ] **TEST-404** ⭐ **Orphaned compaction output.** Force `apply` to reject after the output SSTable is durable; reopen. The rejected output must **not** be published alongside the inputs it was meant to replace. This is the P1 deliberately deferred out of 1K½.
+- [ ] **TEST-405** ⭐ **Id watermark survives an orphan.** Mint id N, write `sst_NNNNNNNN.db`, crash before install, remove the partial file, reopen → the next minted id must be **> N**. Deriving the watermark from filenames reuses N, and a reused id breaks the reverse-id ordering `lookup` depends on.
+- [ ] **TEST-406** A single unreadable `.db` in the directory no longer aborts `open()` — the manifest decides what is live, the directory does not.
 
 ### Scan path (1M)
 - [ ] **TEST-410** Scan yields ascending order across memtable + all SSTables.
@@ -371,7 +459,9 @@ Why the other tests missed it: two of them had no duplicate keys at all, and two
 3. **Module 9** tombstone GC tests — alongside TICKET-130/131, since they define the predicate.
 4. **TEST-300** (overwrite across flushes) — trivially cheap, currently uncovered.
 5. **TEST-253** (merge error propagation) — a fixed bug with no regression test.
-6. Everything else, module by module, as you touch each area.
+6. **TEST-500** (single-shard cache) then Module 11 — the cache has already hidden two fatal bugs, and nearly every eviction assertion is imprecise until the shard count is controllable.
+7. **Module 13** (Version / VersionSet) — the machinery shipped green but **every invariant in it is currently unasserted**. TEST-545, TEST-551 and TEST-554 first: they cover the three bugs this refactor actually fixed.
+8. Everything else, module by module, as you touch each area.
 
 ---
 

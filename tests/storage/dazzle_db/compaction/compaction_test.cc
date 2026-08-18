@@ -51,12 +51,12 @@ TEST(compaction, size_tiered_compaction_auto) {
         storage_engine->flush();
     }
 
-    // auto count = std::count_if(fs::directory_iterator(testdir.path + "/sst"), fs::directory_iterator{},
-    //                            [](const auto& entry) { return fs::is_regular_file(entry); });
+    auto count = std::count_if(fs::directory_iterator(testdir.path + "/sst"), fs::directory_iterator{},
+                               [](const auto& entry) { return fs::is_regular_file(entry); });
 
     /* Based on the above config we set at this point we've hit the 16th file
      * this should auto compact based on the new implementation in flush() */
-    // ASSERT_EQ(count, 2);
+    ASSERT_EQ(count, 2);
 
     /* should get all entries back post deletes */
     for (size_t i = 0; i < 8; i++) {
