@@ -20,7 +20,7 @@ Generated this by using Greptile and plenty of tests misssing need to handle all
 
 ## Cross-cutting rules
 
-- [ ] **TEST-000:** Assert on `error.code`, never `error.message`. Message text is presentation. Audit the existing suite — at least one test already broke on this.
+- [x] **TEST-000:** Assert on `error.code`, never `error.message`. Message text is presentation. Audit the existing suite — at least one test already broke on this.
 - [ ] **TEST-001:** Every loop-based test needs a post-loop count assertion. A per-iteration loop structurally cannot catch "stopped early."
 - [ ] **TEST-002:** All numeric test keys zero-padded so lexicographic order matches numeric order. `user:10000 < user:1001 < user:11` otherwise.
 - [ ] **TEST-003:** Every test that constructs data with sequence numbers must **scramble** them relative to key order, so no assertion can pass by accidental alignment.
@@ -32,7 +32,7 @@ Generated this by using Greptile and plenty of tests misssing need to handle all
 
 ---
 
-## Module 1 — `common/` (Result, Error, encoding, CRC32, HLC, BloomFilter)
+## Module 1 — `/` (Result, Error, encoding, CRC32, HLC, BloomFilter)
 
 ### 1.1 Result / ExpectResult
 - [ ] **TEST-010** [UNIT] Move-only payload: construct with a move-only type, move through several `Result`s, assert no copies (use a counting type).
@@ -96,10 +96,10 @@ Generated this by using Greptile and plenty of tests misssing need to handle all
 The entire model-agnostic-storage claim rests on this module. Currently **untested**.
 
 ### 3.1 Ordering — the load-bearing property
-- [ ] **TEST-080** [PROP] ⭐ **Encoded order == logical order.** Build a list of (partition, clustering, column) triples, encode each, sort the blobs with plain `std::lexicographical_compare`, assert the result matches the expected component-wise order. **This single test justifies `Key::operator<` being a one-liner.**
-- [ ] **TEST-081** [UNIT] Same partition, different clustering → ordered by clustering.
-- [ ] **TEST-082** [UNIT] Same partition + clustering, different column → ordered by column.
-- [ ] **TEST-083** [UNIT] Different partition → partition decides, regardless of what clustering/column contain. Specifically: `("ab", "zzz", "zzz")` sorts before `("abc", "aaa", "aaa")`.
+- [x] **TEST-080** [PROP] ⭐ **Encoded order == logical order.** Build a list of (partition, clustering, column) triples, encode each, sort the blobs with plain `std::lexicographical_compare`, assert the result matches the expected component-wise order. **This single test justifies `Key::operator<` being a one-liner.**
+- [x] **TEST-081** [UNIT] Same partition, different clustering → ordered by clustering.
+- [x] **TEST-082** [UNIT] Same partition + clustering, different column → ordered by column.
+- [x] **TEST-083** [UNIT] Different partition → partition decides, regardless of what clustering/column contain. Specifically: `("ab", "zzz", "zzz")` sorts before `("abc", "aaa", "aaa")`.
 - [ ] **TEST-084** [UNIT] Prefix relationships: `"ab"` before `"abc"`; `""` before everything.
 - [ ] **TEST-085** [UNIT] Components containing `0x00` sort correctly relative to components that don't — specifically that an escaped zero (`0x00 0xFF`) sorts **above** a terminator (`0x00 0x01`).
 - [ ] **TEST-086** [UNIT] Component containing `0xFF`, and one containing `0x01`, adjacent to a boundary.

@@ -18,7 +18,6 @@ TEST(POSIX_IO_Engine, open_non_existent_file) {
     auto& err = result.error();
 
     ASSERT_EQ(err.code, ErrorCode::FILE_DESCRIPTOR_ERR);
-    EXPECT_STREQ("No such file or directory", err.message.c_str());
 }
 
 TEST(POSIX_IO_Engine, create_write_close) {
@@ -192,6 +191,5 @@ TEST(POSIX_IO_Engine, multi_appends) {
         uint8_t read_buf[11] = "";
         auto read_result = engine.read(fh, 10, read_buf, 0);
         ASSERT_TRUE(read_result.has_value());
-        // ASSERT_EQ("helloworld", read_buf);
     }
 }

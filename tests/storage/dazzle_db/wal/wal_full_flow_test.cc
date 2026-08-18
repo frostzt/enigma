@@ -131,5 +131,4 @@ TEST(WAL, crash_recovery) {
 
     auto& err = read_res.error();
     ASSERT_EQ(err.code, ErrorCode::BAD_CONFIG);
-    ASSERT_EQ(err.message, "checksum mismatch corrupted data found");
 }
