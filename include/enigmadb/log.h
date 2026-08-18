@@ -15,7 +15,6 @@
 #include <format>
 #include <iterator>
 #include <memory>
-#include <mutex>
 #include <optional>
 #include <shared_mutex>
 #include <string>

@@ -27,22 +27,14 @@ class VersionSet {
         return current_version_;
     };
 
-    std::vector<SSTableId> append_version(std::shared_ptr<Version> new_version,
-                                          std::vector<SSTableId> obsolete_ids = {}) {
-        std::lock_guard<std::mutex> lock(mu_);
-
-        current_version_ = std::move(new_version);
-        live_versions_.push_back(current_version_);
-
-        if (!obsolete_ids.empty()) {
-            pending_obsolete_ids_.insert(obsolete_ids.begin(), obsolete_ids.end());
-        }
-
-        return purge_obsolete_files();
-    }
-
+    /* TODO: Manifest changes pending */
     Result<std::vector<SSTableId>> apply(VersionEdit edit) {
         std::lock_guard<std::mutex> lock(mu_);
+        for (const auto& id : edit.removed) {
+            if (current_version_->files().find(id) == current_version_->files().end()) {
+                return Result<std::vector<SSTableId>>::err(Error::stale_version("VersionEdit already consumed"));
+            }
+        }
 
         auto new_map = current_version_->files();
 
@@ -51,12 +43,13 @@ class VersionSet {
             new_map.erase(id);
         }
 
+        /* add the added files into the map */
         for (const auto& meta : edit.added) {
             new_map[meta.id] = meta;
         }
 
         auto next_version = std::make_shared<Version>(std::move(new_map));
-        auto published = append_version(next_version);
+        auto published = append_version(next_version, edit.removed);
 
         return Result<std::vector<SSTableId>>::ok(published);
     }
@@ -66,6 +59,18 @@ class VersionSet {
     std::vector<std::shared_ptr<const Version>> live_versions_;
     std::set<SSTableId> pending_obsolete_ids_;
     mutable std::mutex mu_;
+
+    std::vector<SSTableId> append_version(std::shared_ptr<Version> new_version,
+                                          std::vector<SSTableId> obsolete_ids = {}) {
+        current_version_ = std::move(new_version);
+        live_versions_.push_back(current_version_);
+
+        if (!obsolete_ids.empty()) {
+            pending_obsolete_ids_.insert(obsolete_ids.begin(), obsolete_ids.end());
+        }
+
+        return purge_obsolete_files();
+    }
 
     std::vector<SSTableId> purge_obsolete_files() {
         /* remove versions that no longer have a read iterator attached to them */

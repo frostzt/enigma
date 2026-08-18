@@ -6,18 +6,18 @@
 #include "enigmadb/base.h"
 #include "enigmadb/io/io_engine.h"
 #include "enigmadb/log.h"
-#include "enigmadb/storage/dazzle_db/core/version.h"
 #include "enigmadb/storage/dazzle_db/merge_iterator.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_common.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_iterator.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_reader.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_writer.h"
+#include "enigmadb/storage/dazzle_db/sstable/table_cache.h"
 
 namespace enigmadb::dazzle {
 
 Compactor Compactor::create(io::IOEngine& engine, const std::string& data_dir) { return Compactor{engine, data_dir}; }
 
-Result<SSTableId> Compactor::compact(std::shared_ptr<const Version> snapshot, const std::vector<SSTableId>& inputs,
+Result<SSTableId> Compactor::compact(TableCache& cache, const std::vector<SSTableId>& inputs,
                                      const uint64_t next_sst_seq, bool is_full_compaction) {
     uint64_t possible_keys = 0;
     std::vector<std::shared_ptr<SSTableReader>> readers;
@@ -29,14 +29,13 @@ Result<SSTableId> Compactor::compact(std::shared_ptr<const Version> snapshot, co
 
     /* open readers for all the sstable id inputs */
     for (const auto i : inputs) {
-        auto it = snapshot->sst_readers.find(i);
-        if (it == snapshot->sst_readers.end()) {
+        auto rres = cache.get(i);
+        if (!rres.has_value())
             return Result<SSTableId>::err(
                 Error::unexpected("SST file went missing from snapshot before compaction could read it"));
-        }
 
         /* get an estimate amount for next possible keys */
-        auto& reader = it->second;
+        auto& reader = rres.value();
         auto f = reader->get_footer();
         if (!f.has_value()) {
             LOG_ERROR(Category::Compaction, "Failed to fetch footer from a reader for path={} got err={}",

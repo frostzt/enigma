@@ -11,29 +11,34 @@
 #include <execinfo.h>
 
 #include <cstdint>
-#include <format>
 #include <string>
 
 namespace enigmadb {
 
-enum class ErrorCode : int8_t {
-    NONE = -1,
+#define ERROR_CODES(X)                             \
+    /*  Enum Name | Helper Function | Value */     \
+    X(NONE, none, -1)                              \
+    /* Basic error types */                        \
+    X(UNEXPECTED_ERR, unexpected, 0)               \
+    X(FILE_DESCRIPTOR_ERR, file_descriptor_err, 1) \
+    X(FSYNC_ERR, fsync_err, 2)                     \
+    X(CLOSE_ERR, close_err, 3)                     \
+    X(BAD_CONFIG, bad_config, 4)                   \
+    X(WRITE_ERR, write_err, 5)                     \
+    X(READ_ERR, read_err, 6)                       \
+    X(READ_OUT_OF_RANGE, read_out_of_range, 7)     \
+    X(ERR_EOF, err_eof, 8)                         \
+    X(FSTAT_ERR, fstat_err, 9)                     \
+    X(BAD_MAGIC, bad_magic, 10)                    \
+    X(BAD_FILE, bad_file, 11)                      \
+    X(STRUCTURE_EMPTY, structure_empty, 12)        \
+    /* Concurrency and Version errors */           \
+    X(STALE_VERSION, stale_version, 1001)
 
-    UNEXPECTED_ERR = 0,
-
-    /// Basic error types
-    FILE_DESCRIPTOR_ERR = 1,
-    FSYNC_ERR = 2,
-    CLOSE_ERR = 3,
-    BAD_CONFIG = 4,
-    WRITE_ERR = 5,
-    READ_ERR = 6,
-    READ_OUT_OF_RANGE = 7,
-    ERR_EOF = 8,
-    FSTAT_ERR = 9,
-    BAD_MAGIC = 10,
-    BAD_FILE = 11,
-    STRUCTURE_EMPTY = 12,
+enum class ErrorCode : int32_t {
+#define DEFINE_ENUM_ENTRY(enum_name, func_name, val) enum_name = val,
+    ERROR_CODES(DEFINE_ENUM_ENTRY)
+#undef DEFINE_ENUM_ENTRY
 };
 
 struct Error {
@@ -41,17 +46,13 @@ struct Error {
     ErrorCode code;
     std::string message;
 
-    static Error unexpected(std::string message) {
-        return Error{ErrorCode::UNEXPECTED_ERR, std::move(message)};
-    }
-
-    static Error bad_config(std::string message) {
-        return Error{ErrorCode::BAD_CONFIG, std::move(message)};
-    }
+#define DEFINE_STATIC_HELPER(enum_name, func_name, val) \
+    static Error func_name(std::string msg) { return Error{ErrorCode::enum_name, std::move(msg)}; }
+    ERROR_CODES(DEFINE_STATIC_HELPER)
+#undef DEFINE_STATIC_HELPER
 };
 
-[[noreturn]] void _server_panic_impl(const char* file, int line,
-                                     const std::string& msg);
+[[noreturn]] void _server_panic_impl(const char* file, int line, const std::string& msg);
 
 #define server_panic(msg) _server_panic_impl(__FILE__, __LINE__, msg)
 

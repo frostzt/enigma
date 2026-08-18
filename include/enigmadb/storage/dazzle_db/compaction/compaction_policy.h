@@ -22,34 +22,28 @@ namespace enigmadb::dazzle {
 class CompactionPolicy {
    public:
     virtual ~CompactionPolicy() = default;
-    virtual std::optional<CompactionCandidate> pick(
-        const std::vector<const SSTableMeta*>& live) = 0;
+    virtual std::optional<CompactionCandidate> pick(const std::vector<SSTableMeta>& live) = 0;
     virtual std::string_view name() = 0;
 };
 
 class FullCompactionPolicy : public CompactionPolicy {
-    std::optional<CompactionCandidate> pick(
-        const std::vector<const SSTableMeta*>& live) override;
+    std::optional<CompactionCandidate> pick(const std::vector<SSTableMeta>& live) override;
 
     std::string_view name() override { return "full_compaction_policy"; };
 };
 
 class SizeTieredCompactionPolicy : public CompactionPolicy {
    public:
-    SizeTieredCompactionPolicy(size_t min_merge_width, size_t max_merge_width,
-                               double bucket_low = 0.5,
+    SizeTieredCompactionPolicy(size_t min_merge_width, size_t max_merge_width, double bucket_low = 0.5,
                                double bucket_high = 1.5)
         : min_merge_width_(min_merge_width),
           max_merge_width_(max_merge_width),
           bucket_low_(bucket_low),
           bucket_high_(bucket_high) {};
 
-    std::string_view name() override {
-        return "size_tiered_compaction_policy";
-    };
+    std::string_view name() override { return "size_tiered_compaction_policy"; };
 
-    std::optional<CompactionCandidate> pick(
-        const std::vector<const SSTableMeta*>& live) override;
+    std::optional<CompactionCandidate> pick(const std::vector<SSTableMeta>& live) override;
 
    private:
     size_t min_merge_width_, max_merge_width_;

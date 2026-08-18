@@ -11,7 +11,7 @@ namespace enigmadb::dazzle {
 struct VersionEdit {
     std::vector<SSTableId> removed;
     std::vector<SSTableMeta> added;
-    std::optional<uint64_t> next_sst_id;
+    std::optional<uint64_t> next_sst_id{};
 };
 
 }  // namespace enigmadb::dazzle

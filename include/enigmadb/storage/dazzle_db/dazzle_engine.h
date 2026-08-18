@@ -22,11 +22,9 @@
 #include "enigmadb/io/io_engine.h"
 #include "enigmadb/storage/dazzle_db/compaction/compaction.h"
 #include "enigmadb/storage/dazzle_db/compaction/compaction_policy.h"
-#include "enigmadb/storage/dazzle_db/core/version.h"
 #include "enigmadb/storage/dazzle_db/core/version_set.h"
 #include "enigmadb/storage/dazzle_db/memtable/memtable.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_common.h"
-#include "enigmadb/storage/dazzle_db/sstable/sstable_reader.h"
 #include "enigmadb/storage/dazzle_db/sstable/table_cache.h"
 #include "enigmadb/storage/dazzle_db/wal/wal_writer.h"
 #include "enigmadb/storage/key.h"
@@ -59,12 +57,16 @@ class Dazzle : public storage::StorageEngine {
     /* --------------------------------------------------
      * Version management
      * --------------------------------------------------*/
+    /// TableCache manages a pool of active SSTables with an LRU Cache policy
+    std::unique_ptr<TableCache> table_cache_;
+    /// Controls the overall Version management and lending out snapshots to readers and writers
     std::unique_ptr<VersionSet> version_set_;
 
-    std::unique_ptr<TableCache> table_cache_;
+    /// Adds a new SST file into current version also creates a hot cache
+    Result<void> install_flushed_sst(SSTableMeta meta);
 
-    Result<void> install_flushed_sst(SSTableId new_id, std::shared_ptr<SSTableReader> reader,
-                                     std::shared_ptr<SSTableMeta> meta);
+    /// Performs actual IO unlink on SSTable files addressed by the ids
+    void reclaim(const std::vector<SSTableId>& ids);
 
     /* --------------------------------------------------
      * Sequences
@@ -106,10 +108,8 @@ class Dazzle : public storage::StorageEngine {
      * @brief Private constructor; use Dazzle::open() instead.
      */
     Dazzle(io::IOEngine& engine, std::string data_dir, WalWriter wal_writer, uint64_t memtable_size,
-           Memtable active_memtable,
-           std::map<SSTableId, std::shared_ptr<SSTableReader>, SSTableIdComparator> sst_readers,
-           std::map<SSTableId, std::shared_ptr<SSTableMeta>, SSTableIdComparator> sst_meta, uint64_t next_wal_seq,
-           uint64_t next_sst_seq, std::unique_ptr<TableCache> tc, uint64_t highest_sequence = 0,
+           Memtable active_memtable, std::map<SSTableId, SSTableMeta, SSTableIdComparator> sst_meta,
+           uint64_t next_wal_seq, uint64_t next_sst_seq, std::unique_ptr<TableCache> tc, uint64_t highest_sequence = 0,
            std::unique_ptr<CompactionPolicy> policy = nullptr)
         : engine_(engine),
           data_dir_(data_dir),
@@ -117,20 +117,12 @@ class Dazzle : public storage::StorageEngine {
           memtable_size_(memtable_size),
           active_memtable_(std::move(active_memtable)),
           table_cache_(std::move(tc)),
+          version_set_(std::make_unique<VersionSet>(std::move(sst_meta))),
           lsn_{highest_sequence},
           next_wal_seq_{next_wal_seq},
           next_sst_seq_{next_sst_seq},
           policy_(policy ? std::move(policy) : std::make_unique<SizeTieredCompactionPolicy>(4, 8)),
-          compactor_(Compactor::create(engine, data_dir)) {
-        /* setup base version */
-        auto boot_version = std::make_shared<Version>();
-        boot_version->sst_readers = std::move(sst_readers);
-        boot_version->sst_meta = std::move(sst_meta);
-
-        /* create a version set out of the above */
-        version_set_ = std::make_unique<VersionSet>();
-        version_set_->append_version(std::move(boot_version));
-    }
+          compactor_(Compactor::create(engine, data_dir)) {}
 
     /**
      * @brief Returns the filesystem path for a WAL segment with the

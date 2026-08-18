@@ -17,8 +17,10 @@
 
 #include "enigmadb/base.h"
 #include "enigmadb/error.h"
+#include "enigmadb/log.h"
 #include "enigmadb/storage/dazzle_db/compaction/compaction.h"
 #include "enigmadb/storage/dazzle_db/compaction/compaction_policy.h"
+#include "enigmadb/storage/dazzle_db/core/version_edit.h"
 #include "enigmadb/storage/dazzle_db/memtable/memtable.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_common.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_reader.h"
@@ -58,7 +60,7 @@ std::string Dazzle::sst_path(uint64_t seq) {
 }
 
 Result<std::optional<InternalValue>> Version::lookup_internal(const storage::Key& key, TableCache& cache) const {
-    for (auto it = sst_meta.rbegin(); it != sst_meta.rend(); ++it) {
+    for (auto it = sst_meta_.rbegin(); it != sst_meta_.rend(); ++it) {
         auto rr = cache.get(it->first);
         if (!rr.has_value()) return Result<std::optional<InternalValue>>::err(rr.error());
         auto& reader = rr.value();
@@ -126,8 +128,7 @@ Result<std::unique_ptr<Dazzle>> Dazzle::open(io::IOEngine& engine, const std::st
         }
     }
 
-    std::map<SSTableId, std::shared_ptr<SSTableReader>, SSTableIdComparator> sst_readers;
-    std::map<SSTableId, std::shared_ptr<SSTableMeta>, SSTableIdComparator> sst_meta;
+    std::map<SSTableId, SSTableMeta, SSTableIdComparator> sst_meta;
 
     uint64_t max_sst_sequence_found = 0;
 
@@ -148,11 +149,8 @@ Result<std::unique_ptr<Dazzle>> Dazzle::open(io::IOEngine& engine, const std::st
         }
 
         auto sstid = SSTableId{extract_num(entry.filename().string())};
-
-        sst_readers.insert(std::make_pair(sstid, std::make_unique<SSTableReader>(std::move(reader))));
         sst_meta.insert(
-            std::make_pair(sstid, std::make_unique<SSTableMeta>(SSTableMeta{
-                                      sstid, footer.size_bytes, footer.entry_count, footer.highest_sequence})));
+            std::make_pair(sstid, SSTableMeta{sstid, footer.size_bytes, footer.entry_count, footer.highest_sequence}));
     }
 
     /* if wal files exist recover */
@@ -194,8 +192,8 @@ Result<std::unique_ptr<Dazzle>> Dazzle::open(io::IOEngine& engine, const std::st
      * sequences */
     auto storage_engine = std::unique_ptr<Dazzle>(
         new Dazzle(engine, data_dir, std::move(wal_writer_res.value()), memtable_size, std::move(mtable),
-                   std::move(sst_readers), std::move(sst_meta), highest_wal_seq + 1, highest_sst_seq + 1,
-                   std::move(tcr.value()), max_sst_sequence_found + 1, std::move(policy)));
+                   std::move(sst_meta), highest_wal_seq + 1, highest_sst_seq + 1, std::move(tcr.value()),
+                   max_sst_sequence_found + 1, std::move(policy)));
 
     /* try and recover */
     auto recover_result = storage_engine->recover();
@@ -267,6 +265,24 @@ std::vector<SSTableMeta> Dazzle::sst_meta_to_vector() const {
     return current->sst_meta_to_vector();
 }
 
+void Dazzle::reclaim(const std::vector<SSTableId>& ids) {
+    if (ids.size() == 0) return;
+
+    LOG_TRACE(Category::ENGINE_DAZZLE, "Reclaim started with possible {} files to reclaim", ids.size());
+
+    size_t failed = 0;
+    for (const auto& id : ids) {
+        table_cache_->evict(id);
+        /* TODO: This results in a orphaned SST file on a failure or crash I do have an idea for a GC for this */
+        if (auto res = engine_.remove(sst_path(id.value)); !res.has_value()) {
+            failed++;
+            LOG_WARN(Category::IO, "Failed to reclaim deleted file, a SST was left orphaned");
+        }
+    }
+
+    LOG_DEBUG(Category::ENGINE_DAZZLE, "Dazzle engine reclaimed {} files", ids.size() - failed);
+}
+
 Result<std::optional<SSTableId>> Dazzle::do_compact_work() {
     auto task_opt = policy_->pick(sst_meta_to_vector());
     if (!task_opt.has_value()) return Result<std::optional<SSTableId>>::ok(std::nullopt);
@@ -277,13 +293,11 @@ Result<std::optional<SSTableId>> Dazzle::do_compact_work() {
 
 Result<std::optional<SSTableId>> Dazzle::compact_now() {
     auto metas = sst_meta_to_vector();
-    if (metas.empty()) {
-        return Result<std::optional<SSTableId>>::ok(std::nullopt);
-    }
+    if (metas.empty()) return Result<std::optional<SSTableId>>::ok(std::nullopt);
 
     std::vector<SSTableId> inputs;
     inputs.reserve(metas.size());
-    for (const auto* m : metas) inputs.push_back(m->id);
+    for (const auto& m : metas) inputs.push_back(m.id);
     std::sort(inputs.begin(), inputs.end());
 
     return run_task(CompactionTask{inputs, SSTableId{mint_sst_id()},
@@ -306,72 +320,40 @@ Result<std::optional<SSTableId>> Dazzle::run_task(const CompactionTask& task) {
 
 Result<SSTableId> Dazzle::execute(const CompactionTask& task) {
     auto snapshot = version_set_->get_current();
-    return compactor_.compact(snapshot, task.inputs, task.output_id.value, task.can_drop_tombstone);
+    return compactor_.compact(*table_cache_, task.inputs, task.output_id.value, task.can_drop_tombstone);
 }
 
-Result<void> Dazzle::install_flushed_sst(SSTableId new_id, std::shared_ptr<SSTableReader> reader,
-                                         std::shared_ptr<SSTableMeta> meta) {
-    auto current = version_set_->get_current();
-    auto next_version = std::make_shared<Version>();
-    next_version->sst_readers = current->sst_readers;
-    next_version->sst_meta = current->sst_meta;
+Result<void> Dazzle::install_flushed_sst(SSTableMeta meta) {
+    auto edit = VersionEdit({}, {meta});
+    auto applied = version_set_->apply(edit);
+    if (!applied.has_value()) return Result<void>::err(applied.error());
 
-    /* insert the new versions */
-    next_version->sst_readers[new_id] = std::move(reader);
-    next_version->sst_meta[new_id] = std::move(meta);
-
-    version_set_->append_version(next_version);
+    /* reclaim files deleted */
+    reclaim(applied.value());
 
     return Result<void>::ok();
 }
 
 Result<void> Dazzle::install(const CompactionTask& task) {
-    auto current = version_set_->get_current();
-    auto next_version = std::make_shared<Version>();
-
-    next_version->sst_readers = current->sst_readers;
-    next_version->sst_meta = current->sst_meta;
-
-    /* Aggregate and make sure that inputs haven't changed */
-    std::vector<decltype(next_version->sst_readers)::iterator> to_erase;
-    for (auto& i : task.inputs) {
-        auto it = next_version->sst_readers.find(i);
-        if (it == next_version->sst_readers.end()) {
-            return Result<void>::err(Error::unexpected("FATAL: Compacted input supplied no longer exists!"));
-        }
-        to_erase.push_back(it);
-    }
-
     /* Create a new SSTable Reader for this new sstable file */
-    auto sstrr = SSTableReader::create(engine_, sst_path(task.output_id.value));
-    if (!sstrr.has_value()) {
-        /* We need to delete this file on failure if the reader wasn't able
-         * to open this compaction didn't happen - best effort delete,
-         * Manifest and recover should handle if anything goes wrong here */
-        engine_.remove(sst_path(task.output_id.value));
-        return Result<void>::err(sstrr.error());
-    }
-
-    /* Remove the sst readers that are no longer needed */
-    std::vector<std::string> removed_paths;
-    removed_paths.reserve(to_erase.size());
-    for (auto it : to_erase) {
-        removed_paths.push_back(sst_path(it->first.value));
-        next_version->sst_meta.erase(it->first);
-        next_version->sst_readers.erase(it);
-    }
+    auto rf = table_cache_->get(task.output_id);
+    if (!rf.has_value()) return Result<void>::err(rf.error());
 
     /* add the newly generated files */
-    auto& reader = sstrr.value();
-    auto f = reader.get_footer();
+    auto& reader = rf.value();
+    auto f = reader->get_footer();
     if (!f.has_value()) return Result<void>::err(f.error());
     auto footer = f.value();
-    next_version->sst_readers[task.output_id] = std::make_shared<SSTableReader>(std::move(reader));
-    next_version->sst_meta[task.output_id] =
-        std::make_shared<SSTableMeta>(task.output_id, footer.size_bytes, footer.entry_count, footer.highest_sequence);
+
+    auto edit = VersionEdit(
+        task.inputs, {SSTableMeta{task.output_id, footer.size_bytes, footer.entry_count, footer.highest_sequence}});
 
     /* update version */
-    version_set_->append_version(next_version, removed_paths);
+    auto applied = version_set_->apply(edit);
+    if (!applied.has_value()) return Result<void>::err(applied.error());
+
+    /* reclaim files deleted */
+    reclaim(applied.value());
 
     return Result<void>::ok();
 }
@@ -385,17 +367,13 @@ Result<void> Dazzle::flush() {
 
     /* create a new sstable writer */
     auto sstwrr = SSTableWriter::create(engine_, sst_path(new_sequence), active_memtable_.count());
-    if (!sstwrr.has_value()) {
-        return Result<void>::err(sstwrr.error());
-    }
+    if (!sstwrr.has_value()) return Result<void>::err(sstwrr.error());
 
     /* itr memtable and add entry to the sstable */
     auto& writer = sstwrr.value();
     for (auto it = active_memtable_.begin(); it != active_memtable_.end(); it++) {
         auto add_result = writer.add(it->first, it->second);
-        if (!add_result.has_value()) {
-            return Result<void>::err(add_result.error());
-        }
+        if (!add_result.has_value()) return Result<void>::err(add_result.error());
     }
 
     if (auto finish_result = writer.finish(); !finish_result.has_value()) {
@@ -404,16 +382,12 @@ Result<void> Dazzle::flush() {
 
     /* open an sstable reader */
     auto sstrr = SSTableReader::create(engine_, sst_path(new_sequence));
-    if (!sstrr.has_value()) {
-        return Result<void>::err(sstrr.error());
-    }
+    if (!sstrr.has_value()) return Result<void>::err(sstrr.error());
 
     /* create new wal sequence */
     auto new_wal_seq = mint_wal_id();
     auto walwrr = WalWriter::create(engine_, wal_path(new_wal_seq));
-    if (!walwrr.has_value()) {
-        return Result<void>::err(walwrr.error());
-    }
+    if (!walwrr.has_value()) return Result<void>::err(walwrr.error());
 
     auto& reader = sstrr.value();
     auto f = reader.get_footer();
@@ -422,10 +396,8 @@ Result<void> Dazzle::flush() {
 
     /* Create and install new sstable */
     auto new_id = SSTableId{new_sequence};
-    auto insresult = install_flushed_sst(
-        new_id, std::make_shared<SSTableReader>(std::move(reader)),
-        std::make_shared<SSTableMeta>(new_id, footer.size_bytes, footer.entry_count, footer.highest_sequence));
-
+    auto insresult =
+        install_flushed_sst(SSTableMeta{new_id, footer.size_bytes, footer.entry_count, footer.highest_sequence});
     if (!insresult.has_value()) return Result<void>::err(insresult.error());
 
     wal_writer_.emplace(std::move(walwrr.value()));
@@ -459,7 +431,7 @@ Result<std::optional<storage::Value>> Dazzle::get(const storage::Key& key) {
     }
 
     auto current_disk = version_set_->get_current();
-    return current_disk->lookup(key);
+    return current_disk->lookup(key, *table_cache_);
 }
 
 /* this returns raw key so if tombstone will still return the record wrote this for tests */
@@ -469,7 +441,7 @@ Result<std::optional<InternalValue>> Dazzle::get_internal(const storage::Key& ke
     }
 
     auto current_disk = version_set_->get_current();
-    return current_disk->lookup_internal(key);
+    return current_disk->lookup_internal(key, *table_cache_);
 }
 
 Result<uint64_t> Dazzle::recover() {
