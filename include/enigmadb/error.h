@@ -46,10 +46,17 @@ struct Error {
     ErrorCode code;
     std::string message;
 
+    // static ctor
 #define DEFINE_STATIC_HELPER(enum_name, func_name, val) \
     static Error func_name(std::string msg) { return Error{ErrorCode::enum_name, std::move(msg)}; }
     ERROR_CODES(DEFINE_STATIC_HELPER)
 #undef DEFINE_STATIC_HELPER
+
+    // checker
+#define DEFINE_CHECKER(enum_name, func_name, val) \
+    bool is_##func_name() const { return code == ErrorCode::enum_name; }
+    ERROR_CODES(DEFINE_CHECKER)
+#undef DEFINE_CHECKER
 };
 
 [[noreturn]] void _server_panic_impl(const char* file, int line, const std::string& msg);

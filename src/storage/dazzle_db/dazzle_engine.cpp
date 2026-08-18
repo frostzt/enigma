@@ -141,8 +141,6 @@ Result<std::unique_ptr<Dazzle>> Dazzle::open(io::IOEngine& engine, const std::st
 
         auto& reader = sstr.value();
         auto sstfooter = reader.get_footer();
-        assert(sstfooter.has_value());
-
         auto& footer = sstfooter.value();
         if (footer.highest_sequence > max_sst_sequence_found) {
             max_sst_sequence_found = footer.highest_sequence;
@@ -307,6 +305,9 @@ Result<std::optional<SSTableId>> Dazzle::compact_now() {
 Result<std::optional<SSTableId>> Dazzle::run_task(const CompactionTask& task) {
     auto exec_result = execute(task);
     if (!exec_result.has_value()) {
+        if (exec_result.error().is_stale_version()) {
+            return Result<std::optional<SSTableId>>::ok(std::nullopt);
+        }
         return Result<std::optional<SSTableId>>::err(exec_result.error());
     }
 
@@ -319,7 +320,6 @@ Result<std::optional<SSTableId>> Dazzle::run_task(const CompactionTask& task) {
 }
 
 Result<SSTableId> Dazzle::execute(const CompactionTask& task) {
-    auto snapshot = version_set_->get_current();
     return compactor_.compact(*table_cache_, task.inputs, task.output_id.value, task.can_drop_tombstone);
 }
 
@@ -381,7 +381,8 @@ Result<void> Dazzle::flush() {
     }
 
     /* open an sstable reader */
-    auto sstrr = SSTableReader::create(engine_, sst_path(new_sequence));
+    auto new_id = SSTableId{new_sequence};
+    auto sstrr = table_cache_->get(new_id);
     if (!sstrr.has_value()) return Result<void>::err(sstrr.error());
 
     /* create new wal sequence */
@@ -390,12 +391,11 @@ Result<void> Dazzle::flush() {
     if (!walwrr.has_value()) return Result<void>::err(walwrr.error());
 
     auto& reader = sstrr.value();
-    auto f = reader.get_footer();
+    auto f = reader->get_footer();
     if (!f.has_value()) return Result<void>::err(f.error());
     auto footer = f.value();
 
     /* Create and install new sstable */
-    auto new_id = SSTableId{new_sequence};
     auto insresult =
         install_flushed_sst(SSTableMeta{new_id, footer.size_bytes, footer.entry_count, footer.highest_sequence});
     if (!insresult.has_value()) return Result<void>::err(insresult.error());
