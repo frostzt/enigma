@@ -18,7 +18,9 @@ namespace enigmadb::dazzle {
 class VersionSet {
    public:
     VersionSet(std::map<SSTableId, SSTableMeta, SSTableIdComparator> sst_meta)
-        : current_version_(std::make_shared<const Version>(std::move(sst_meta))) {}
+        : current_version_(std::make_shared<const Version>(std::move(sst_meta))) {
+        live_versions_.push_back(current_version_);
+    }
 
     ~VersionSet() = default;
 

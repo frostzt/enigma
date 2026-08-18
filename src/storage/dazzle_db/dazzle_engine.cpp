@@ -141,6 +141,7 @@ Result<std::unique_ptr<Dazzle>> Dazzle::open(io::IOEngine& engine, const std::st
 
         auto& reader = sstr.value();
         auto sstfooter = reader.get_footer();
+        if (!sstfooter.has_value()) return Result<std::unique_ptr<Dazzle>>::err(sstfooter.error());
         auto& footer = sstfooter.value();
         if (footer.highest_sequence > max_sst_sequence_found) {
             max_sst_sequence_found = footer.highest_sequence;
@@ -186,8 +187,7 @@ Result<std::unique_ptr<Dazzle>> Dazzle::open(io::IOEngine& engine, const std::st
     auto tcr = TableCache::create(engine, data_dir, std::move(cache));
     if (!tcr.has_value()) return Result<std::unique_ptr<Dazzle>>::err(tcr.error());
 
-    /* FIXME: Need to revisit this later right now its really bad here with the
-     * sequences */
+    /* Create the dazzle engine */
     auto storage_engine = std::unique_ptr<Dazzle>(
         new Dazzle(engine, data_dir, std::move(wal_writer_res.value()), memtable_size, std::move(mtable),
                    std::move(sst_meta), highest_wal_seq + 1, highest_sst_seq + 1, std::move(tcr.value()),
@@ -305,6 +305,8 @@ Result<std::optional<SSTableId>> Dazzle::compact_now() {
 Result<std::optional<SSTableId>> Dazzle::run_task(const CompactionTask& task) {
     auto exec_result = execute(task);
     if (!exec_result.has_value()) {
+        /* In case we encounter a stale version we WILL NOT treat is as failure given
+         * enigma is built for concurrency such condition can hit */
         if (exec_result.error().is_stale_version()) {
             return Result<std::optional<SSTableId>>::ok(std::nullopt);
         }
