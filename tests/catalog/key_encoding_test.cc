@@ -12,27 +12,20 @@ using namespace enigmadb::TESTNAMESPACE;
 
 TEST(key_encoding, ordering_same_encoded_logical_order) {
     std::vector<storage::Key> keys{
-        make_key("def", "delta", "e"), make_key("def", "delta", "f"),
-        make_key("ghi", "gamma", "g"), make_key("ghi", "gamma", "i"),
-        make_key("def", "delta", "d"), make_key("abc", "alpha", "b"),
-        make_key("abc", "alpha", "c"), make_key("abc", "alpha", "a"),
-        make_key("ghi", "gamma", "h"),
+        make_key("def", "delta", "e"), make_key("def", "delta", "f"), make_key("ghi", "gamma", "g"),
+        make_key("ghi", "gamma", "i"), make_key("def", "delta", "d"), make_key("abc", "alpha", "b"),
+        make_key("abc", "alpha", "c"), make_key("abc", "alpha", "a"), make_key("ghi", "gamma", "h"),
     };
 
     std::vector<storage::Key> expected{
-        make_key("abc", "alpha", "a"), make_key("abc", "alpha", "b"),
-        make_key("abc", "alpha", "c"), make_key("def", "delta", "d"),
-        make_key("def", "delta", "e"), make_key("def", "delta", "f"),
-        make_key("ghi", "gamma", "g"), make_key("ghi", "gamma", "h"),
-        make_key("ghi", "gamma", "i"),
+        make_key("abc", "alpha", "a"), make_key("abc", "alpha", "b"), make_key("abc", "alpha", "c"),
+        make_key("def", "delta", "d"), make_key("def", "delta", "e"), make_key("def", "delta", "f"),
+        make_key("ghi", "gamma", "g"), make_key("ghi", "gamma", "h"), make_key("ghi", "gamma", "i"),
     };
 
-    std::sort(keys.begin(), keys.end(),
-              [](const storage::Key a, const storage::Key b) -> bool {
-                  return std::lexicographical_compare(
-                      a.bytes().begin(), a.bytes().end(), b.bytes().begin(),
-                      b.bytes().end());
-              });
+    std::sort(keys.begin(), keys.end(), [](const storage::Key a, const storage::Key b) -> bool {
+        return std::lexicographical_compare(a.bytes().begin(), a.bytes().end(), b.bytes().begin(), b.bytes().end());
+    });
 
     ASSERT_EQ(keys, expected);
 }
@@ -45,19 +38,15 @@ TEST(key_encoding, preserves_prefix_ordering) {
 }
 
 TEST(key_encoding, preserves_embedded_null_ordering) {
-    auto key_null = catalog::encode_composite_key(
-        make_bytes({'a', 0x00, 'c'}), make_bytes({'d'}), make_bytes({'d'}));
-    auto key_one = catalog::encode_composite_key(
-        make_bytes({'a', 0x01, 'c'}), make_bytes({'d'}), make_bytes({'d'}));
+    auto key_null = catalog::encode_composite_key(make_bytes({'a', 0x00, 'c'}), make_bytes({'d'}), make_bytes({'d'}));
+    auto key_one = catalog::encode_composite_key(make_bytes({'a', 0x01, 'c'}), make_bytes({'d'}), make_bytes({'d'}));
 
     ASSERT_TRUE(key_null < key_one);
 }
 
 TEST(key_encoding, preserves_field_ordering) {
-    auto first_key = catalog::encode_composite_key(
-        make_bytes({'a', 'b'}), make_bytes({'b', 'b'}), make_bytes({'c'}));
-    auto second_key = catalog::encode_composite_key(
-        make_bytes({'a', 'a'}), make_bytes({'b', 'b'}), make_bytes({'c'}));
+    auto first_key = catalog::encode_composite_key(make_bytes({'a', 'b'}), make_bytes({'b', 'b'}), make_bytes({'c'}));
+    auto second_key = catalog::encode_composite_key(make_bytes({'a', 'a'}), make_bytes({'b', 'b'}), make_bytes({'c'}));
 
     ASSERT_TRUE(second_key < first_key);
 }
@@ -69,8 +58,7 @@ TEST(key_decoding, rejects_truncated_buffers) {
 }
 
 TEST(key_decoding, rejects_invalid_escape_sequences) {
-    std::vector<uint8_t> invalid_escape = {'a',  0x00, 0x02, 0x00, 0x01,
-                                           0x00, 0x01, 0x00, 0x01};
+    std::vector<uint8_t> invalid_escape = {'a', 0x00, 0x02, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01};
     auto res = catalog::decode_composite_key(invalid_escape);
     ASSERT_FALSE(res.has_value());
 }
