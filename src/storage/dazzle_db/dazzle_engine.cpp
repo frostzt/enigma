@@ -305,16 +305,16 @@ Result<std::optional<SSTableId>> Dazzle::compact_now() {
 Result<std::optional<SSTableId>> Dazzle::run_task(const CompactionTask& task) {
     auto exec_result = execute(task);
     if (!exec_result.has_value()) {
-        /* In case we encounter a stale version we WILL NOT treat is as failure given
-         * enigma is built for concurrency such condition can hit */
-        if (exec_result.error().is_stale_version()) {
-            return Result<std::optional<SSTableId>>::ok(std::nullopt);
-        }
         return Result<std::optional<SSTableId>>::err(exec_result.error());
     }
 
     /* emplace the new sst reader */
     if (auto r = install(task); !r.has_value()) {
+        /* In case we encounter a stale version we WILL NOT treat is as failure given
+         * enigma is built for concurrency such condition can hit */
+        if (r.error().is_stale_version()) {
+            return Result<std::optional<SSTableId>>::ok(std::nullopt);
+        }
         return Result<std::optional<SSTableId>>::err(r.error());
     }
 
