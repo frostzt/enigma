@@ -27,8 +27,7 @@ class WalReader {
    public:
     Result<WalRecord> next();
 
-    static Result<WalReader> create(io::IOEngine& engine,
-                                    const std::string& path);
+    static Result<WalReader> create(io::IOEngine& engine, const std::string& path);
 };
 
 }  // namespace enigmadb::dazzle

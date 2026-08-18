@@ -20,9 +20,7 @@ namespace enigmadb {
 struct Tempdir {
     std::string path;
 
-    Tempdir(const std::string& p) : path(p) {
-        std::filesystem::create_directory(path);
-    }
+    Tempdir(const std::string& p) : path(p) { std::filesystem::create_directory(path); }
 
     ~Tempdir() { std::filesystem::remove_all(path); }
 };

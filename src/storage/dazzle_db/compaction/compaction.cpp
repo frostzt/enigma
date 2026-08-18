@@ -8,19 +8,19 @@
 #include "enigmadb/log.h"
 #include "enigmadb/storage/dazzle_db/merge_iterator.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_common.h"
+#include "enigmadb/storage/dazzle_db/sstable/sstable_iterator.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_reader.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_writer.h"
+#include "enigmadb/storage/dazzle_db/sstable/table_cache.h"
 
 namespace enigmadb::dazzle {
 
-Compactor Compactor::create(io::IOEngine& engine, const std::string& data_dir) {
-    return Compactor{engine, data_dir};
-}
+Compactor Compactor::create(io::IOEngine& engine, const std::string& data_dir) { return Compactor{engine, data_dir}; }
 
-Result<SSTableId> Compactor::compact(const std::vector<SSTableId>& inputs,
-                                     const uint64_t next_sst_seq,
-                                     bool is_full_compaction) {
+Result<SSTableId> Compactor::compact(TableCache& cache, const std::vector<SSTableId>& inputs,
+                                     const uint64_t next_sst_seq, bool is_full_compaction) {
     uint64_t possible_keys = 0;
+    std::vector<std::shared_ptr<SSTableReader>> readers;
 
     LOG_DEBUG(Category::Compaction,
               "Compaction started for {} inputs next sst seq={} should drop "
@@ -28,39 +28,29 @@ Result<SSTableId> Compactor::compact(const std::vector<SSTableId>& inputs,
               inputs.size(), next_sst_seq, is_full_compaction);
 
     /* open readers for all the sstable id inputs */
-    std::vector<std::unique_ptr<SSTableReader>> readers;
     for (const auto i : inputs) {
-        auto r = SSTableReader::create(engine_, sst_path(data_dir_, i.value));
-        if (!r.has_value()) {
-            LOG_ERROR(Category::Compaction,
-                      "Failed to open a SSTable Reader for path={} got "
-                      "err={}",
-                      sst_path(data_dir_, i.value), r.error().message);
-            return Result<SSTableId>::err(r.error());
-        }
+        auto rres = cache.get(i);
+        if (!rres.has_value())
+            return Result<SSTableId>::err(
+                Error::unexpected("SST file went missing from snapshot before compaction could read it"));
 
         /* get an estimate amount for next possible keys */
-        auto& reader = r.value();
-        auto f = reader.get_footer();
+        auto& reader = rres.value();
+        auto f = reader->get_footer();
         if (!f.has_value()) {
-            LOG_ERROR(
-                Category::Compaction,
-                "Failed to fetch footer from a reader for path={} got err={}",
-                sst_path(data_dir_, i.value), r.error().message);
+            LOG_ERROR(Category::Compaction, "Failed to fetch footer from a reader for path={} got err={}",
+                      sst_path(data_dir_, i.value), f.error().message);
             return Result<SSTableId>::err(f.error());
         }
 
         possible_keys += f.value().entry_count;
-
-        readers.emplace_back(
-            std::make_unique<SSTableReader>(std::move(reader)));
+        readers.push_back(reader);
     }
 
     std::vector<std::unique_ptr<SSTableIterator>> owned_itrs;
     owned_itrs.reserve(readers.size());
     for (const auto& reader : readers) {
-        owned_itrs.push_back(
-            std::make_unique<SSTableIterator>(reader->iterator()));
+        owned_itrs.push_back(std::make_unique<SSTableIterator>(reader));
     }
 
     /* borrows from readers above, heap stable tho */
@@ -71,11 +61,9 @@ Result<SSTableId> Compactor::compact(const std::vector<SSTableId>& inputs,
     }
 
     /* new sst writer */
-    auto w = SSTableWriter::create(engine_, sst_path(data_dir_, next_sst_seq),
-                                   possible_keys);
+    auto w = SSTableWriter::create(engine_, sst_path(data_dir_, next_sst_seq), possible_keys);
     if (!w.has_value()) {
-        LOG_ERROR(Category::Compaction,
-                  "Failed to fetch footer from a writer for path={} got err={}",
+        LOG_ERROR(Category::Compaction, "Failed to fetch footer from a writer for path={} got err={}",
                   sst_path(data_dir_, next_sst_seq), w.error().message);
         return Result<SSTableId>::err(w.error());
     }
@@ -104,10 +92,8 @@ Result<SSTableId> Compactor::compact(const std::vector<SSTableId>& inputs,
     /* flush and create this new file; writer.finish calls fsync on the file and
      * directory */
     if (auto f = writer.finish(); !f.has_value()) {
-        LOG_ERROR(
-            Category::Compaction,
-            "Failed to finish and flush the new file under path={}, got={}",
-            sst_path(data_dir_, next_sst_seq), f.error().message);
+        LOG_ERROR(Category::Compaction, "Failed to finish and flush the new file under path={}, got={}",
+                  sst_path(data_dir_, next_sst_seq), f.error().message);
         return Result<SSTableId>::err(f.error());
     }
 

@@ -140,8 +140,7 @@ class MergeIterator : public InternalIterator {
     Result<void> status() const override;
 
    private:
-    std::vector<InternalIterator*>
-        sources_;  ///< All source iterators (non-owning).
+    std::vector<InternalIterator*> sources_;  ///< All source iterators (non-owning).
 
     /// @brief Min-heap of sources ordered by (key asc, sequence desc).
     std::priority_queue<HeapEntry, std::vector<HeapEntry>, HeapCompare> heap_;

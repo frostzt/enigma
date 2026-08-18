@@ -13,6 +13,7 @@
 
 #include "enigmadb/io/io_engine.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_common.h"
+#include "enigmadb/storage/dazzle_db/sstable/table_cache.h"
 
 namespace enigmadb::dazzle {
 
@@ -34,14 +35,12 @@ class Compactor {
     io::IOEngine& engine_;
     const std::string data_dir_;
 
-    Compactor(io::IOEngine& engine, std::string data_dir)
-        : engine_(engine), data_dir_(std::move(data_dir)) {}
+    Compactor(io::IOEngine& engine, std::string data_dir) : engine_(engine), data_dir_(std::move(data_dir)) {}
 
    public:
     static Compactor create(io::IOEngine& engine, const std::string& data_dir);
 
-    Result<SSTableId> compact(const std::vector<SSTableId>& inputs,
-                              const uint64_t next_sst_seq,
+    Result<SSTableId> compact(TableCache& cache, const std::vector<SSTableId>& inputs, const uint64_t next_sst_seq,
                               bool is_full_compaction);
 };
 

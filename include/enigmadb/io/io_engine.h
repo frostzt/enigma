@@ -83,9 +83,7 @@ class FileHandle {
         return *this;
     }
 
-    FileHandle(FileHandle&& other) noexcept : fd_(other.fd_) {
-        other.fd_ = -1;
-    };
+    FileHandle(FileHandle&& other) noexcept : fd_(other.fd_) { other.fd_ = -1; };
 };
 
 class IOEngine {
@@ -109,8 +107,7 @@ class IOEngine {
      * @param length Length of bytes to append to the file
      * @return Number of bytes appended, or Error on failure.
      */
-    virtual Result<size_t> append(const FileHandle& fh, const uint8_t* buffer,
-                                  size_t length) = 0;
+    virtual Result<size_t> append(const FileHandle& fh, const uint8_t* buffer, size_t length) = 0;
 
     virtual Result<size_t> file_size(const FileHandle& fh) = 0;
 
@@ -124,8 +121,7 @@ class IOEngine {
      * @param offset   Byte offset from the start of the file.
      * @return Number of bytes actually read, or Error on failure.
      */
-    virtual Result<size_t> read(const FileHandle& fh, size_t count,
-                                uint8_t* buffer, size_t offset) = 0;
+    virtual Result<size_t> read(const FileHandle& fh, size_t count, uint8_t* buffer, size_t offset) = 0;
 
     /**
      * @brief Flushes all the directory and flushes it to the disk

@@ -20,13 +20,9 @@ class LogSink {
     virtual void submit(const LogRecord& record) = 0;
     virtual void flush() = 0;
 
-    void set_level(Level lvl) noexcept {
-        sink_level_.store(lvl, std::memory_order_relaxed);
-    }
+    void set_level(Level lvl) noexcept { sink_level_.store(lvl, std::memory_order_relaxed); }
 
-    [[nodiscard]] Level level() const noexcept {
-        return sink_level_.load(std::memory_order_relaxed);
-    }
+    [[nodiscard]] Level level() const noexcept { return sink_level_.load(std::memory_order_relaxed); }
 
    protected:
     static std::string format_record(const LogRecord& record);
@@ -99,8 +95,7 @@ class RingBufferSink : public LogSink {
 
 class AsyncSink : public LogSink {
    public:
-    AsyncSink(std::vector<std::shared_ptr<LogSink>> sinks,
-              size_t capacity = 8192,
+    AsyncSink(std::vector<std::shared_ptr<LogSink>> sinks, size_t capacity = 8192,
               OverflowPolicy policy = OverflowPolicy::BlockOnWarnPlus);
     ~AsyncSink() override;
 

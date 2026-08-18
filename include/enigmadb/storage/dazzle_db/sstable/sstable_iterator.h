@@ -16,13 +16,14 @@
 #ifndef ENIGMA_DB_SSTABLE_ITERATOR_H
 #define ENIGMA_DB_SSTABLE_ITERATOR_H
 
+#include <cassert>
+#include <memory>
 #include <optional>
 #include <vector>
 
-#include "enigmadb/io/io_engine.h"
 #include "enigmadb/storage/dazzle_db/internal_iterator.h"
 #include "enigmadb/storage/dazzle_db/internal_value.h"
-#include "enigmadb/storage/dazzle_db/sstable/sstable_common.h"
+#include "enigmadb/storage/dazzle_db/sstable/sstable_reader.h"
 #include "enigmadb/storage/key.h"
 
 namespace enigmadb::dazzle {
@@ -31,10 +32,14 @@ namespace enigmadb::dazzle {
  * @brief Concrete Iterator that sequentially scans every entry in an
  *        SSTable, block by block.
  *
- * The iterator does not own the file handle or the index — both are
- * borrowed from an SSTableReader and must outlive this object. Blocks
- * are read into an internal buffer that is reused across block
- * transitions.
+ * The iterator holds a shared_ptr to its SSTableReader and reaches the
+ * file handle and index entries through it. That reference is what keeps
+ * the reader alive: the reader cannot be destroyed — nor reclaimed after
+ * eviction from the TableCache — while any iterator over it still exists.
+ * Callers do not need to manage the reader's lifetime separately.
+ *
+ * Blocks are read into an internal buffer that is reused across block
+ * transitions; only the current block is resident at any time.
  *
  * When an I/O or decoding error occurs, the iterator becomes invalid
  * (valid() returns false). Call status() after the scan loop to
@@ -45,9 +50,7 @@ namespace enigmadb::dazzle {
  */
 class SSTableIterator : public InternalIterator {
    private:
-    io::IOEngine& engine_;
-    const io::FileHandle& fh_;
-    const std::vector<IndexEntry>& index_entries_;
+    std::shared_ptr<SSTableReader> reader_;
     std::optional<Error> error_;
 
     size_t current_block_idx_;
@@ -73,15 +76,10 @@ class SSTableIterator : public InternalIterator {
     void set_error(Error err);
 
    public:
-    SSTableIterator(io::IOEngine& engine, const io::FileHandle& fh,
-                    const std::vector<IndexEntry>& index_entries)
-        : engine_(engine),
-          fh_(fh),
-          index_entries_(index_entries),
-          error_(std::nullopt),
-          current_block_idx_(0),
-          block_offset_(0),
-          valid_(false) {}
+    explicit SSTableIterator(std::shared_ptr<SSTableReader> sstreader)
+        : reader_(std::move(sstreader)), error_(std::nullopt), current_block_idx_(0), block_offset_(0), valid_(false) {
+        assert(reader_);
+    }
 
     bool valid() const override;
     void seek_to_first() override;

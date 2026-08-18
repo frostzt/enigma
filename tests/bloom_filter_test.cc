@@ -14,8 +14,7 @@ TEST(bloom_filter, add_may_contain_true) {
     filter.add(storage::Key{string_to_bytes("alice")});
 
     ASSERT_TRUE(filter.may_contain(storage::Key{string_to_bytes("alice")}));
-    ASSERT_FALSE(
-        filter.may_contain(storage::Key{string_to_bytes("not_alice")}));
+    ASSERT_FALSE(filter.may_contain(storage::Key{string_to_bytes("not_alice")}));
 }
 
 TEST(bloom_filter, multiple_keys) {
@@ -23,15 +22,13 @@ TEST(bloom_filter, multiple_keys) {
 
     for (size_t i = 0; i < 500; i++) {
         if (i % 2 == 0) {
-            filter.add(
-                storage::Key{string_to_bytes("alice_" + std::to_string(i))});
+            filter.add(storage::Key{string_to_bytes("alice_" + std::to_string(i))});
         }
     }
 
     for (size_t i = 0; i < 500; i++) {
         if (i % 2 == 0) {
-            ASSERT_TRUE(filter.may_contain(
-                storage::Key{string_to_bytes("alice_" + std::to_string(i))}));
+            ASSERT_TRUE(filter.may_contain(storage::Key{string_to_bytes("alice_" + std::to_string(i))}));
         }
     }
 }

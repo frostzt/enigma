@@ -30,10 +30,7 @@ void MergeIterator::set_error(Error err) {
 
 bool MergeIterator::is_error() const { return error_.has_value(); }
 
-void MergeIterator::reset_heap() {
-    heap_ =
-        std::priority_queue<HeapEntry, std::vector<HeapEntry>, HeapCompare>();
-}
+void MergeIterator::reset_heap() { heap_ = std::priority_queue<HeapEntry, std::vector<HeapEntry>, HeapCompare>(); }
 
 void MergeIterator::seek_to_first() {
     /* clear the heap */

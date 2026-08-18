@@ -20,8 +20,7 @@ TEST(SSTableWriter, add_finish_verify) {
     auto prev_size = std::filesystem::file_size(testfile.path);
 
     /* write flow */
-    auto crewriter_result =
-        dazzle::SSTableWriter::create(engine, testfile.path, 50);
+    auto crewriter_result = dazzle::SSTableWriter::create(engine, testfile.path, 50);
     ASSERT_TRUE(crewriter_result.has_value());
 
     auto& writer = crewriter_result.value();
@@ -44,8 +43,7 @@ TEST(SSTableWriter, add_finish_verify) {
     ASSERT_TRUE(curr_size > prev_size);
 
     /* read flow */
-    auto crewreader_result =
-        dazzle::SSTableReader::create(engine, testfile.path);
+    auto crewreader_result = dazzle::SSTableReader::create(engine, testfile.path);
     ASSERT_TRUE(crewreader_result.has_value());
 
     auto& reader = crewreader_result.value();
@@ -78,8 +76,7 @@ TEST(SSTableWriter, single_entry_finish) {
 
     auto prev_size = std::filesystem::file_size(testfile.path);
 
-    auto crewriter_result =
-        dazzle::SSTableWriter::create(engine, testfile.path, 50);
+    auto crewriter_result = dazzle::SSTableWriter::create(engine, testfile.path, 50);
     ASSERT_TRUE(crewriter_result.has_value());
 
     auto& writer = crewriter_result.value();
@@ -94,8 +91,7 @@ TEST(SSTableWriter, single_entry_finish) {
     auto curr_size = std::filesystem::file_size(testfile.path);
     ASSERT_TRUE(curr_size > prev_size);
 
-    auto crewreader_result =
-        dazzle::SSTableReader::create(engine, testfile.path);
+    auto crewreader_result = dazzle::SSTableReader::create(engine, testfile.path);
     ASSERT_TRUE(crewreader_result.has_value());
 
     auto& reader = crewreader_result.value();
@@ -111,16 +107,14 @@ TEST(SSTableWriter, multiple_records) {
 
     auto prev_size = std::filesystem::file_size(testfile.path);
 
-    auto crewriter_result =
-        dazzle::SSTableWriter::create(engine, testfile.path, 250);
+    auto crewriter_result = dazzle::SSTableWriter::create(engine, testfile.path, 250);
     ASSERT_TRUE(crewriter_result.has_value());
 
     auto& writer = crewriter_result.value();
 
     for (size_t i = 10; i < 60; i++) {
         auto ki = make_key("user:" + std::to_string(i), "2026-01", "age");
-        auto vi = dazzle::InternalValue{
-            string_to_bytes("value_" + std::to_string(i)), false, i};
+        auto vi = dazzle::InternalValue{string_to_bytes("value_" + std::to_string(i)), false, i};
         ASSERT_TRUE(writer.add(ki, vi).has_value());
     }
 
@@ -130,8 +124,7 @@ TEST(SSTableWriter, multiple_records) {
     auto curr_size = std::filesystem::file_size(testfile.path);
     ASSERT_TRUE(curr_size > prev_size);
 
-    auto crewreader_result =
-        dazzle::SSTableReader::create(engine, testfile.path);
+    auto crewreader_result = dazzle::SSTableReader::create(engine, testfile.path);
     ASSERT_TRUE(crewreader_result.has_value());
 
     auto& reader = crewreader_result.value();
@@ -140,8 +133,7 @@ TEST(SSTableWriter, multiple_records) {
         auto ki = make_key("user:" + std::to_string(i), "2026-01", "age");
         auto read_res = reader.get(ki);
         ASSERT_TRUE(read_res.has_value());
-        ASSERT_EQ(bytes_to_string(read_res.value().value().data),
-                  "value_" + std::to_string(i));
+        ASSERT_EQ(bytes_to_string(read_res.value().value().data), "value_" + std::to_string(i));
     }
 }
 
@@ -149,8 +141,7 @@ TEST(SSTableWriter, tombstone_record) {
     io::PosixIOEngine engine;
     Tempfile testfile("tempfile-XXXXXX");
 
-    auto crewriter_result =
-        dazzle::SSTableWriter::create(engine, testfile.path, 10);
+    auto crewriter_result = dazzle::SSTableWriter::create(engine, testfile.path, 10);
     ASSERT_TRUE(crewriter_result.has_value());
 
     auto& writer = crewriter_result.value();
@@ -162,8 +153,7 @@ TEST(SSTableWriter, tombstone_record) {
     auto finish_result = writer.finish();
     ASSERT_TRUE(finish_result.has_value());
 
-    auto crewreader_result =
-        dazzle::SSTableReader::create(engine, testfile.path);
+    auto crewreader_result = dazzle::SSTableReader::create(engine, testfile.path);
     ASSERT_TRUE(crewreader_result.has_value());
 
     auto& reader = crewreader_result.value();
@@ -179,16 +169,14 @@ TEST(SSTableWriter, size_bytes_emits_filesize) {
 
     auto prev_size = std::filesystem::file_size(testfile.path);
 
-    auto crewriter_result =
-        dazzle::SSTableWriter::create(engine, testfile.path, 250);
+    auto crewriter_result = dazzle::SSTableWriter::create(engine, testfile.path, 250);
     ASSERT_TRUE(crewriter_result.has_value());
 
     auto& writer = crewriter_result.value();
 
     for (size_t i = 10; i < 60; i++) {
         auto ki = make_key("user:" + std::to_string(i), "2026-01", "age");
-        auto vi = dazzle::InternalValue{
-            string_to_bytes("value_" + std::to_string(i)), false, i};
+        auto vi = dazzle::InternalValue{string_to_bytes("value_" + std::to_string(i)), false, i};
         ASSERT_TRUE(writer.add(ki, vi).has_value());
     }
 
@@ -198,8 +186,7 @@ TEST(SSTableWriter, size_bytes_emits_filesize) {
     auto curr_size = std::filesystem::file_size(testfile.path);
     ASSERT_TRUE(curr_size > prev_size);
 
-    auto crewreader_result =
-        dazzle::SSTableReader::create(engine, testfile.path);
+    auto crewreader_result = dazzle::SSTableReader::create(engine, testfile.path);
     ASSERT_TRUE(crewreader_result.has_value());
 
     auto& reader = crewreader_result.value();
@@ -207,8 +194,7 @@ TEST(SSTableWriter, size_bytes_emits_filesize) {
         auto ki = make_key("user:" + std::to_string(i), "2026-01", "age");
         auto read_res = reader.get(ki);
         ASSERT_TRUE(read_res.has_value());
-        ASSERT_EQ(bytes_to_string(read_res.value().value().data),
-                  "value_" + std::to_string(i));
+        ASSERT_EQ(bytes_to_string(read_res.value().value().data), "value_" + std::to_string(i));
     }
 
     auto file_size = std::filesystem::file_size(testfile.path);

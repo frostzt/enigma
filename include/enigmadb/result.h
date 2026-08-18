@@ -52,13 +52,9 @@ class [[nodiscard]] ExpectResult {
         throw std::runtime_error("invalid access to error");
     }
 
-    static ExpectResult ok(T value) {
-        return ExpectResult<T, E>{std::move(value)};
-    }
+    static ExpectResult ok(T value) { return ExpectResult<T, E>{std::move(value)}; }
 
-    static ExpectResult err(E error) {
-        return ExpectResult<T, E>{std::move(error)};
-    }
+    static ExpectResult err(E error) { return ExpectResult<T, E>{std::move(error)}; }
 };
 
 template <typename E>
@@ -70,9 +66,7 @@ class ExpectResult<void, E> {
     ExpectResult(E err) : data_(std::move(err)) {}
 
    public:
-    bool has_value() const {
-        return std::holds_alternative<std::monostate>(data_);
-    };
+    bool has_value() const { return std::holds_alternative<std::monostate>(data_); };
 
     void value() const {
         if (!has_value()) {

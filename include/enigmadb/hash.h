@@ -8,6 +8,7 @@
 namespace enigmadb {
 
 uint32_t Hash(const uint8_t* data, size_t n, uint32_t seed);
+uint32_t Hash(const char* data, size_t n, uint32_t seed);
 
 }  // namespace enigmadb
 

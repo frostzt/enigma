@@ -27,11 +27,9 @@ class PosixIOEngine : public IOEngine {
 
     Result<FileHandle> open(const std::string& path, Mode mode) override;
 
-    Result<size_t> append(const FileHandle& fh, const uint8_t* buffer,
-                          size_t length) override;
+    Result<size_t> append(const FileHandle& fh, const uint8_t* buffer, size_t length) override;
 
-    Result<size_t> read(const FileHandle& fh, size_t count, uint8_t* buffer,
-                        size_t offset) override;
+    Result<size_t> read(const FileHandle& fh, size_t count, uint8_t* buffer, size_t offset) override;
 
     Result<size_t> file_size(const FileHandle& fh) override;
 

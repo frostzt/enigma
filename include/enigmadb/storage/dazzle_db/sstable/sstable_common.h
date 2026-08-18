@@ -31,8 +31,7 @@ constexpr size_t SSTABLE_FORMAT_VERSION = 4;
 static constexpr size_t MAGIC_SIZE = 8;
 
 /// @brief Magic bytes written to the footer to identify a valid SSTable file.
-static constexpr std::array<char, 8> MAGIC = {'E', 'N', 'I', 'G',
-                                              'S', 'S', 'T', 'B'};
+static constexpr std::array<char, 8> MAGIC = {'E', 'N', 'I', 'G', 'S', 'S', 'T', 'B'};
 
 /**
  * @brief An 8 byte struct that tracks an SSTable independently via an
@@ -56,9 +55,7 @@ struct SSTableMeta {
 };
 
 struct SSTableIdComparator {
-    bool operator()(const SSTableId& a, const SSTableId& b) const {
-        return a.value < b.value;
-    }
+    bool operator()(const SSTableId& a, const SSTableId& b) const { return a.value < b.value; }
 };
 
 inline std::string sstable_filename(SSTableId id) {
@@ -78,22 +75,17 @@ inline SSTableId parse_sstable_filename(std::string_view path) {
     constexpr std::string_view suffix = ".db";
 
     auto last_slash = path.find_last_of("/\\");
-    std::string_view filename = (last_slash == std::string_view::npos)
-                                    ? path
-                                    : path.substr(last_slash + 1);
+    std::string_view filename = (last_slash == std::string_view::npos) ? path : path.substr(last_slash + 1);
 
-    if (filename.size() <= prefix.size() + suffix.size() ||
-        filename.substr(0, prefix.size()) != prefix ||
+    if (filename.size() <= prefix.size() + suffix.size() || filename.substr(0, prefix.size()) != prefix ||
         filename.substr(filename.size() - suffix.size()) != suffix) {
         return SSTableId{0};
     }
 
-    auto num_part = filename.substr(
-        prefix.size(), filename.size() - prefix.size() - suffix.size());
+    auto num_part = filename.substr(prefix.size(), filename.size() - prefix.size() - suffix.size());
 
     uint64_t value = 0;
-    auto [ptr, ec] = std::from_chars(num_part.data(),
-                                     num_part.data() + num_part.size(), value);
+    auto [ptr, ec] = std::from_chars(num_part.data(), num_part.data() + num_part.size(), value);
 
     if (ec == std::errc::invalid_argument) {
         LOG_ERROR(Category::SSTable, "Not a valid number\n");

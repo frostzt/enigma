@@ -22,8 +22,7 @@ namespace enigmadb::storage {
 
 class FakeIterator : public Iterator {
    public:
-    FakeIterator(std::vector<std::pair<Key, Value>> entries)
-        : entries_(std::move(entries)), curr_idx_(0) {}
+    FakeIterator(std::vector<std::pair<Key, Value>> entries) : entries_(std::move(entries)), curr_idx_(0) {}
 
     bool valid() const override { return curr_idx_ < entries_.size(); }
 

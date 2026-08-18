@@ -22,9 +22,10 @@
 #include "enigmadb/io/io_engine.h"
 #include "enigmadb/storage/dazzle_db/compaction/compaction.h"
 #include "enigmadb/storage/dazzle_db/compaction/compaction_policy.h"
+#include "enigmadb/storage/dazzle_db/core/version_set.h"
 #include "enigmadb/storage/dazzle_db/memtable/memtable.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_common.h"
-#include "enigmadb/storage/dazzle_db/sstable/sstable_reader.h"
+#include "enigmadb/storage/dazzle_db/sstable/table_cache.h"
 #include "enigmadb/storage/dazzle_db/wal/wal_writer.h"
 #include "enigmadb/storage/key.h"
 #include "enigmadb/storage/storage_engine.h"
@@ -54,19 +55,18 @@ class Dazzle : public storage::StorageEngine {
     TimestampGenerator hlc_;
 
     /* --------------------------------------------------
-     * SSTables
+     * Version management
      * --------------------------------------------------*/
-    /// SSTable readers
-    std::map<SSTableId, std::unique_ptr<SSTableReader>, SSTableIdComparator>
-        sst_readers_;
+    /// TableCache manages a pool of active SSTables with an LRU Cache policy
+    std::unique_ptr<TableCache> table_cache_;
+    /// Controls the overall Version management and lending out snapshots to readers and writers
+    std::unique_ptr<VersionSet> version_set_;
 
-    /// SSTable metadata
-    std::map<SSTableId, std::unique_ptr<SSTableMeta>, SSTableIdComparator>
-        sst_meta_;
+    /// Adds a new SST file into current version also creates a hot cache
+    Result<void> install_flushed_sst(SSTableMeta meta);
 
-    std::vector<const SSTableMeta*> sst_meta_to_vector() const;
-
-    Result<void> add_sst_reader(SSTableId, SSTableReader);
+    /// Performs actual IO unlink on SSTable files addressed by the ids
+    void reclaim(const std::vector<SSTableId>& ids);
 
     /* --------------------------------------------------
      * Sequences
@@ -78,28 +78,11 @@ class Dazzle : public storage::StorageEngine {
     /// Sequence number for the next SSTable file.
     std::atomic<uint64_t> next_sst_seq_{0};
 
-    /**
-     * @brief Bumps LSN sequence by one
-     */
-    uint64_t bump_lsn_sequence() {
-        return lsn_.fetch_add(1, std::memory_order_relaxed);
-    }
-
-    uint64_t mint_sst_id() {
-        return next_sst_seq_.fetch_add(1, std::memory_order_relaxed);
-    }
-
-    uint64_t peek_sst_id() const {
-        return next_sst_seq_.load(std::memory_order_relaxed);
-    }
-
-    uint64_t mint_wal_id() {
-        return next_wal_seq_.fetch_add(1, std::memory_order_relaxed);
-    }
-
-    uint64_t peek_wal_id() const {
-        return next_wal_seq_.load(std::memory_order_relaxed);
-    }
+    uint64_t bump_lsn_sequence() { return lsn_.fetch_add(1, std::memory_order_relaxed); }
+    uint64_t mint_sst_id() { return next_sst_seq_.fetch_add(1, std::memory_order_relaxed); }
+    uint64_t peek_sst_id() const { return next_sst_seq_.load(std::memory_order_relaxed); }
+    uint64_t mint_wal_id() { return next_wal_seq_.fetch_add(1, std::memory_order_relaxed); }
+    uint64_t peek_wal_id() const { return next_wal_seq_.load(std::memory_order_relaxed); }
 
     /* --------------------------------------------------
      * Compaction
@@ -119,31 +102,26 @@ class Dazzle : public storage::StorageEngine {
     /// Executes the compaction task and performs sst swap and cleanup
     Result<std::optional<SSTableId>> run_task(const CompactionTask&);
 
+    std::vector<SSTableMeta> sst_meta_to_vector() const;
+
     /**
      * @brief Private constructor; use Dazzle::open() instead.
      */
-    Dazzle(
-        io::IOEngine& engine, std::string data_dir, WalWriter wal_writer,
-        uint64_t memtable_size, Memtable active_memtable,
-        std::map<SSTableId, std::unique_ptr<SSTableReader>, SSTableIdComparator>
-            sst_readers,
-        std::map<SSTableId, std::unique_ptr<SSTableMeta>, SSTableIdComparator>
-            sst_meta,
-        uint64_t next_wal_seq, uint64_t next_sst_seq,
-        uint64_t highest_sequence = 0,
-        std::unique_ptr<CompactionPolicy> policy = nullptr)
+    Dazzle(io::IOEngine& engine, std::string data_dir, WalWriter wal_writer, uint64_t memtable_size,
+           Memtable active_memtable, std::map<SSTableId, SSTableMeta, SSTableIdComparator> sst_meta,
+           uint64_t next_wal_seq, uint64_t next_sst_seq, std::unique_ptr<TableCache> tc, uint64_t highest_sequence = 0,
+           std::unique_ptr<CompactionPolicy> policy = nullptr)
         : engine_(engine),
           data_dir_(data_dir),
           wal_writer_(std::move(wal_writer)),
           memtable_size_(memtable_size),
           active_memtable_(std::move(active_memtable)),
-          sst_readers_(std::move(sst_readers)),
-          sst_meta_(std::move(sst_meta)),
+          table_cache_(std::move(tc)),
+          version_set_(std::make_unique<VersionSet>(std::move(sst_meta))),
           lsn_{highest_sequence},
           next_wal_seq_{next_wal_seq},
           next_sst_seq_{next_sst_seq},
-          policy_(policy ? std::move(policy)
-                         : std::make_unique<SizeTieredCompactionPolicy>(4, 32)),
+          policy_(policy ? std::move(policy) : std::make_unique<SizeTieredCompactionPolicy>(4, 8)),
           compactor_(Compactor::create(engine, data_dir)) {}
 
     /**
@@ -173,9 +151,7 @@ class Dazzle : public storage::StorageEngine {
      * applies the mutation to the memtable, and triggers a flush if
      * the memtable has exceeded its size threshold.
      */
-    Result<void> put(const storage::Key& key,
-                     std::optional<std::span<const uint8_t>> value,
-                     bool remove);
+    Result<void> put(const storage::Key& key, std::optional<std::span<const uint8_t>> value, bool remove);
 
     /**
      * @brief Replays old WAL segments into the memtable and flushes
@@ -191,11 +167,17 @@ class Dazzle : public storage::StorageEngine {
      */
     Result<uint64_t> recover();
 
+    /* TODO: Stats */
+
    public:
     Dazzle(const Dazzle&) = delete;
     Dazzle& operator=(const Dazzle&) = delete;
     Dazzle(Dazzle&&) = delete;
     Dazzle& operator=(Dazzle&&) = delete;
+
+    /* --------------------------------------------------
+     * Stats
+     * --------------------------------------------------*/
 
     /* --------------------------------------------------
      * Compaction
@@ -213,8 +195,7 @@ class Dazzle : public storage::StorageEngine {
     /**
      * @brief Overrides the current compaction policy and sets it as active
      */
-    Result<void> set_compaction_policy(
-        std::unique_ptr<CompactionPolicy> policy);
+    Result<void> set_compaction_policy(std::unique_ptr<CompactionPolicy> policy);
 
     /**
      * @brief Returns the latest LSN available
@@ -239,10 +220,10 @@ class Dazzle : public storage::StorageEngine {
      * number), opens a new WAL segment for writes, and runs crash
      * recovery by replaying any old WAL segments.
      */
-    static Result<std::unique_ptr<Dazzle>> open(
-        io::IOEngine& engine, const std::string& data_dir,
-        const uint64_t memtable_size,
-        std::unique_ptr<CompactionPolicy> policy = nullptr);
+    static Result<std::unique_ptr<Dazzle>> open(io::IOEngine& engine, const std::string& data_dir,
+                                                const uint64_t memtable_size,
+                                                std::unique_ptr<CompactionPolicy> policy = nullptr,
+                                                size_t max_table_cache_bytes_mb = 32, size_t max_file_shards = 16);
 
     /**
      * @brief Writes a column value.
@@ -251,8 +232,7 @@ class Dazzle : public storage::StorageEngine {
      * the active memtable. If the memtable exceeds its size threshold
      * a flush is triggered automatically.
      */
-    Result<void> put(const storage::Key& key,
-                     std::span<const uint8_t> value) override;
+    Result<void> put(const storage::Key& key, std::span<const uint8_t> value) override;
 
     /**
      * @brief Deletes a column by writing a tombstone.

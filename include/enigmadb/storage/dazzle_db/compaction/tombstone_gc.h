@@ -17,8 +17,7 @@ namespace enigmadb::dazzle {
 
 /* Returns true if the inputs are valid and exist in the provided live array.
  * NOTE: live MUST be sorted */
-bool can_drop_tombstones(const std::vector<SSTableId>& live,
-                         const std::vector<SSTableId>& inputs);
+bool can_drop_tombstones(const std::vector<SSTableId>& live, const std::vector<SSTableId>& inputs);
 
 }  // namespace enigmadb::dazzle
 

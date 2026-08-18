@@ -29,15 +29,13 @@ static void store_slot_bytes(uint64_t* dst, const char* src, size_t len) {
     for (size_t w = 0, done = 0; done < len; ++w, done += 8) {
         uint64_t word = 0;
         std::memcpy(&word, src + done, std::min<size_t>(8, len - done));
-        std::atomic_ref<uint64_t>(dst[w]).store(word,
-                                                std::memory_order_relaxed);
+        std::atomic_ref<uint64_t>(dst[w]).store(word, std::memory_order_relaxed);
     }
 }
 
 static void load_slot_bytes(char* dst, uint64_t* src, size_t len) noexcept {
     for (size_t w = 0, done = 0; done < len; ++w, done += 8) {
-        uint64_t word =
-            std::atomic_ref<uint64_t>(src[w]).load(std::memory_order_relaxed);
+        uint64_t word = std::atomic_ref<uint64_t>(src[w]).load(std::memory_order_relaxed);
         std::memcpy(dst + done, &word, std::min<size_t>(8, len - done));
     }
 }
@@ -84,14 +82,10 @@ std::string LogSink::format_record(const LogRecord& rec) {
         last_sec = sec;
     }
 
-    auto ms =
-        std::chrono::duration_cast<std::chrono::milliseconds>(rec.ts - tp_sec)
-            .count();
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(rec.ts - tp_sec).count();
 
-    return std::format("[{}.{:03d}] [{}] [{}] [TID:{}] {}:{} {}: {}\n",
-                       time_str, ms, level_to_string(rec.level),
-                       category_to_string(rec.category), rec.tid, rec.file,
-                       rec.line, rec.func, rec.message);
+    return std::format("[{}.{:03d}] [{}] [{}] [TID:{}] {}:{} {}: {}\n", time_str, ms, level_to_string(rec.level),
+                       category_to_string(rec.category), rec.tid, rec.file, rec.line, rec.func, rec.message);
 }
 
 // ---------------- ConsoleSink ----------------
@@ -129,9 +123,7 @@ void ConsoleSink::flush() {
 }
 
 // ---------------- FileSink ----------------
-FileSink::FileSink(const std::string& filepath) {
-    file_.open(filepath, std::ios::out | std::ios::app);
-}
+FileSink::FileSink(const std::string& filepath) { file_.open(filepath, std::ios::out | std::ios::app); }
 
 FileSink::~FileSink() {
     if (file_.is_open()) file_.close();
@@ -179,8 +171,7 @@ void RingBufferSink::submit(const LogRecord& record) {
     // loser drops its record rather than splicing its bytes into ours.
     uint64_t cur = slot.gen.load(std::memory_order_acquire);
     if (cur & kWritingFlag) return;  // still owned by a writer we lapped
-    if (!slot.gen.compare_exchange_strong(cur, seq | kWritingFlag,
-                                          std::memory_order_acq_rel,
+    if (!slot.gen.compare_exchange_strong(cur, seq | kWritingFlag, std::memory_order_acq_rel,
                                           std::memory_order_relaxed)) {
         return;  // lost the claim to a concurrent writer
     }
@@ -231,8 +222,7 @@ void RingBufferSink::signal_safe_dump(int fd) const noexcept {
 }
 
 // ---------------- AsyncSink ----------------
-AsyncSink::AsyncSink(std::vector<std::shared_ptr<LogSink>> sinks,
-                     size_t capacity, OverflowPolicy policy)
+AsyncSink::AsyncSink(std::vector<std::shared_ptr<LogSink>> sinks, size_t capacity, OverflowPolicy policy)
     : sinks_(std::move(sinks)),
       capacity_(capacity == 0 ? 8192 : capacity),
       policy_(policy),
@@ -258,17 +248,14 @@ void AsyncSink::submit(const LogRecord& record) {
 
     if (size_ == capacity_) {
         bool should_block = (policy_ == OverflowPolicy::Block) ||
-                            (policy_ == OverflowPolicy::BlockOnWarnPlus &&
-                             record.level >= Level::Warn);
+                            (policy_ == OverflowPolicy::BlockOnWarnPlus && record.level >= Level::Warn);
 
         if (should_block) {
-            cv_produce_.wait(lock,
-                             [this] { return size_ < capacity_ || !running_; });
+            cv_produce_.wait(lock, [this] { return size_ < capacity_ || !running_; });
 
             // Woken by stop() rather than by space opening up: enqueueing now
             // would overwrite a live slot and leave the record undelivered.
-            if (size_ == capacity_ ||
-                !running_.load(std::memory_order_relaxed)) {
+            if (size_ == capacity_ || !running_.load(std::memory_order_relaxed)) {
                 lock.unlock();
                 deliver(record);
                 return;
@@ -330,8 +317,7 @@ void AsyncSink::worker_loop() {
             std::unique_lock<std::mutex> lock(mutex_);
             if (!running_ && size_ == 0) break;
 
-            cv_consume_.wait_for(lock, std::chrono::milliseconds(100),
-                                 [this] { return size_ > 0 || !running_; });
+            cv_consume_.wait_for(lock, std::chrono::milliseconds(100), [this] { return size_ > 0 || !running_; });
 
             while (size_ > 0 && batch.size() < 256) {
                 batch.push_back(std::move(queue_[head_]));

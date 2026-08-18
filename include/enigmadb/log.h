@@ -15,7 +15,6 @@
 #include <format>
 #include <iterator>
 #include <memory>
-#include <mutex>
 #include <optional>
 #include <shared_mutex>
 #include <string>
@@ -25,16 +24,7 @@
 namespace enigmadb {
 
 enum class Level : uint8_t { Trace, Debug, Info, Warn, Error, Fatal, Off };
-enum class Category : uint8_t {
-    General,
-    Wal,
-    SSTable,
-    Memtable,
-    Catalog,
-    Compaction,
-    IO,
-    _Count
-};
+enum class Category : uint8_t { General, Wal, SSTable, Memtable, Catalog, Compaction, IO, ENGINE_DAZZLE, _Count };
 
 #ifndef NDEBUG
 inline constexpr Level kCompileMinLevel = Level::Trace;
@@ -80,8 +70,7 @@ inline uint64_t get_current_thread_id() noexcept {
 #elif defined(__linux__)
     return static_cast<uint64_t>(syscall(SYS_gettid));
 #else
-    return static_cast<uint64_t>(
-        std::hash<std::thread::id>{}(std::this_thread::get_id()));
+    return static_cast<uint64_t>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
 #endif
 };
 
@@ -119,8 +108,7 @@ class Logger {
     // the returned reference even if another thread swaps the list meanwhile.
     [[nodiscard]] std::shared_ptr<const SinkList> snapshot_sinks() const;
 
-    std::array<std::atomic<Level>, static_cast<size_t>(Category::_Count)>
-        active_levels_{};
+    std::array<std::atomic<Level>, static_cast<size_t>(Category::_Count)> active_levels_{};
     // Published as an immutable snapshot. dispatch() copies the pointer under a
     // shared lock and then works from its own reference, while init() and
     // add_sink() build a replacement and swap it in exclusively; mutating the
@@ -139,19 +127,16 @@ class Logger {
     std::atomic<RingBufferSink*> ring_ptr_{nullptr};
 };
 
-inline bool log_enabled(Category cat, Level lvl) noexcept {
-    return Logger::instance().is_enabled(cat, lvl);
-};
+inline bool log_enabled(Category cat, Level lvl) noexcept { return Logger::instance().is_enabled(cat, lvl); };
 
 template <typename... Args>
-void log_impl(Category cat, Level lvl, const char* file, int line,
-              const char* fn, std::format_string<Args...> fmt, Args&&... args) {
+void log_impl(Category cat, Level lvl, const char* file, int line, const char* fn, std::format_string<Args...> fmt,
+              Args&&... args) {
     thread_local std::string tls_buffer;
     tls_buffer.clear();
 
     try {
-        std::vformat_to(std::back_inserter(tls_buffer), fmt.get(),
-                        std::make_format_args(args...));
+        std::vformat_to(std::back_inserter(tls_buffer), fmt.get(), std::make_format_args(args...));
     } catch (...) {
         tls_buffer = "<log formatting error>";
     }
@@ -172,23 +157,18 @@ void install_crash_handlers();
 
 }  // namespace enigmadb
 
-#define ENIGMA_LOG(cat, lvl, ...)                                            \
-    do {                                                                     \
-        if (::enigmadb::log_enabled((cat), (lvl))) [[unlikely]] {            \
-            ::enigmadb::log_impl((cat), (lvl), __FILE__, __LINE__, __func__, \
-                                 __VA_ARGS__);                               \
-        }                                                                    \
+#define ENIGMA_LOG(cat, lvl, ...)                                                          \
+    do {                                                                                   \
+        if (::enigmadb::log_enabled((cat), (lvl))) [[unlikely]] {                          \
+            ::enigmadb::log_impl((cat), (lvl), __FILE__, __LINE__, __func__, __VA_ARGS__); \
+        }                                                                                  \
     } while (0)
 
-#define LOG_TRACE(cat, ...) \
-    ENIGMA_LOG(cat, ::enigmadb::Level::Trace, __VA_ARGS__)
-#define LOG_DEBUG(cat, ...) \
-    ENIGMA_LOG(cat, ::enigmadb::Level::Debug, __VA_ARGS__)
+#define LOG_TRACE(cat, ...) ENIGMA_LOG(cat, ::enigmadb::Level::Trace, __VA_ARGS__)
+#define LOG_DEBUG(cat, ...) ENIGMA_LOG(cat, ::enigmadb::Level::Debug, __VA_ARGS__)
 #define LOG_INFO(cat, ...) ENIGMA_LOG(cat, ::enigmadb::Level::Info, __VA_ARGS__)
 #define LOG_WARN(cat, ...) ENIGMA_LOG(cat, ::enigmadb::Level::Warn, __VA_ARGS__)
-#define LOG_ERROR(cat, ...) \
-    ENIGMA_LOG(cat, ::enigmadb::Level::Error, __VA_ARGS__)
-#define LOG_FATAL(cat, ...) \
-    ENIGMA_LOG(cat, ::enigmadb::Level::Fatal, __VA_ARGS__)
+#define LOG_ERROR(cat, ...) ENIGMA_LOG(cat, ::enigmadb::Level::Error, __VA_ARGS__)
+#define LOG_FATAL(cat, ...) ENIGMA_LOG(cat, ::enigmadb::Level::Fatal, __VA_ARGS__)
 
 #endif  // ENIGMA_DB_LOG_H

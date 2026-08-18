@@ -103,8 +103,7 @@ TEST(MemTable, flush_uses_count) {
     ASSERT_FALSE(memtable.should_flush());
 
     for (size_t i = 0; i < 5; i++) {
-        auto ki = make_key("random_" + std::to_string(i),
-                           "random_clus_" + std::to_string(i), "name");
+        auto ki = make_key("random_" + std::to_string(i), "random_clus_" + std::to_string(i), "name");
         memtable.put(ki, as_bytes("artyom"), 2);
     }
 

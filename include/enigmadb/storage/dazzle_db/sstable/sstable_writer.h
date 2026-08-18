@@ -49,9 +49,8 @@ class SSTableWriter {
     BloomFilter bloom_filter_;
     uint64_t highest_sequence_;
 
-    std::vector<IndexEntry>
-        index_entries_;   ///< Accumulated index for all flushed blocks.
-    size_t entry_count_;  ///< Total entries added across all blocks.
+    std::vector<IndexEntry> index_entries_;  ///< Accumulated index for all flushed blocks.
+    size_t entry_count_;                     ///< Total entries added across all blocks.
 
     /**
      * @brief Private constructor; use SSTableWriter::create() instead.
@@ -60,8 +59,7 @@ class SSTableWriter {
      * @param path    Filesystem path of the SSTable being written.
      * @param fh      Open file handle (ownership is moved in).
      */
-    SSTableWriter(io::IOEngine& engine, const std::string& path,
-                  io::FileHandle fh, size_t estimated_keys)
+    SSTableWriter(io::IOEngine& engine, const std::string& path, io::FileHandle fh, size_t estimated_keys)
         : engine_(engine),
           fh_(std::move(fh)),
           path_(path),
@@ -91,9 +89,7 @@ class SSTableWriter {
      *
      * The file is opened in write mode via @p engine.
      */
-    static Result<SSTableWriter> create(io::IOEngine& engine,
-                                        const std::string& path,
-                                        size_t estimated_keys);
+    static Result<SSTableWriter> create(io::IOEngine& engine, const std::string& path, size_t estimated_keys);
 
     /**
      * @brief Appends a key-value entry to the SSTable.

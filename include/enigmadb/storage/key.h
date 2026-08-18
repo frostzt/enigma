@@ -10,8 +10,7 @@
 namespace enigmadb::storage {
 
 template <typename It>
-concept ContiguousByteIterator = std::contiguous_iterator<It> &&
-                                 std::same_as<std::iter_value_t<It>, uint8_t>;
+concept ContiguousByteIterator = std::contiguous_iterator<It> && std::same_as<std::iter_value_t<It>, uint8_t>;
 
 class Key {
    public:
