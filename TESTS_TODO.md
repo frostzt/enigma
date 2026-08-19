@@ -370,11 +370,11 @@ Ported from LevelDB. Two fatal bugs were already found here under ASan/LSan — 
 - [x] **TEST-514** [UNIT] Capacity of 0: insert still returns a usable handle, the entry is simply never cached, and releasing it runs the deleter.
 
 ### 11.3 Lifetime and hygiene
-- [ ] **TEST-515** [ASAN] ⭐ Full lifecycle under LSan: insert N, release some, evict some, destroy the cache → **zero leaks**. This is the test that would have caught the missing `free(e)`.
-- [ ] **TEST-516** [UNIT] Destroying a cache while handles are outstanding — define the contract and assert it. `~LRUCache` currently asserts `in_use_` is empty.
-- [ ] **TEST-517** [UNIT] Hash table growth: insert enough entries to force several `resize()` rounds, assert every key is still findable. Guards the `resize()` rehash loop.
-- [ ] **TEST-518** [UNIT] Keys containing embedded `0x00` bytes work — the key is an opaque byte range, not a C string.
-- [ ] **TEST-519** [UNIT] Empty key. Degenerate but legal, and the inline-key allocation arithmetic is `sizeof(LRUHandle) - 1 + key.size()`.
+- [x] **TEST-515** [ASAN] ⭐ Full lifecycle under LSan: insert N, release some, evict some, destroy the cache → **zero leaks**. This is the test that would have caught the missing `free(e)`.
+- [x] **TEST-516** [UNIT] Destroying a cache while handles are outstanding — define the contract and assert it. `~LRUCache` currently asserts `in_use_` is empty.
+- [x] **TEST-517** [UNIT] Hash table growth: insert enough entries to force several `resize()` rounds, assert every key is still findable. Guards the `resize()` rehash loop.
+- [x] **TEST-518** [UNIT] Keys containing embedded `0x00` bytes work — the key is an opaque byte range, not a C string.
+- [x] **TEST-519** [UNIT] Empty key. Degenerate but legal, and the inline-key allocation arithmetic is `sizeof(LRUHandle) - 1 + key.size()`.
 
 ### 11.4 Concurrency
 - [ ] **TEST-520** [ASAN] Concurrent `insert`/`lookup`/`release` across N threads under TSan — no data races, no lost releases.

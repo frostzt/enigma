@@ -10,8 +10,10 @@
 #include <vector>
 
 #include "gtest/gtest.h"
+#include "test_support/keys.h"
 
 using namespace enigmadb;
+using namespace enigmadb::TESTNAMESPACE;
 
 void* encode_value(uintptr_t v) { return reinterpret_cast<void*>(v); }
 int decode_value(void* v) { return reinterpret_cast<uintptr_t>(v); }
@@ -430,7 +432,129 @@ TEST(Cache, zero_capacity_returns_handle) {
     ASSERT_EQ(v, 1);
 
     cache->release(h);
+    ASSERT_EQ(deleted_values.size(), 1);
 
     auto hi = cache->lookup("key");
     ASSERT_EQ(hi, nullptr);
+}
+
+TEST(Cache, general_lifecycle) {
+    clear_vec();
+    constexpr size_t N = 8;
+    std::unique_ptr<utils::Cache> cache(utils::NewLRUCache(N * 5, 1));
+
+    /* write some keys */
+    for (size_t i = 0; i < N; i++) {
+        cache->release(cache->insert("key" + std::to_string(i), encode_value(i), 5, &deleter));
+    }
+
+    /* read values from keys */
+    for (size_t i = 0; i < N; i++) {
+        auto hi = cache->lookup("key" + std::to_string(i));
+        ASSERT_NE(hi, nullptr);
+        auto vi = decode_value(cache->value(hi));
+        ASSERT_EQ(vi, i);
+        cache->release(hi);
+    }
+
+    /* write some more keys should cause 5 evictions */
+    for (size_t i = 8; i < 13; i++) {
+        cache->release(cache->insert("key" + std::to_string(i), encode_value(1), 5, &deleter));
+    }
+
+    /* read evicted values */
+    for (size_t i = 0; i < N - 3; i++) {
+        auto hi = cache->lookup("key" + std::to_string(i));
+        ASSERT_EQ(hi, nullptr);
+    }
+
+    for (size_t i = 5; i < N - 3; i++) {
+        auto hi = cache->lookup("key" + std::to_string(i));
+        ASSERT_NE(hi, nullptr);
+        auto vi = decode_value(cache->value(hi));
+        ASSERT_EQ(vi, i);
+        cache->release(hi);
+    }
+
+    cache->prune();
+}
+
+TEST(Cache, destroy_cache_while_open_handle) {
+    clear_vec();
+    EXPECT_DEATH(
+        {
+            std::unique_ptr<utils::Cache> cache(utils::NewLRUCache(25, 1));
+            [[maybe_unused]] auto h1 = cache->insert("key1", encode_value(1), 5, &deleter);
+            [[maybe_unused]] auto h2 = cache->insert("key2", encode_value(1), 5, &deleter);
+        },
+        "in_use_.next");
+}
+
+TEST(Cache, hashtable_growth) {
+    clear_vec();
+    std::unique_ptr<utils::Cache> cache(utils::NewLRUCache(750, 1));
+
+    /* hashtable grows *2 -> (start) 4 -> 8 -> 16 -> 32 -> 64 -> 128 */
+    for (size_t i = 0; i < 129; i++) {
+        cache->release(cache->insert("k" + std::to_string(i), encode_value(i), 5, &deleter));
+    }
+
+    for (size_t i = 0; i < 129; i++) {
+        auto hi = cache->lookup("k" + std::to_string(i));
+        ASSERT_NE(hi, nullptr);
+        auto vi = decode_value(cache->value(hi));
+        ASSERT_EQ(vi, i);
+        cache->release(hi);
+    }
+}
+
+TEST(Cache, embedded_terminator_bytes) {
+    clear_vec();
+    std::unique_ptr<utils::Cache> cache(utils::NewLRUCache(750, 1));
+
+    auto k1 = make_bytes({'a', 0x00, 'c'});
+    auto k2 = make_bytes({0x00, 'a', 'c'});
+    auto k3 = make_bytes({'a', 'c', 0x00});
+
+    std::string_view sk1(reinterpret_cast<const char*>(k1.data()), k1.size());
+    std::string_view sk2(reinterpret_cast<const char*>(k2.data()), k2.size());
+    std::string_view sk3(reinterpret_cast<const char*>(k3.data()), k3.size());
+
+    cache->release(cache->insert(sk1, encode_value(1), 5, &deleter));
+    cache->release(cache->insert(sk2, encode_value(2), 5, &deleter));
+    cache->release(cache->insert(sk3, encode_value(3), 5, &deleter));
+
+    /* k1 should return value */
+    auto h = cache->lookup(sk1);
+    ASSERT_NE(h, nullptr);
+    auto v = decode_value(cache->value(h));
+    ASSERT_EQ(v, 1);
+    cache->release(h);
+
+    /* k2 should return value */
+    h = cache->lookup(sk2);
+    ASSERT_NE(h, nullptr);
+    v = decode_value(cache->value(h));
+    ASSERT_EQ(v, 2);
+    cache->release(h);
+
+    /* k3 should return value */
+    h = cache->lookup(sk3);
+    ASSERT_NE(h, nullptr);
+    v = decode_value(cache->value(h));
+    ASSERT_EQ(v, 3);
+    cache->release(h);
+}
+
+TEST(Cache, empty_keys) {
+    clear_vec();
+    std::unique_ptr<utils::Cache> cache(utils::NewLRUCache(25, 1));
+
+    cache->release(cache->insert("", encode_value(1), 5, &deleter));
+
+    auto h = cache->lookup("");
+    ASSERT_NE(h, nullptr);
+    auto v = decode_value(cache->value(h));
+    ASSERT_EQ(v, 1);
+    cache->release(h);
 }
