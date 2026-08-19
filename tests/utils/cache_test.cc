@@ -1,5 +1,6 @@
 #include "enigmadb/utils/cache.h"
 
+#include <algorithm>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -366,4 +367,70 @@ TEST(Cache, charge_exceeds_capacity_for_held_handle_and_resume_eviction) {
 
     /* We release the handles and insert new should evict the last 4 */
     cache->release(cache->insert("g", encode_value(7), 8, &deleter));
+
+    /* last 3 should have been evicted */
+    auto e1 = cache->lookup("a");
+    ASSERT_EQ(e1, nullptr);
+    auto e2 = cache->lookup("b");
+    ASSERT_EQ(e2, nullptr);
+    auto e3 = cache->lookup("c");
+    ASSERT_EQ(e3, nullptr);
+}
+
+TEST(Cache, prune) {
+    clear_vec();
+    std::unique_ptr<utils::Cache> cache(utils::NewLRUCache(50, 1));
+
+    cache->release(cache->insert("key1", encode_value(1), 5, deleter));
+    cache->release(cache->insert("key2", encode_value(2), 5, deleter));
+    cache->release(cache->insert("key3", encode_value(3), 5, deleter));
+    cache->release(cache->insert("key4", encode_value(4), 5, deleter));
+    cache->release(cache->insert("key5", encode_value(5), 5, deleter));
+
+    cache->prune();
+    for (size_t i = 1; i <= 5; i++) {
+        auto l = cache->lookup("key" + std::to_string(i));
+        ASSERT_EQ(l, nullptr);
+    }
+}
+
+TEST(Cache, prune_does_not_evict_pinned) {
+    clear_vec();
+    std::unique_ptr<utils::Cache> cache(utils::NewLRUCache(50, 1));
+
+    auto h1 = cache->insert("key1", encode_value(1), 5, deleter);
+    auto h2 = cache->insert("key2", encode_value(2), 5, deleter);
+    auto h3 = cache->insert("key3", encode_value(3), 5, deleter);
+    auto h4 = cache->insert("key4", encode_value(4), 5, deleter);
+    auto h5 = cache->insert("key5", encode_value(5), 5, deleter);
+
+    cache->prune();
+
+    for (size_t i = 1; i <= 5; i++) {
+        auto l = cache->lookup("key" + std::to_string(i));
+        ASSERT_NE(l, nullptr);
+        auto v = decode_value(cache->value(l));
+        ASSERT_EQ(v, i);
+        cache->release(l);
+    }
+
+    cache->release(h1);
+    cache->release(h2);
+    cache->release(h3);
+    cache->release(h4);
+    cache->release(h5);
+}
+
+TEST(Cache, zero_capacity_returns_handle) {
+    clear_vec();
+    std::unique_ptr<utils::Cache> cache(utils::NewLRUCache(0, 1));
+
+    auto h = cache->insert("key", encode_value(1), 5, deleter);
+    auto v = decode_value(cache->value(h));
+    ASSERT_EQ(v, 1);
+
+    cache->release(h);
+
+    auto hi = cache->lookup("key");
+    ASSERT_EQ(hi, nullptr);
 }

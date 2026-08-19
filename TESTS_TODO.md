@@ -365,9 +365,9 @@ Ported from LevelDB. Two fatal bugs were already found here under ASan/LSan — 
 - [x] **TEST-509** [UNIT] LRU ordering: touch A, insert until one entry must go, assert the *untouched* one was evicted.
 - [x] **TEST-510** [UNIT] ⭐ A single entry whose charge **exceeds capacity** is still inserted and readable. Refusing would mean reopening that file on every access.
 - [x] **TEST-511** [UNIT] ⭐ **Pinned entries survive eviction.** Hold a handle, flood the cache past capacity, assert the pinned value is still readable and its deleter has not run.
-- [ ] **TEST-512** [UNIT] ⭐ `total_charge()` may legitimately **exceed** capacity when everything is pinned, and the eviction loop terminates rather than spinning. This is the soft-capacity property; a test that asserts `usage <= capacity` unconditionally is wrong.
-- [ ] **TEST-513** [UNIT] `prune()` evicts everything unpinned and nothing pinned.
-- [ ] **TEST-514** [UNIT] Capacity of 0: insert still returns a usable handle, the entry is simply never cached, and releasing it runs the deleter.
+- [x] **TEST-512** [UNIT] ⭐ `total_charge()` may legitimately **exceed** capacity when everything is pinned, and the eviction loop terminates rather than spinning. This is the soft-capacity property; a test that asserts `usage <= capacity` unconditionally is wrong.
+- [x] **TEST-513** [UNIT] `prune()` evicts everything unpinned and nothing pinned.
+- [x] **TEST-514** [UNIT] Capacity of 0: insert still returns a usable handle, the entry is simply never cached, and releasing it runs the deleter.
 
 ### 11.3 Lifetime and hygiene
 - [ ] **TEST-515** [ASAN] ⭐ Full lifecycle under LSan: insert N, release some, evict some, destroy the cache → **zero leaks**. This is the test that would have caught the missing `free(e)`.
