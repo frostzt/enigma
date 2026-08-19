@@ -1,0 +1,18 @@
+# ThreadSanitizer suppressions for EnigmaDB.
+#
+# Empty on purpose. Every entry added here is a race TSan found that we decided not
+# to fix so each one needs a comment saying WHY. An unexplained suppression is
+# indistinguishable from a bug someone silenced.
+#
+# Format (one per line):
+#   race:SomeFunctionName
+#   race:path/to/file.cpp
+#   deadlock:SomeMutexWrapper
+#   called_from_lib:libsomething.so
+#
+# Before adding one, check it isn't actually:
+#   - a genuine race (fix it)
+#   - a benign-looking race that is still UB in C++ (fix it "it works on x86" is
+#     not a memory model)
+#   - missing annotation on a custom synchronisation primitive (annotate it with
+#     ANNOTATE_HAPPENS_BEFORE / ANNOTATE_HAPPENS_AFTER instead of suppressing)

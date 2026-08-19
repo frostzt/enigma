@@ -39,15 +39,15 @@ jobs:
         include:
           - name: "Ubuntu Latest (GCC)"
             os: ubuntu-latest
-            sanitizer_flags: ""
-          
+            sanitizer: "none"
+
           - name: "macOS Latest (Clang)"
             os: macos-latest
-            sanitizer_flags: ""
+            sanitizer: "none"
 
           - name: "Ubuntu (ASan + UBSan)"
             os: ubuntu-latest
-            sanitizer_flags: "-fsanitize=address,undefined -fno-omit-frame-pointer"
+            sanitizer: "address"
 
     runs-on: ${{ matrix.os }}
 
@@ -63,16 +63,79 @@ jobs:
         run: |
           cmake -B build \
             -DCMAKE_BUILD_TYPE=Debug \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-            -DCMAKE_CXX_FLAGS="${{ matrix.sanitizer_flags }}" \
-            -DCMAKE_EXE_LINKER_FLAGS="${{ matrix.sanitizer_flags }}"
+            -DENIGMA_SANITIZER=${{ matrix.sanitizer }} \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Build
         run: cmake --build build --parallel
 
       - name: Run Tests
         env:
-          # Halt immediately on the first UBSan or ASan error hit during test execution
           ASAN_OPTIONS: "halt_on_error=1:abort_on_error=1"
           UBSAN_OPTIONS: "halt_on_error=1:print_stacktrace=1"
         run: ctest --test-dir build --output-on-failure
+
+  thread-sanitizer:
+    name: "Ubuntu (TSan)"
+    needs: lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ubuntu-tsan-ccache
+
+      - name: Configure CMake
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DENIGMA_SANITIZER=thread \
+            -DCMAKE_CXX_COMPILER=g++ \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Run Tests
+        env:
+          TSAN_OPTIONS: >-
+            halt_on_error=1:second_deadlock_stack=1:history_size=7:suppressions=${{ github.workspace }}/.tsan-suppressions
+        run: |
+          ctest --test-dir build --output-on-failure \
+            -E "DeathTest|destroy_cache_while_open_handle"
+  # TODO: Enable this back
+  # clang-tidy:
+  #   name: "clang-tidy (changed lines)"
+  #   needs: lint
+  #   runs-on: ubuntu-latest
+  #   if: github.event_name == 'pull_request'
+  #
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #       with:
+  #         fetch-depth: 0
+  #
+  #     - name: Install clang-tidy
+  #       run: |
+  #         sudo apt-get update
+  #         sudo apt-get install -y clang-tidy
+  #
+  #     - name: Configure CMake
+  #       run: |
+  #         cmake -B build \
+  #           -DCMAKE_BUILD_TYPE=Debug \
+  #           -DENIGMA_SANITIZER=none \
+  #           -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+  #
+  #     - name: Prime dependencies
+  #       run: cmake --build build --target enigmadb_lib --parallel
+  #
+  #     - name: Run clang-tidy on the diff
+  #       run: |
+  #         TIDY_DIFF=$(ls /usr/lib/llvm-*/share/clang/clang-tidy-diff.py | head -1)
+  #         git diff -U0 "origin/${{ github.base_ref }}"...HEAD \
+  #           -- 'src/*' 'include/*' 'tests/*' \
+  #           | python3 "$TIDY_DIFF" -p1 -path build -use-color -j "$(nproc)"
