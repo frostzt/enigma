@@ -9,11 +9,11 @@
 #define ENIGMADB_IO_ENGINE_H
 
 #include <fcntl.h>
-#include <stdint.h>
 #include <sys/fcntl.h>
 #include <unistd.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <format>
 #include <ostream>
 #include <string>
@@ -23,21 +23,21 @@
 namespace enigmadb::io {
 
 enum class Mode {
-    Read,       /// O_RDONLY
-    Write,      /// O_WRONLY | O_CREAT
-    ReadWrite,  /// O_RDWR   | O_CREAT
-    Append,     /// O_WRONLY | O_APPEND | O_CREAT
-    Overwrite,  /// O_WRONLY | O_CREAT | O_TRUNC
+    READ,       /// O_RDONLY
+    WRITE,      /// O_WRONLY | O_CREAT
+    READWRITE,  /// O_RDWR   | O_CREAT
+    APPEND,     /// O_WRONLY | O_APPEND | O_CREAT
+    OVERWRITE,  /// O_WRONLY | O_CREAT | O_TRUNC
 };
 
 inline std::ostream& operator<<(std::ostream& out, const Mode& mode) {
     switch (mode) {
             // clang-format off
-            case Mode::Read:      out << "O_RDONLY";                            break;
-            case Mode::Write:     out << "O_WRONLY | O_CREAT";                  break;
-            case Mode::ReadWrite: out << "O_RDWR | O_CREAT";                    break;
-            case Mode::Append:    out << "O_WRONLY | O_APPEND | O_CREAT";       break;
-            case Mode::Overwrite: out << "O_WRONLY | O_CREAT | O_TRUNC";        break;
+            case Mode::READ:      out << "O_RDONLY";                            break;
+            case Mode::WRITE:     out << "O_WRONLY | O_CREAT";                  break;
+            case Mode::READWRITE: out << "O_RDWR | O_CREAT";                    break;
+            case Mode::APPEND:    out << "O_WRONLY | O_APPEND | O_CREAT";       break;
+            case Mode::OVERWRITE: out << "O_WRONLY | O_CREAT | O_TRUNC";        break;
             default:              out << "UNKNOWN_MODE";                        break;
             // clang-format on
     }
@@ -55,8 +55,15 @@ class FileHandle {
     int fd_;
 
    public:
-    struct construct_tag {};
-    FileHandle(construct_tag, int fd) : fd_(fd) {}
+    struct ConstructTag {
+        ConstructTag() = default;
+        ConstructTag(const ConstructTag&) = default;
+        ConstructTag(ConstructTag&&) = default;
+        ConstructTag& operator=(const ConstructTag&) = default;
+        ConstructTag& operator=(ConstructTag&&) = default;
+        ~ConstructTag() = default;
+    };
+    FileHandle(ConstructTag, int fd) : fd_(fd) {}
 
     ~FileHandle() {
         if (fd_ != -1) {
@@ -88,6 +95,10 @@ class FileHandle {
 
 class IOEngine {
    public:
+    IOEngine(const IOEngine&) = default;
+    IOEngine(IOEngine&&) = delete;
+    IOEngine& operator=(const IOEngine&) = default;
+    IOEngine& operator=(IOEngine&&) = delete;
     virtual ~IOEngine() = default;
 
     /**
@@ -172,11 +183,11 @@ struct std::formatter<enigmadb::io::Mode> : std::formatter<std::string_view> {
         // clang-format off
         std::string_view name = "UNKNOWN_MODE";
         switch (mode) {
-            case enigmadb::io::Mode::Read:      name = "O_RDONLY";                      break;
-            case enigmadb::io::Mode::Write:     name = "O_WRONLY | O_CREAT";            break;
-            case enigmadb::io::Mode::ReadWrite: name = "O_RDWR | O_CREAT";              break;
-            case enigmadb::io::Mode::Append:    name = "O_WRONLY | O_APPEND | O_CREAT"; break;
-            case enigmadb::io::Mode::Overwrite: name = "O_WRONLY | O_CREAT | O_TRUNC";  break;
+            case enigmadb::io::Mode::READ:      name = "O_RDONLY";                      break;
+            case enigmadb::io::Mode::WRITE:     name = "O_WRONLY | O_CREAT";            break;
+            case enigmadb::io::Mode::READWRITE: name = "O_RDWR | O_CREAT";              break;
+            case enigmadb::io::Mode::APPEND:    name = "O_WRONLY | O_APPEND | O_CREAT"; break;
+            case enigmadb::io::Mode::OVERWRITE: name = "O_WRONLY | O_CREAT | O_TRUNC";  break;
         }
         return std::formatter<std::string_view>::format(name, ctx);
         // clang-format on

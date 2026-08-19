@@ -9,8 +9,7 @@
 #ifndef ENIGMA_DB_CATALOG_KEY_ENCODING_H
 #define ENIGMA_DB_CATALOG_KEY_ENCODING_H
 
-#include <stdint.h>
-
+#include <cstdint>
 #include <span>
 #include <vector>
 

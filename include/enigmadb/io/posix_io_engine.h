@@ -23,7 +23,11 @@ namespace enigmadb::io {
 
 class PosixIOEngine : public IOEngine {
    public:
-    ~PosixIOEngine() {};
+    PosixIOEngine(const PosixIOEngine&) = default;
+    PosixIOEngine(PosixIOEngine&&) = delete;
+    PosixIOEngine& operator=(const PosixIOEngine&) = default;
+    PosixIOEngine& operator=(PosixIOEngine&&) = delete;
+    ~PosixIOEngine() override = default;
 
     Result<FileHandle> open(const std::string& path, Mode mode) override;
 

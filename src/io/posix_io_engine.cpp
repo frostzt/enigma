@@ -104,11 +104,11 @@ Result<FileHandle> PosixIOEngine::open(const std::string& path, Mode mode) {
     // clang-format off
     int flags;
     switch (mode) {
-      case Mode::Read:      flags = O_RDONLY;                        break;
-      case Mode::Write:     flags = O_WRONLY | O_CREAT;              break;
-      case Mode::ReadWrite: flags = O_RDWR   | O_CREAT;              break;
-      case Mode::Append:    flags = O_WRONLY | O_APPEND | O_CREAT;   break;
-      case Mode::Overwrite: flags = O_WRONLY | O_CREAT | O_TRUNC;    break;
+      case Mode::READ:      flags = O_RDONLY;                        break;
+      case Mode::WRITE:     flags = O_WRONLY | O_CREAT;              break;
+      case Mode::READWRITE: flags = O_RDWR   | O_CREAT;              break;
+      case Mode::APPEND:    flags = O_WRONLY | O_APPEND | O_CREAT;   break;
+      case Mode::OVERWRITE: flags = O_WRONLY | O_CREAT | O_TRUNC;    break;
     }
     // clang-format on
 
@@ -123,7 +123,7 @@ Result<FileHandle> PosixIOEngine::open(const std::string& path, Mode mode) {
 
     /* We use 'construct_tag' here as we know PosixIOEngine is a concrete impl
      */
-    auto fh = FileHandle(FileHandle::construct_tag{}, fd);
+    auto fh = FileHandle(FileHandle::ConstructTag{}, fd);
     return ExpectResult<FileHandle, Error>::ok(std::move(fh));
 };
 
@@ -171,7 +171,7 @@ Result<void> PosixIOEngine::sync_directory(const std::string& path) {
         char* err_msg = strerror(errno);
         return ExpectResult<void, Error>::err(Error{ErrorCode::FILE_DESCRIPTOR_ERR, err_msg});
     }
-    FileHandle dir_handle(FileHandle::construct_tag{}, fd);
+    FileHandle dir_handle(FileHandle::ConstructTag{}, fd);
     if (fsync(fd) == -1) {
         char* err_msg = strerror(errno);
         return ExpectResult<void, Error>::err(Error{ErrorCode::FSYNC_ERR, err_msg});
