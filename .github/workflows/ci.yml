@@ -10,6 +10,9 @@ on:
       - '.gitignore'
       - 'LICENSE'
 
+permissions:
+  contents: read
+
 # Cancel in-progress runs when a new push occurs on the same branch or PR
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
