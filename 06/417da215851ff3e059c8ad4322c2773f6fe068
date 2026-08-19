@@ -1,0 +1,19 @@
+src/utils/cache.cpp
+  s_152efb35590b6f::t_1826afa859b149 266-268
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "06417da215851ff3e059c8ad4322c2773f6fe068",
+  "prompts": {},
+  "sessions": {
+    "s_152efb35590b6f": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_fe6ad6537ffe2xrPvM5tjhARfJ",
+        "model": "claude-opus-5"
+      },
+      "human_author": "frostzt <aidenfrostbite@gmail.com>"
+    }
+  }
+}
