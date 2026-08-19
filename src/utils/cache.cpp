@@ -263,8 +263,9 @@ bool LRUCache::finish_erase(LRUHandle* e) {
 
 void LRUCache::erase(const std::string_view key, uint32_t hash) {
     std::lock_guard<std::mutex> lock(mu_);
-    stats_.total_evictions++;
-    finish_erase(table_.remove(key, hash));
+    if (finish_erase(table_.remove(key, hash))) {
+        stats_.total_evictions++;
+    }
 }
 
 void LRUCache::prune() {

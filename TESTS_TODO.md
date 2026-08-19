@@ -344,7 +344,7 @@ Why the other tests missed it: two of them had no duplicate keys at all, and two
 Ported from LevelDB. Two fatal bugs were already found here under ASan/LSan — an unsized hash table (SEGV on the *first* insert) and a handle leak on every eviction — so this module has a track record of hiding things that only sanitizers surface.
 
 **Testability blocker, do this first:**
-- [ ] **TEST-500** [UNIT] ⭐ Expose a **single-shard** cache for tests. `LRUCache` lives in an anonymous namespace and `ShardedLRUCache` splits capacity 16 ways, so every eviction assertion is currently at the mercy of which shard a key hashes into. Either a `detail/` header or a shard-count constructor parameter. **Nearly every test below is imprecise without this.**
+- [x] **TEST-500** [UNIT] ⭐ Expose a **single-shard** cache for tests. `LRUCache` lives in an anonymous namespace and `ShardedLRUCache` splits capacity 16 ways, so every eviction assertion is currently at the mercy of which shard a key hashes into. Either a `detail/` header or a shard-count constructor parameter. **Nearly every test below is imprecise without this.**
 
 **Contract every cache test must respect:**
 - `insert` returns a reference you must `release`, exactly like `lookup`. Dropping an insert handle pins the entry in `in_use_` forever, and `~LRUCache`'s assert only catches it if the cache is actually destroyed.
@@ -354,17 +354,17 @@ Ported from LevelDB. Two fatal bugs were already found here under ASan/LSan — 
 ### 11.1 Basic behaviour
 - [x] **TEST-501** [UNIT] Insert then lookup returns the same value.
 - [x] **TEST-502** [UNIT] Lookup of an absent key returns nullptr.
-- [ ] **TEST-503** [UNIT] Insert with a duplicate key replaces the old entry; the old value's deleter runs exactly once.
-- [ ] **TEST-504** [UNIT] `erase` removes the entry; a subsequent lookup misses.
-- [ ] **TEST-505** [UNIT] `erase` on an absent key is a no-op, not a crash.
-- [ ] **TEST-506** [UNIT] `new_id()` returns strictly increasing values, and is safe under concurrent calls.
+- [x] **TEST-503** [UNIT] Insert with a duplicate key replaces the old entry; the old value's deleter runs exactly once.
+- [x] **TEST-504** [UNIT] `erase` removes the entry; a subsequent lookup misses.
+- [x] **TEST-505** [UNIT] `erase` on an absent key is a no-op, not a crash.
+- [x] **TEST-506** [UNIT] `new_id()` returns strictly increasing values, and is safe under concurrent calls.
 
 ### 11.2 Charge accounting and eviction
 - [x] **TEST-507** [UNIT] Eviction is triggered by **bytes**, not entry count.
-- [ ] **TEST-508** [UNIT] `total_charge()` rises by exactly the charge on insert and falls by exactly the charge on eviction.
-- [ ] **TEST-509** [UNIT] LRU ordering: touch A, insert until one entry must go, assert the *untouched* one was evicted.
-- [ ] **TEST-510** [UNIT] ⭐ A single entry whose charge **exceeds capacity** is still inserted and readable. Refusing would mean reopening that file on every access.
-- [ ] **TEST-511** [UNIT] ⭐ **Pinned entries survive eviction.** Hold a handle, flood the cache past capacity, assert the pinned value is still readable and its deleter has not run.
+- [x] **TEST-508** [UNIT] `total_charge()` rises by exactly the charge on insert and falls by exactly the charge on eviction.
+- [x] **TEST-509** [UNIT] LRU ordering: touch A, insert until one entry must go, assert the *untouched* one was evicted.
+- [x] **TEST-510** [UNIT] ⭐ A single entry whose charge **exceeds capacity** is still inserted and readable. Refusing would mean reopening that file on every access.
+- [x] **TEST-511** [UNIT] ⭐ **Pinned entries survive eviction.** Hold a handle, flood the cache past capacity, assert the pinned value is still readable and its deleter has not run.
 - [ ] **TEST-512** [UNIT] ⭐ `total_charge()` may legitimately **exceed** capacity when everything is pinned, and the eviction loop terminates rather than spinning. This is the soft-capacity property; a test that asserts `usage <= capacity` unconditionally is wrong.
 - [ ] **TEST-513** [UNIT] `prune()` evicts everything unpinned and nothing pinned.
 - [ ] **TEST-514** [UNIT] Capacity of 0: insert still returns a usable handle, the entry is simply never cached, and releasing it runs the deleter.
