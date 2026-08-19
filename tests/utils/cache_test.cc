@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "enigmadb/utils/numbers.h"
 #include "gtest/gtest.h"
 #include "test_support/keys.h"
 
@@ -459,16 +460,16 @@ TEST(Cache, general_lifecycle) {
 
     /* write some more keys should cause 5 evictions */
     for (size_t i = 8; i < 13; i++) {
-        cache->release(cache->insert("key" + std::to_string(i), encode_value(1), 5, &deleter));
+        cache->release(cache->insert("key" + std::to_string(i), encode_value(i), 5, &deleter));
     }
 
     /* read evicted values */
-    for (size_t i = 0; i < N - 3; i++) {
+    for (size_t i = 0; i < 5; i++) {
         auto hi = cache->lookup("key" + std::to_string(i));
         ASSERT_EQ(hi, nullptr);
     }
 
-    for (size_t i = 5; i < N - 3; i++) {
+    for (size_t i = 5; i < 13; i++) {
         auto hi = cache->lookup("key" + std::to_string(i));
         ASSERT_NE(hi, nullptr);
         auto vi = decode_value(cache->value(hi));
@@ -557,4 +558,91 @@ TEST(Cache, empty_keys) {
     auto v = decode_value(cache->value(h));
     ASSERT_EQ(v, 1);
     cache->release(h);
+}
+
+TEST(Cache, concurrent_inserts_lookups_release_sharded_lru) {
+    clear_vec();
+    std::unique_ptr<utils::Cache> cache(utils::NewLRUCache(mb_to_b(32), 16));
+
+    constexpr size_t numthreads = 8;
+    constexpr size_t writes_per_thread = 500;
+    constexpr size_t total_writes = numthreads * writes_per_thread;
+
+    std::vector<std::thread> wthreads;
+    wthreads.reserve(numthreads);
+
+    /* concurrently write into the cache */
+    for (size_t i = 0; i < numthreads; i++) {
+        wthreads.emplace_back([&cache, i]() {
+            for (size_t k = 0; k < writes_per_thread; k++) {
+                auto id = (i * 1000) + k;
+                cache->release(cache->insert("k" + std::to_string(id), encode_value(id), 10, &deleter));
+            }
+        });
+    }
+
+    for (auto& thread : wthreads) {
+        thread.join();
+    }
+
+    auto stats = cache->get_stats();
+
+    ASSERT_EQ(stats.total_inserts, total_writes);
+
+    std::vector<std::thread> rthreads;
+    rthreads.reserve(numthreads);
+
+    /* concurrently read from the cache */
+    for (size_t i = 0; i < numthreads; i++) {
+        rthreads.emplace_back([&cache, i]() {
+            for (size_t k = 0; k < writes_per_thread; k++) {
+                auto id = (i * 1000) + k;
+
+                auto lh = cache->lookup("k" + std::to_string(id));
+                ASSERT_NE(lh, nullptr);
+                auto lv = decode_value(cache->value(lh));
+                ASSERT_EQ(lv, id);
+                cache->release(lh);
+            }
+        });
+    }
+
+    for (auto& thread : rthreads) {
+        thread.join();
+    }
+
+    stats = cache->get_stats();
+
+    ASSERT_EQ(stats.total_evictions, 0);
+    ASSERT_EQ(stats.total_inserts, total_writes);
+    ASSERT_EQ(stats.total_hits, total_writes);
+    ASSERT_EQ(stats.total_misses, 0);
+}
+
+TEST(Cache, insert_race_should_not_crash) {
+    clear_vec();
+    std::unique_ptr<utils::Cache> cache(utils::NewLRUCache(120, 1));
+
+    std::vector<std::thread> threads;
+    threads.reserve(2);
+
+    threads.emplace_back([&cache]() { cache->release(cache->insert("vroom", encode_value(1), 6, &deleter)); });
+    threads.emplace_back([&cache]() { cache->release(cache->insert("vroom", encode_value(9), 6, &deleter)); });
+
+    for (auto& thread : threads) {
+        thread.join();
+    }
+
+    auto h = cache->lookup("vroom");
+    ASSERT_NE(h, nullptr);
+    auto v = decode_value(cache->value(h));
+    ASSERT_TRUE(v == 1 || v == 9);
+    cache->release(h);
+
+    auto stats = cache->get_stats();
+
+    ASSERT_EQ(stats.total_hits, 1);
+    ASSERT_EQ(stats.total_misses, 0);
+    ASSERT_EQ(stats.total_inserts, 2);
+    ASSERT_EQ(stats.total_evictions, 0);
 }

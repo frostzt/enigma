@@ -377,8 +377,8 @@ Ported from LevelDB. Two fatal bugs were already found here under ASan/LSan — 
 - [x] **TEST-519** [UNIT] Empty key. Degenerate but legal, and the inline-key allocation arithmetic is `sizeof(LRUHandle) - 1 + key.size()`.
 
 ### 11.4 Concurrency
-- [ ] **TEST-520** [ASAN] Concurrent `insert`/`lookup`/`release` across N threads under TSan — no data races, no lost releases.
-- [ ] **TEST-521** [UNIT] Two threads racing on the **same** key: both may insert, the second replaces the first, and the first's value stays alive until its holders release. Wasted work, not a bug — assert it isn't a crash.
+- [x] **TEST-520** [ASAN] Concurrent `insert`/`lookup`/`release` across N threads under TSan — no data races, no lost releases.
+- [x] **TEST-521** [UNIT] Two threads racing on the **same** key: both may insert, the second replaces the first, and the first's value stays alive until its holders release. Wasted work, not a bug — assert it isn't a crash.
 
 ---
 
