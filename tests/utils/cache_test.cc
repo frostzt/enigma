@@ -1,25 +1,43 @@
 #include "enigmadb/utils/cache.h"
 
+#include <algorithm>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <vector>
 
+#include "enigmadb/utils/numbers.h"
 #include "gtest/gtest.h"
+#include "test_support/keys.h"
 
 using namespace enigmadb;
+using namespace enigmadb::TESTNAMESPACE;
 
 void* encode_value(uintptr_t v) { return reinterpret_cast<void*>(v); }
 int decode_value(void* v) { return reinterpret_cast<uintptr_t>(v); }
 
-std::vector<std::pair<const std::string_view, int>> deleted_values(20);
+std::mutex deleted_mu;
+std::vector<std::pair<std::string, int>> deleted_values;
 
-void clear_vec() { deleted_values.clear(); }
+void clear_vec() {
+    std::lock_guard<std::mutex> lock(deleted_mu);
+    deleted_values.clear();
+}
 
-void deleter(const std::string_view k, void* v) { deleted_values.push_back(std::make_pair(k, decode_value(v))); }
+size_t deleted_count() {
+    std::lock_guard<std::mutex> lock(deleted_mu);
+    return deleted_values.size();
+}
 
-TEST(cache, gets_simple_value) {
+void deleter(const std::string_view k, void* v) {
+    std::lock_guard<std::mutex> lock(deleted_mu);
+    deleted_values.emplace_back(std::string(k), decode_value(v));
+}
+
+TEST(Cache, gets_simple_value) {
     clear_vec();
     std::unique_ptr<utils::Cache> cache(utils::NewLRUCache(100, 4));
 
@@ -32,7 +50,7 @@ TEST(cache, gets_simple_value) {
     cache->release(handle);
 }
 
-TEST(cache, hits_and_misses) {
+TEST(Cache, hits_and_misses) {
     clear_vec();
     std::unique_ptr<utils::Cache> cache(utils::NewLRUCache(100, 1));
 
@@ -46,7 +64,7 @@ TEST(cache, hits_and_misses) {
     cache->release(h);
 }
 
-TEST(cache, eviction_policy) {
+TEST(Cache, eviction_policy) {
     clear_vec();
     std::unique_ptr<utils::Cache> cache(utils::NewLRUCache(500, 1));
 
@@ -87,4 +105,682 @@ TEST(cache, eviction_policy) {
     cache->release(rh);
 
     cache->release(h);
+}
+
+TEST(Cache, replaces_key_and_deletes) {
+    clear_vec();
+    std::unique_ptr<utils::Cache> cache(utils::NewLRUCache(100, 1));
+
+    cache->release(cache->insert("new_key", encode_value(1), 2, &deleter));
+    auto h = cache->lookup("new_key");
+    auto v = decode_value(cache->value(h));
+    auto stats = cache->get_stats();
+
+    ASSERT_EQ(stats.total_evictions, 0);
+    ASSERT_EQ(stats.total_hits, 1);
+    ASSERT_EQ(stats.total_misses, 0);
+    ASSERT_EQ(stats.total_inserts, 1);
+    ASSERT_EQ(deleted_values.size(), 0);
+
+    ASSERT_EQ(v, 1);
+    cache->release(h);
+
+    ASSERT_EQ(deleted_values.size(), 0);
+
+    cache->release(cache->insert("new_key", encode_value(2), 2, &deleter));
+    h = cache->lookup("new_key");
+    v = decode_value(cache->value(h));
+    stats = cache->get_stats();
+
+    ASSERT_EQ(stats.total_evictions, 0);
+    ASSERT_EQ(stats.total_hits, 2);
+    ASSERT_EQ(stats.total_misses, 0);
+    ASSERT_EQ(stats.total_inserts, 2);
+
+    /* the new value is what is readable */
+    ASSERT_EQ(v, 2);
+
+    /* the OLD value is what got destroyed, exactly once, under the same key */
+    ASSERT_EQ(deleted_count(), 1);
+    ASSERT_EQ(deleted_values[0].first, "new_key");
+    ASSERT_EQ(deleted_values[0].second, 1);
+
+    /* charge is not double counted after a replacement */
+    ASSERT_EQ(cache->total_charge(), 2);
+
+    cache->release(h);
+}
+
+TEST(Cache, eviction_is_by_bytes_not_count) {
+    clear_vec();
+
+    {
+        /* Two entries, 20 bytes each, capacity 25. A count-based policy would keep
+         * both (count is only 2). A byte-based one must evict the first. */
+        std::unique_ptr<utils::Cache> cache(utils::NewLRUCache(25, 1));
+
+        cache->release(cache->insert("first", encode_value(1), 20, &deleter));
+        ASSERT_EQ(cache->total_charge(), 20);
+
+        cache->release(cache->insert("second", encode_value(2), 20, &deleter));
+
+        auto stats = cache->get_stats();
+        ASSERT_EQ(stats.total_evictions, 1);
+        ASSERT_EQ(cache->total_charge(), 20);
+
+        ASSERT_EQ(cache->lookup("first"), nullptr);
+        ASSERT_EQ(deleted_count(), 1);
+        ASSERT_EQ(deleted_values[0].first, "first");
+
+        auto h = cache->lookup("second");
+        ASSERT_NE(h, nullptr);
+        ASSERT_EQ(decode_value(cache->value(h)), 2);
+        cache->release(h);
+    }
+
+    clear_vec();
+
+    {
+        /* Ten entries, 1 byte each, capacity 25. A count-based policy of 3 would
+         * have evicted seven of them. A byte-based one evicts nothing. */
+        std::unique_ptr<utils::Cache> cache(utils::NewLRUCache(25, 1));
+
+        for (size_t i = 0; i < 10; i++) {
+            cache->release(cache->insert("k" + std::to_string(i), encode_value(i), 1, &deleter));
+        }
+
+        auto stats = cache->get_stats();
+        ASSERT_EQ(stats.total_evictions, 0);
+        ASSERT_EQ(cache->total_charge(), 10);
+        ASSERT_EQ(deleted_count(), 0);
+
+        for (size_t i = 0; i < 10; i++) {
+            auto h = cache->lookup("k" + std::to_string(i));
+            ASSERT_NE(h, nullptr);
+            ASSERT_EQ(decode_value(cache->value(h)), i);
+            cache->release(h);
+        }
+    }
+}
+
+TEST(Cache, erase) {
+    clear_vec();
+    std::unique_ptr<utils::Cache> cache(utils::NewLRUCache(100, 1));
+
+    cache->release(cache->insert("new_key", encode_value(1), 2, &deleter));
+    auto h = cache->lookup("new_key");
+    auto v = decode_value(cache->value(h));
+    auto stats = cache->get_stats();
+
+    ASSERT_EQ(stats.total_evictions, 0);
+    ASSERT_EQ(stats.total_hits, 1);
+    ASSERT_EQ(stats.total_misses, 0);
+    ASSERT_EQ(stats.total_inserts, 1);
+    ASSERT_EQ(v, 1);
+    cache->release(h);
+
+    cache->erase("new_key");
+    h = cache->lookup("new_key");
+    stats = cache->get_stats();
+    ASSERT_EQ(h, nullptr);
+    ASSERT_EQ(stats.total_evictions, 1);
+    ASSERT_EQ(stats.total_hits, 1);
+    ASSERT_EQ(stats.total_misses, 1);
+    ASSERT_EQ(stats.total_inserts, 1);
+}
+
+TEST(Cache, erase_noop) {
+    clear_vec();
+    std::unique_ptr<utils::Cache> cache(utils::NewLRUCache(100, 1));
+    cache->erase("does_not_exist");
+    auto stats = cache->get_stats();
+
+    ASSERT_EQ(stats.total_evictions, 0);
+    ASSERT_EQ(stats.total_hits, 0);
+    ASSERT_EQ(stats.total_misses, 0);
+    ASSERT_EQ(stats.total_inserts, 0);
+}
+
+TEST(Cache, new_id_increases_monotonically_single_thread) {
+    clear_vec();
+    std::unique_ptr<utils::Cache> cache(utils::NewLRUCache(100, 1));
+
+    for (size_t i = 1; i < 5000; i++) {
+        auto gid = cache->new_id();
+        ASSERT_EQ(i, gid);
+    }
+}
+
+TEST(Cache, new_id_increases_monotonically_concurrent) {
+    clear_vec();
+    std::unique_ptr<utils::Cache> cache(utils::NewLRUCache(100, 1));
+
+    constexpr size_t numthreads = 8;
+    constexpr size_t ids_per_thread = 1000;
+    constexpr size_t total_ids = numthreads * ids_per_thread;
+
+    std::vector<std::thread> threads;
+    threads.reserve(numthreads);
+
+    std::mutex mtx;
+    std::vector<uint64_t> all_ids;
+    all_ids.reserve(total_ids);
+
+    for (size_t i = 0; i < numthreads; i++) {
+        threads.emplace_back([&cache, &mtx, &all_ids]() {
+            std::vector<uint64_t> local_ids;
+            local_ids.reserve(ids_per_thread);
+
+            uint64_t prev_id = 0;
+            for (size_t i = 0; i < ids_per_thread; ++i) {
+                auto gid = cache->new_id();
+
+                EXPECT_GT(gid, prev_id);
+                prev_id = gid;
+
+                local_ids.push_back(gid);
+            }
+
+            std::lock_guard<std::mutex> lock(mtx);
+            all_ids.insert(all_ids.end(), local_ids.begin(), local_ids.end());
+        });
+    }
+
+    for (auto& thread : threads) {
+        thread.join();
+    }
+
+    /* ids must be unique */
+    ASSERT_EQ(all_ids.size(), total_ids);
+
+    std::sort(all_ids.begin(), all_ids.end());
+
+    /* ids present exactly once */
+    for (size_t i = 0; i < total_ids; ++i) {
+        ASSERT_EQ(all_ids[i], static_cast<uint64_t>(i + 1));
+    }
+}
+
+TEST(Cache, charge_increments_and_decrements) {
+    clear_vec();
+    std::unique_ptr<utils::Cache> cache(utils::NewLRUCache(100, 1));
+
+    ASSERT_EQ(cache->total_charge(), 0);
+
+    cache->release(cache->insert("new_key", encode_value(1), 8, &deleter));
+    auto h = cache->lookup("new_key");
+    auto v = decode_value(cache->value(h));
+    ASSERT_EQ(v, 1);
+
+    ASSERT_EQ(cache->total_charge(), 8);
+    cache->release(h);
+
+    cache->erase("new_key");
+    ASSERT_EQ(cache->total_charge(), 0);
+}
+
+TEST(Cache, lru_ordering) {
+    clear_vec();
+    std::unique_ptr<utils::Cache> cache(utils::NewLRUCache(25, 1));
+    auto stats = cache->get_stats();
+
+    ASSERT_EQ(stats.total_evictions, 0);
+    ASSERT_EQ(stats.total_hits, 0);
+    ASSERT_EQ(stats.total_inserts, 0);
+    ASSERT_EQ(stats.total_misses, 0);
+
+    cache->release(cache->insert("red", encode_value(1), 8, &deleter));
+    cache->release(cache->insert("blue", encode_value(2), 8, &deleter));
+    cache->release(cache->insert("pink", encode_value(3), 8, &deleter));
+
+    stats = cache->get_stats();
+
+    ASSERT_EQ(stats.total_evictions, 0);
+    ASSERT_EQ(stats.total_hits, 0);
+    ASSERT_EQ(stats.total_inserts, 3);
+    ASSERT_EQ(stats.total_misses, 0);
+
+    cache->release(cache->insert("lancy", encode_value(3), 8, &deleter));
+
+    auto h = cache->lookup("red");
+    stats = cache->get_stats();
+    ASSERT_EQ(h, nullptr);
+
+    ASSERT_EQ(stats.total_evictions, 1);
+    ASSERT_EQ(stats.total_hits, 0);
+    ASSERT_EQ(stats.total_inserts, 4);
+    ASSERT_EQ(stats.total_misses, 1);
+}
+
+TEST(Cache, lru_ordering_with_held_handle) {
+    clear_vec();
+    std::unique_ptr<utils::Cache> cache(utils::NewLRUCache(25, 1));
+    auto stats = cache->get_stats();
+
+    ASSERT_EQ(stats.total_evictions, 0);
+    ASSERT_EQ(stats.total_hits, 0);
+    ASSERT_EQ(stats.total_inserts, 0);
+    ASSERT_EQ(stats.total_misses, 0);
+
+    cache->release(cache->insert("red", encode_value(1), 8, &deleter));
+    cache->release(cache->insert("blue", encode_value(2), 8, &deleter));
+    cache->release(cache->insert("pink", encode_value(3), 8, &deleter));
+
+    /* should move red above */
+    cache->release(cache->lookup("red"));
+
+    stats = cache->get_stats();
+
+    ASSERT_EQ(stats.total_evictions, 0);
+    ASSERT_EQ(stats.total_hits, 1);
+    ASSERT_EQ(stats.total_inserts, 3);
+    ASSERT_EQ(stats.total_misses, 0);
+
+    cache->release(cache->insert("lancy", encode_value(3), 8, &deleter));
+
+    auto h = cache->lookup("red");
+    auto v = decode_value(cache->value(h));
+    stats = cache->get_stats();
+    ASSERT_EQ(v, 1);
+
+    cache->release(h);
+
+    auto l = cache->lookup("blue");
+    ASSERT_EQ(l, nullptr);
+
+    ASSERT_EQ(stats.total_evictions, 1);
+    ASSERT_EQ(stats.total_hits, 2);
+    ASSERT_EQ(stats.total_inserts, 4);
+    ASSERT_EQ(stats.total_misses, 0);
+}
+
+TEST(Cache, charge_exceeds_capacity_but_readable) {
+    clear_vec();
+    std::unique_ptr<utils::Cache> cache(utils::NewLRUCache(25, 1));
+
+    cache->release(cache->insert("red", encode_value(1), 30, &deleter));
+
+    auto h = cache->lookup("red");
+    auto v = decode_value(cache->value(h));
+    ASSERT_EQ(v, 1);
+    cache->release(h);
+}
+
+TEST(Cache, charge_exceeds_capacity_for_held_handle_and_resume_eviction) {
+    clear_vec();
+    constexpr size_t capacity = 24; /* 8 * 3 */
+    std::unique_ptr<utils::Cache> cache(utils::NewLRUCache(capacity, 1));
+
+    std::vector<std::string> keys = {"a", "b", "c", "d", "e", "f"};
+
+    auto h1 = cache->insert("a", encode_value(1), 8, &deleter);
+    auto h2 = cache->insert("b", encode_value(2), 8, &deleter);
+    auto h3 = cache->insert("c", encode_value(3), 8, &deleter);
+    ASSERT_EQ(cache->total_charge(), capacity);
+    /* now beyond capacity */
+    auto h4 = cache->insert("d", encode_value(4), 8, &deleter);
+    ASSERT_EQ(cache->total_charge(), capacity + 8);
+    auto h5 = cache->insert("e", encode_value(5), 8, &deleter);
+    ASSERT_EQ(cache->total_charge(), capacity + (8 * 2));
+    auto h6 = cache->insert("f", encode_value(6), 8, &deleter);
+    ASSERT_EQ(cache->total_charge(), capacity + (8 * 3));
+    ASSERT_GT(cache->total_charge(), capacity);
+
+    /* Every entry is pinned, so the eviction loop must have found nothing it could
+     * free and crucially must have STOPPED rather than spinning. Readable-but-
+     * already-destroyed is the failure this guards: without these two asserts the
+     * lookups below would still pass on a cache that had run the deleters. */
+    {
+        auto stats = cache->get_stats();
+        ASSERT_EQ(stats.total_evictions, 0);
+    }
+    ASSERT_EQ(deleted_count(), 0);
+
+    cache->release(h1);
+    cache->release(h2);
+    cache->release(h3);
+    cache->release(h4);
+    cache->release(h5);
+    cache->release(h6);
+
+    for (size_t i = 1; i <= keys.size(); i++) {
+        auto l = cache->lookup(keys[i - 1]);
+        ASSERT_NE(l, nullptr);
+        auto v = decode_value(cache->value(l));
+        ASSERT_EQ(v, i);
+        cache->release(l);
+    }
+
+    /* We release the handles and insert new should evict the last 4 */
+    cache->release(cache->insert("g", encode_value(7), 8, &deleter));
+
+    /* last 3 should have been evicted */
+    auto e1 = cache->lookup("a");
+    ASSERT_EQ(e1, nullptr);
+    auto e2 = cache->lookup("b");
+    ASSERT_EQ(e2, nullptr);
+    auto e3 = cache->lookup("c");
+    ASSERT_EQ(e3, nullptr);
+
+    ASSERT_EQ(deleted_count(), 4);
+    ASSERT_EQ(cache->total_charge(), capacity);
+}
+
+TEST(Cache, prune) {
+    clear_vec();
+    std::unique_ptr<utils::Cache> cache(utils::NewLRUCache(50, 1));
+
+    cache->release(cache->insert("key1", encode_value(1), 5, deleter));
+    cache->release(cache->insert("key2", encode_value(2), 5, deleter));
+    cache->release(cache->insert("key3", encode_value(3), 5, deleter));
+    cache->release(cache->insert("key4", encode_value(4), 5, deleter));
+    cache->release(cache->insert("key5", encode_value(5), 5, deleter));
+
+    cache->prune();
+    for (size_t i = 1; i <= 5; i++) {
+        auto l = cache->lookup("key" + std::to_string(i));
+        ASSERT_EQ(l, nullptr);
+    }
+}
+
+TEST(Cache, prune_does_not_evict_pinned) {
+    clear_vec();
+    std::unique_ptr<utils::Cache> cache(utils::NewLRUCache(50, 1));
+
+    auto h1 = cache->insert("key1", encode_value(1), 5, deleter);
+    auto h2 = cache->insert("key2", encode_value(2), 5, deleter);
+    auto h3 = cache->insert("key3", encode_value(3), 5, deleter);
+    auto h4 = cache->insert("key4", encode_value(4), 5, deleter);
+    auto h5 = cache->insert("key5", encode_value(5), 5, deleter);
+
+    cache->prune();
+
+    for (size_t i = 1; i <= 5; i++) {
+        auto l = cache->lookup("key" + std::to_string(i));
+        ASSERT_NE(l, nullptr);
+        auto v = decode_value(cache->value(l));
+        ASSERT_EQ(v, i);
+        cache->release(l);
+    }
+
+    cache->release(h1);
+    cache->release(h2);
+    cache->release(h3);
+    cache->release(h4);
+    cache->release(h5);
+}
+
+TEST(Cache, zero_capacity_returns_handle) {
+    clear_vec();
+    std::unique_ptr<utils::Cache> cache(utils::NewLRUCache(0, 1));
+
+    auto h = cache->insert("key", encode_value(1), 5, deleter);
+    auto v = decode_value(cache->value(h));
+    ASSERT_EQ(v, 1);
+
+    cache->release(h);
+    ASSERT_EQ(deleted_values.size(), 1);
+
+    auto hi = cache->lookup("key");
+    ASSERT_EQ(hi, nullptr);
+}
+
+TEST(Cache, general_lifecycle) {
+    clear_vec();
+    constexpr size_t N = 8;
+    std::unique_ptr<utils::Cache> cache(utils::NewLRUCache(N * 5, 1));
+
+    /* write some keys */
+    for (size_t i = 0; i < N; i++) {
+        cache->release(cache->insert("key" + std::to_string(i), encode_value(i), 5, &deleter));
+    }
+
+    /* read values from keys */
+    for (size_t i = 0; i < N; i++) {
+        auto hi = cache->lookup("key" + std::to_string(i));
+        ASSERT_NE(hi, nullptr);
+        auto vi = decode_value(cache->value(hi));
+        ASSERT_EQ(vi, i);
+        cache->release(hi);
+    }
+
+    /* write some more keys should cause 5 evictions */
+    for (size_t i = 8; i < 13; i++) {
+        cache->release(cache->insert("key" + std::to_string(i), encode_value(i), 5, &deleter));
+    }
+
+    /* read evicted values */
+    for (size_t i = 0; i < 5; i++) {
+        auto hi = cache->lookup("key" + std::to_string(i));
+        ASSERT_EQ(hi, nullptr);
+    }
+
+    for (size_t i = 5; i < 13; i++) {
+        auto hi = cache->lookup("key" + std::to_string(i));
+        ASSERT_NE(hi, nullptr);
+        auto vi = decode_value(cache->value(hi));
+        ASSERT_EQ(vi, i);
+        cache->release(hi);
+    }
+
+    cache->prune();
+}
+
+TEST(Cache, destroy_cache_while_open_handle) {
+    clear_vec();
+    EXPECT_DEATH(
+        {
+            std::unique_ptr<utils::Cache> cache(utils::NewLRUCache(25, 1));
+            [[maybe_unused]] auto h1 = cache->insert("key1", encode_value(1), 5, &deleter);
+            [[maybe_unused]] auto h2 = cache->insert("key2", encode_value(1), 5, &deleter);
+        },
+        "in_use_.next");
+}
+
+TEST(Cache, hashtable_growth) {
+    clear_vec();
+    std::unique_ptr<utils::Cache> cache(utils::NewLRUCache(750, 1));
+
+    /* hashtable grows *2 -> (start) 4 -> 8 -> 16 -> 32 -> 64 -> 128 */
+    for (size_t i = 0; i < 129; i++) {
+        cache->release(cache->insert("k" + std::to_string(i), encode_value(i), 5, &deleter));
+    }
+
+    for (size_t i = 0; i < 129; i++) {
+        auto hi = cache->lookup("k" + std::to_string(i));
+        ASSERT_NE(hi, nullptr);
+        auto vi = decode_value(cache->value(hi));
+        ASSERT_EQ(vi, i);
+        cache->release(hi);
+    }
+}
+
+TEST(Cache, embedded_terminator_bytes) {
+    clear_vec();
+    std::unique_ptr<utils::Cache> cache(utils::NewLRUCache(750, 1));
+
+    auto k1 = make_bytes({'a', 0x00, 'c'});
+    auto k2 = make_bytes({0x00, 'a', 'c'});
+    auto k3 = make_bytes({'a', 'c', 0x00});
+
+    std::string_view sk1(reinterpret_cast<const char*>(k1.data()), k1.size());
+    std::string_view sk2(reinterpret_cast<const char*>(k2.data()), k2.size());
+    std::string_view sk3(reinterpret_cast<const char*>(k3.data()), k3.size());
+
+    cache->release(cache->insert(sk1, encode_value(1), 5, &deleter));
+    cache->release(cache->insert(sk2, encode_value(2), 5, &deleter));
+    cache->release(cache->insert(sk3, encode_value(3), 5, &deleter));
+
+    /* k1 should return value */
+    auto h = cache->lookup(sk1);
+    ASSERT_NE(h, nullptr);
+    auto v = decode_value(cache->value(h));
+    ASSERT_EQ(v, 1);
+    cache->release(h);
+
+    /* k2 should return value */
+    h = cache->lookup(sk2);
+    ASSERT_NE(h, nullptr);
+    v = decode_value(cache->value(h));
+    ASSERT_EQ(v, 2);
+    cache->release(h);
+
+    /* k3 should return value */
+    h = cache->lookup(sk3);
+    ASSERT_NE(h, nullptr);
+    v = decode_value(cache->value(h));
+    ASSERT_EQ(v, 3);
+    cache->release(h);
+}
+
+TEST(Cache, empty_keys) {
+    clear_vec();
+    std::unique_ptr<utils::Cache> cache(utils::NewLRUCache(25, 1));
+
+    cache->release(cache->insert("", encode_value(1), 5, &deleter));
+
+    auto h = cache->lookup("");
+    ASSERT_NE(h, nullptr);
+    auto v = decode_value(cache->value(h));
+    ASSERT_EQ(v, 1);
+    cache->release(h);
+}
+
+TEST(Cache, concurrent_inserts_lookups_release_sharded_lru) {
+    clear_vec();
+    std::unique_ptr<utils::Cache> cache(utils::NewLRUCache(mb_to_b(32), 16));
+
+    constexpr size_t numthreads = 8;
+    constexpr size_t writes_per_thread = 500;
+    constexpr size_t total_writes = numthreads * writes_per_thread;
+
+    std::vector<std::thread> wthreads;
+    wthreads.reserve(numthreads);
+
+    /* concurrently write into the cache */
+    for (size_t i = 0; i < numthreads; i++) {
+        wthreads.emplace_back([&cache, i]() {
+            for (size_t k = 0; k < writes_per_thread; k++) {
+                auto id = (i * 1000) + k;
+                cache->release(cache->insert("k" + std::to_string(id), encode_value(id), 10, &deleter));
+            }
+        });
+    }
+
+    for (auto& thread : wthreads) {
+        thread.join();
+    }
+
+    auto stats = cache->get_stats();
+
+    ASSERT_EQ(stats.total_inserts, total_writes);
+
+    std::vector<std::thread> rthreads;
+    rthreads.reserve(numthreads);
+
+    /* concurrently read from the cache */
+    for (size_t i = 0; i < numthreads; i++) {
+        rthreads.emplace_back([&cache, i]() {
+            for (size_t k = 0; k < writes_per_thread; k++) {
+                auto id = (i * 1000) + k;
+
+                auto lh = cache->lookup("k" + std::to_string(id));
+                ASSERT_NE(lh, nullptr);
+                auto lv = decode_value(cache->value(lh));
+                ASSERT_EQ(lv, id);
+                cache->release(lh);
+            }
+        });
+    }
+
+    for (auto& thread : rthreads) {
+        thread.join();
+    }
+
+    stats = cache->get_stats();
+
+    ASSERT_EQ(stats.total_evictions, 0);
+    ASSERT_EQ(stats.total_inserts, total_writes);
+    ASSERT_EQ(stats.total_hits, total_writes);
+    ASSERT_EQ(stats.total_misses, 0);
+}
+
+TEST(Cache, concurrent_insert_and_lookup_overlap) {
+    clear_vec();
+    std::unique_ptr<utils::Cache> cache(utils::NewLRUCache(mb_to_b(32), 16));
+
+    constexpr size_t numthreads = 8;
+    constexpr size_t ops_per_thread = 500;
+
+    std::vector<std::thread> threads;
+    threads.reserve(numthreads * 2);
+
+    for (size_t t = 0; t < numthreads; t++) {
+        /* writer */
+        threads.emplace_back([&cache, t]() {
+            for (size_t k = 0; k < ops_per_thread; k++) {
+                auto id = (t * 1000) + k;
+                cache->release(cache->insert("k" + std::to_string(id), encode_value(id), 10, &deleter));
+            }
+        });
+
+        /* reader racing the writer above over the same key space */
+        threads.emplace_back([&cache, t]() {
+            for (size_t k = 0; k < ops_per_thread; k++) {
+                auto id = (t * 1000) + k;
+                auto h = cache->lookup("k" + std::to_string(id));
+                if (h != nullptr) {
+                    EXPECT_EQ(decode_value(cache->value(h)), static_cast<int>(id));
+                    cache->release(h);
+                }
+            }
+        });
+    }
+
+    for (auto& thread : threads) {
+        thread.join();
+    }
+
+    auto stats = cache->get_stats();
+    ASSERT_EQ(stats.total_inserts, numthreads * ops_per_thread);
+    ASSERT_EQ(stats.total_evictions, 0);
+    ASSERT_EQ(deleted_count(), 0);
+
+    for (size_t t = 0; t < numthreads; t++) {
+        for (size_t k = 0; k < ops_per_thread; k++) {
+            auto id = (t * 1000) + k;
+            auto h = cache->lookup("k" + std::to_string(id));
+            ASSERT_NE(h, nullptr);
+            ASSERT_EQ(decode_value(cache->value(h)), static_cast<int>(id));
+            cache->release(h);
+        }
+    }
+}
+
+TEST(Cache, insert_race_should_not_crash) {
+    clear_vec();
+    std::unique_ptr<utils::Cache> cache(utils::NewLRUCache(120, 1));
+
+    std::vector<std::thread> threads;
+    threads.reserve(2);
+
+    threads.emplace_back([&cache]() { cache->release(cache->insert("vroom", encode_value(1), 6, &deleter)); });
+    threads.emplace_back([&cache]() { cache->release(cache->insert("vroom", encode_value(9), 6, &deleter)); });
+
+    for (auto& thread : threads) {
+        thread.join();
+    }
+
+    auto h = cache->lookup("vroom");
+    ASSERT_NE(h, nullptr);
+    auto v = decode_value(cache->value(h));
+    ASSERT_TRUE(v == 1 || v == 9);
+    cache->release(h);
+
+    auto stats = cache->get_stats();
+
+    ASSERT_EQ(stats.total_hits, 1);
+    ASSERT_EQ(stats.total_misses, 0);
+    ASSERT_EQ(stats.total_inserts, 2);
+    ASSERT_EQ(stats.total_evictions, 0);
 }

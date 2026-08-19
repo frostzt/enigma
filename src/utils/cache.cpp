@@ -8,6 +8,7 @@
 #include <mutex>
 #include <string_view>
 
+#include "enigmadb/error.h"
 #include "enigmadb/hash.h"
 
 namespace enigmadb::utils {
@@ -117,7 +118,7 @@ class LRUCache {
     }
 
     ~LRUCache() {
-        assert(in_use_.next == &in_use_);
+        server_assert(in_use_.next == &in_use_);
         for (auto e = lru_.next; e != &lru_;) {
             auto next = e->next;
             assert(e->in_cache);
@@ -263,8 +264,9 @@ bool LRUCache::finish_erase(LRUHandle* e) {
 
 void LRUCache::erase(const std::string_view key, uint32_t hash) {
     std::lock_guard<std::mutex> lock(mu_);
-    stats_.total_evictions++;
-    finish_erase(table_.remove(key, hash));
+    if (finish_erase(table_.remove(key, hash))) {
+        stats_.total_evictions++;
+    }
 }
 
 void LRUCache::prune() {

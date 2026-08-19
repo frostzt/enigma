@@ -34,13 +34,13 @@ class Cache {
      *
      * When the entry is no longer needed it it passed to the deleter
      */
-    virtual Handle* insert(const std::string_view key, void* value, size_t charge,
-                           void (*deleter)(const std::string_view key, void* value)) = 0;
+    [[nodiscard]] virtual Handle* insert(const std::string_view key, void* value, size_t charge,
+                                         void (*deleter)(const std::string_view key, void* value)) = 0;
 
     /**
      * Returns the mapping for they provided `key` caller MUST call this->release(handle)
      */
-    virtual Handle* lookup(const std::string_view key) = 0;
+    [[nodiscard]] virtual Handle* lookup(const std::string_view key) = 0;
 
     /**
      * Releases the mapping returned by lookup
@@ -57,7 +57,7 @@ class Cache {
      */
     virtual void erase(const std::string_view key) = 0;
 
-    virtual uint64_t new_id() = 0;
+    [[nodiscard]] virtual uint64_t new_id() = 0;
 
     /* Removes keys from the cache that are NOT actively being used */
     virtual void prune() {};
