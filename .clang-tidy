@@ -1,0 +1,287 @@
+# EnigmaDB — clang-tidy configuration
+#
+# Philosophy: this is adopted INCREMENTALLY via clang-tidy-diff (lint only the lines
+# a PR touches). Running the full set over the whole tree at once produces thousands
+# of findings and gets switched off within a week — that is the failure mode this
+# config is shaped to avoid.
+#
+# Every disabled check below has a reason. If a reason stops being true, re-enable it.
+
+Checks: >
+  -*,
+
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions,
+
+  cert-*,
+  -cert-err58-cpp,
+  -cert-dcl21-cpp,
+
+  concurrency-*,
+
+  cppcoreguidelines-*,
+  -cppcoreguidelines-avoid-do-while,
+  -cppcoreguidelines-avoid-const-or-ref-data-members,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-avoid-non-const-global-variables,
+  -cppcoreguidelines-avoid-c-arrays,
+  -cppcoreguidelines-macro-usage,
+  -cppcoreguidelines-non-private-member-variables-in-classes,
+  -cppcoreguidelines-owning-memory,
+  -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
+  -cppcoreguidelines-pro-bounds-constant-array-index,
+  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+  -cppcoreguidelines-pro-type-reinterpret-cast,
+  -cppcoreguidelines-pro-type-union-access,
+  -cppcoreguidelines-pro-type-vararg,
+  -cppcoreguidelines-narrowing-conversions,
+
+  misc-*,
+  -misc-include-cleaner,
+  -misc-non-private-member-variables-in-classes,
+  -misc-no-recursion,
+
+  modernize-*,
+  -modernize-use-trailing-return-type,
+  -modernize-avoid-c-arrays,
+  -modernize-use-nodiscard,
+
+  performance-*,
+  -performance-enum-size,
+
+  portability-*,
+
+  readability-*,
+  -readability-braces-around-statements,
+  -readability-identifier-length,
+  -readability-magic-numbers,
+  -readability-function-cognitive-complexity,
+  -readability-uppercase-literal-suffix,
+  -readability-redundant-access-specifiers,
+  -readability-named-parameter,
+
+# ---------------------------------------------------------------------------
+# Why each thing is off
+# ---------------------------------------------------------------------------
+#
+# bugprone-easily-swappable-parameters
+#   Fires on almost every function here — compact(cache, inputs, next_sst_seq,
+#   is_full_compaction), encode_uint64(value, buffer, offset). The advice (wrap
+#   every pair of same-typed params in a strong type) is not worth it at this size.
+#   SSTableId already exists for the one case where confusion was real.
+#
+# bugprone-narrowing-conversions / cppcoreguidelines-narrowing-conversions
+#   size_t <-> uint64_t <-> uint32_t crossings are everywhere in the on-disk format
+#   code and are deliberate. Revisit if a real truncation bug ever lands; -Wconversion
+#   is the better tool for that day because it can be enabled per-file.
+#
+# cert-err58-cpp
+#   Static objects with throwing constructors. Test files are full of them.
+#
+# cppcoreguidelines-avoid-magic-numbers / readability-magic-numbers
+#   A storage engine is made of format constants — 4096, 64, 8, 0x00 0x01. The
+#   important ones already have names (MAX_PAGING_SIZE_BYTES, FOOTER_SIZE); the rest
+#   are offsets that read *better* inline. There are two genuine cases in the nits
+#   list (the magic 9 trailer skip, the hardcoded 38 CRC length) — fix those by hand
+#   rather than drowning in 500 findings to catch 2.
+#
+# cppcoreguidelines-avoid-non-const-global-variables
+#   Test fixtures use them (the deleter's recording vector). Off globally, and the
+#   tests/ override makes that explicit.
+#
+# cppcoreguidelines-avoid-c-arrays / modernize-avoid-c-arrays
+#   `char key_data[1]` in LRUHandle is the deliberate struct-hack for an inline
+#   variable-length key. std::array cannot express it.
+#
+# cppcoreguidelines-owning-memory
+#   utils/cache.cpp uses malloc/free directly, on purpose, because the handle and its
+#   key are one allocation. This check wants gsl::owner<> everywhere.
+#
+# cppcoreguidelines-pro-bounds-pointer-arithmetic
+#   Buffer parsing in the SSTable/WAL decoders is pointer arithmetic by nature.
+#
+# cppcoreguidelines-pro-type-reinterpret-cast
+#   Required at three real boundaries: uint8_t* <-> char* for string_view cache keys,
+#   Cache::Handle* <-> LRUHandle* (the opaque-token pattern), and void* value storage.
+#
+# cppcoreguidelines-macro-usage
+#   error.h's X-macro table generates the ErrorCode enum and its helpers from one
+#   list. That is exactly what macros are for.
+#
+# misc/cppcoreguidelines-non-private-member-variables-in-classes
+#   SSTableMeta, VersionEdit, SSTFooter, IndexEntry are data aggregates by design.
+#
+# modernize-use-trailing-return-type
+#   Pure style, and it would rewrite the entire codebase.
+#
+# modernize-use-nodiscard
+#   Result<T,E> already carries [[nodiscard]] on the type, which is stronger and
+#   applies at every call site. Turning this on adds the attribute to hundreds of
+#   unrelated accessors for no benefit.
+#
+# readability-braces-around-statements
+#   `if (!r.has_value()) return Result<void>::err(r.error());` is the house idiom and
+#   it reads well. Thousands of findings otherwise.
+#
+# readability-identifier-length
+#   Complains about i, k, v, h, e in loops and short scopes.
+#
+# readability-function-cognitive-complexity
+#   Dazzle::open and Compactor::compact are legitimately long linear sequences of
+#   fallible steps. Worth revisiting if either grows further, but not a gate today.
+#
+# cppcoreguidelines-avoid-do-while
+#   ENIGMA_LOG and server_assert are do { ... } while (0) — which is THE correct way
+#   to write a multi-statement macro that behaves like a statement. The check is
+#   right in general and wrong here.
+#
+# cppcoreguidelines-avoid-const-or-ref-data-members
+#   `io::IOEngine& engine_` and `const std::string data_dir_` are deliberate: the
+#   engine is borrowed and must outlive its user, and the data dir never changes.
+#   The check's real complaint is that such classes are not assignable — which is
+#   also deliberate here (copy and move are explicitly deleted).
+#
+# misc-include-cleaner
+#   IWYU-style transitive-include analysis. 101 findings today. Genuinely valuable,
+#   but it is its own project — turn it on deliberately, not as a side effect.
+#
+# performance-enum-size
+#   Suggests narrower underlying types. The enums where it matters (Level, Category)
+#   are already `: uint8_t`; the rest are cold.
+#
+# readability-named-parameter
+#   `[](SSTableReader*) { cache->release(h); }` leaves the parameter unnamed ON
+#   PURPOSE — the whole point of that deleter is that it ignores the pointer.
+
+WarningsAsErrors: >
+  bugprone-use-after-move,
+  bugprone-dangling-handle,
+  bugprone-unchecked-optional-access,
+  bugprone-signed-char-misuse,
+  concurrency-mt-unsafe,
+  performance-for-range-copy,
+  performance-move-const-arg,
+  performance-unnecessary-value-param
+
+# The nine above are errors from day one, not warnings, because each maps to a bug
+# class this project has ALREADY hit at least once:
+#
+#   bugprone-use-after-move            — reading r.value() after std::move(r.value())
+#                                        (the approximate_memory_usage ordering trap)
+#   bugprone-dangling-handle           — a std::string_view outliving its storage
+#                                        (the deleter recording cache keys)
+#   bugprone-unchecked-optional-access — .value() without has_value()
+#                                        (get_footer() unwrapped in install/flush)
+#   performance-for-range-copy         — `auto v = itr.value()` copying a vector per
+#                                        iteration (already in the nits list)
+#
+# bugprone-macro-parentheses is deliberately NOT an error: error.h's X-macro expands
+# `enum_name = val,` and the check wants `(val)`. That is technically fine to add,
+# but it fires on a table-expansion pattern rather than a real precedence hazard, so
+# it stays a warning to be judged case by case.
+#   concurrency-mt-unsafe              — non-reentrant libc calls, relevant once
+#                                        background compaction lands
+
+# Analyse ONLY our own headers. This must be tight: a pattern like
+#   .*/(include|src|tests)/.*\.(h|hpp)$
+# looks reasonable and is a trap — it also matches /usr/include/**, the toolchain's
+# own headers under /usr/lib/gcc/**/include/**, and googletest's
+# build/_deps/googletest-src/googletest/include/**. The symptom is clang-tidy
+# reporting "76747 warnings generated" per file while showing only a handful.
+HeaderFilterRegex: '.*/include/enigmadb/.*\.(h|hpp)$|.*/tests/test_support/.*\.(h|hpp)$'
+
+# DO NOT add ExcludeHeaderFilterRegex here. It only exists in clang-tidy >= 19, and
+# an unrecognised key does not produce an error — clang-tidy silently discards the
+# ENTIRE config and falls back to its defaults. Verified: with the key present,
+# clang-tidy 18 reports 0 findings on src/utils/cache.cpp; with it removed, 48. The
+# tight HeaderFilterRegex above already excludes build dirs, so the belt-and-braces
+# is not worth a silent total-failure mode on an older toolchain.
+
+FormatStyle: file
+
+CheckOptions:
+  # --- Naming, per CONVENTIONS.md -----------------------------------------
+  - key: readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key: readability-identifier-naming.StructCase
+    value: CamelCase
+  - key: readability-identifier-naming.EnumCase
+    value: CamelCase
+  - key: readability-identifier-naming.TypeAliasCase
+    value: CamelCase
+  - key: readability-identifier-naming.TypedefCase
+    value: CamelCase
+  - key: readability-identifier-naming.NamespaceCase
+    value: lower_case
+  - key: readability-identifier-naming.FunctionCase
+    value: lower_case
+  - key: readability-identifier-naming.VariableCase
+    value: lower_case
+  - key: readability-identifier-naming.ParameterCase
+    value: lower_case
+  - key: readability-identifier-naming.PrivateMemberCase
+    value: lower_case
+  - key: readability-identifier-naming.PrivateMemberSuffix
+    value: '_'
+  - key: readability-identifier-naming.ProtectedMemberCase
+    value: lower_case
+  - key: readability-identifier-naming.ProtectedMemberSuffix
+    value: '_'
+
+  # Constants are SCREAMING_SNAKE_CASE per CONVENTIONS.md (clang-tidy calls this
+  # UPPER_CASE): MAX_PAGING_SIZE_BYTES, FOOTER_SIZE, MAGIC, SSTABLE_FORMAT_VERSION.
+  #
+  # Only namespace-scope, file-static and class-static constants are constrained.
+  # Function-LOCAL constants are deliberately left alone — `constexpr
+  # std::string_view prefix = "sst_";` inside parse_sstable_filename() reads better
+  # lowercase, and screaming a name whose scope is three lines is noise. That is why
+  # LocalConstantCase / ConstantParameterCase / ConstantMemberCase are pinned to
+  # lower_case below rather than left to inherit.
+  - key: readability-identifier-naming.GlobalConstantCase
+    value: UPPER_CASE
+  - key: readability-identifier-naming.StaticConstantCase
+    value: UPPER_CASE
+  - key: readability-identifier-naming.ClassConstantCase
+    value: UPPER_CASE
+
+  # Const-ness does not change how a local, a parameter or a data member is named.
+  - key: readability-identifier-naming.LocalConstantCase
+    value: lower_case
+  - key: readability-identifier-naming.LocalConstantPointerCase
+    value: lower_case
+  - key: readability-identifier-naming.ConstantParameterCase
+    value: lower_case
+  - key: readability-identifier-naming.ConstantMemberCase
+    value: lower_case
+  # ConstantMember is MORE specific than PrivateMember, so it does not inherit the
+  # trailing underscore — without this, every `const std::string data_dir_` member
+  # is reported as a naming violation.
+  - key: readability-identifier-naming.ConstantMemberSuffix
+    value: '_'
+
+  # Enumerators are SCREAMING_SNAKE_CASE too. ErrorCode and WalOpType already comply;
+  # Level, Category and the ring-overflow policy are CamelCase holdovers and will
+  # flag until renamed. Category is the clearest evidence the rule is worth having —
+  # it already contains ENGINE_DAZZLE sitting among General / Wal / SSTable.
+  - key: readability-identifier-naming.EnumConstantCase
+    value: UPPER_CASE
+  - key: readability-identifier-naming.ScopedEnumConstantCase
+    value: UPPER_CASE
+
+  # --- Modernize ----------------------------------------------------------
+  - key: modernize-use-override.AllowOverrideAndFinal
+    value: 'true'
+  - key: modernize-loop-convert.MinConfidence
+    value: reasonable
+
+  # --- Performance --------------------------------------------------------
+  # Anything at or below a pointer-pair is fine to pass by value.
+  - key: performance-unnecessary-value-param.AllowedTypes
+    value: 'SSTableId;std::string_view;std::span'
+  - key: performance-for-range-copy.WarnOnAllAutoCopies
+    value: 'true'
+
+  # --- Misc ---------------------------------------------------------------
+  - key: misc-const-correctness.AnalyzeValues
+    value: 'false'   # very noisy on locals; the pointer/reference cases are the useful ones

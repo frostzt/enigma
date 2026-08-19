@@ -1,0 +1,46 @@
+# Test-tree overrides. clang-tidy merges this with the root .clang-tidy, so only the
+# deltas belong here.
+#
+# Tests are allowed to be blunter than library code: hardcoded expectations ARE the
+# assertion, fixture state is global by nature, and a table-driven test is long on
+# purpose. What tests are NOT allowed to be is wrong about lifetimes — so the
+# WarningsAsErrors set from the root config still applies here, deliberately.
+
+InheritParentConfig: true
+
+Checks: >
+  -cppcoreguidelines-avoid-non-const-global-variables,
+  -cppcoreguidelines-special-member-functions,
+  -readability-function-size,
+  -readability-magic-numbers,
+  -cert-err58-cpp,
+  -misc-use-anonymous-namespace,
+  -bugprone-exception-escape,
+  -cppcoreguidelines-avoid-do-while,
+  -readability-convert-member-functions-to-static
+
+# Why:
+#
+# avoid-non-const-global-variables
+#   The deleter's recording vector (deleted_values) has to be global — the cache
+#   takes a plain function pointer, so there is nowhere else to put it.
+#
+# misc-use-anonymous-namespace
+#   Would fire on every helper in every _test.cc. gtest's own TEST() macro pattern
+#   makes this advice awkward, and translation-unit collisions are caught by the
+#   linker anyway.
+#
+# bugprone-exception-escape
+#   gtest's ASSERT_* macros return early from the enclosing function; the check
+#   misreads several of those paths.
+#
+# readability-convert-member-functions-to-static
+#   Test fixture methods.
+#
+# NOT disabled, on purpose:
+#   bugprone-dangling-handle       — a string_view outliving its storage in a test is
+#                                    just as much a use-after-free, and this exact bug
+#                                    lived in cache_test.cc's deleter for a while
+#   bugprone-use-after-move
+#   performance-for-range-copy     — `auto v = itr.value()` in a 50k-iteration test
+#                                    loop is 50k needless vector copies
