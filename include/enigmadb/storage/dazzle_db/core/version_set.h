@@ -2,6 +2,7 @@
 #define ENIGMADB_DAZZLEDB_CORE_VERSION_SET_H_
 
 #include <algorithm>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <set>

@@ -49,7 +49,7 @@ std::vector<uint8_t> serialize_wal_record(const WalRecord& record) {
     }
 
     /* update header */
-    auto body_length = offset - 8;
+    auto body_length = offset - 8; /* sub the header */
     auto checksum = compute_crc_32(buf + 8, body_length);
     encode_uint32(body_length, buf, 0);
     encode_uint32(checksum, buf, 4);
