@@ -32,6 +32,9 @@ namespace enigmadb {
     X(BAD_MAGIC, bad_magic, 10)                    \
     X(BAD_FILE, bad_file, 11)                      \
     X(STRUCTURE_EMPTY, structure_empty, 12)        \
+    X(CHECKSUM_MISMATCH, checksum_mismatch, 13)    \
+    X(CORRUPTION, corruption, 14)                  \
+    X(INCOMPLETE_RECORD, incomplete_record, 15)    \
     /* Concurrency and Version errors */           \
     X(STALE_VERSION, stale_version, 1001)
 
