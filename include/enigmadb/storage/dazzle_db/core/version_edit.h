@@ -1,5 +1,5 @@
-#ifndef ENIGMADB_DAZZLEDB_CORE_VERSION_EDIT_H
-#define ENIGMADB_DAZZLEDB_CORE_VERSION_EDIT_H
+#ifndef ENIGMADB_DAZZLEDB_CORE_VERSION_EDIT_H_
+#define ENIGMADB_DAZZLEDB_CORE_VERSION_EDIT_H_
 
 #include <optional>
 #include <vector>
@@ -18,21 +18,20 @@ struct VersionEdit {
 [[nodiscard]] inline size_t get_version_edit_record_size(const VersionEdit& ve) {
     size_t total_size =
         /* len */ 4 + /* checksum */ 4 + /* removed len */ 4 + /* added len */ 4 + /* next sst id flag */ 1;
-
     total_size += /* sstid size */ 8 * ve.removed.size();
     total_size += /* sstmeta size */ SSTABLE_META_SIZE * ve.added.size();
-
     if (ve.next_sst_id.has_value()) {
         total_size += /* next sst id size */ 8;
     }
-
     return total_size;
 }
 
+/// Serializes VersionEdit to write ready binary
 [[nodiscard]] std::vector<uint8_t> serialize_version_edit(const VersionEdit& ve);
 
-[[nodiscard]] Result<VersionEdit> deserialize_version_edit(const uint8_t* buffer, size_t length);
+/// Deserializes VersionEdit from binary
+[[nodiscard]] Result<size_t> deserialize_version_edit(const uint8_t* buffer, size_t length, VersionEdit& ve);
 
 }  // namespace enigmadb::dazzle
 
-#endif  // ENIGMADB_DAZZLEDB_CORE_VERSION_EDIT_H
+#endif  // ENIGMADB_DAZZLEDB_CORE_VERSION_EDIT_H_

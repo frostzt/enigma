@@ -1,5 +1,6 @@
 #include "enigmadb/storage/dazzle_db/core/version_edit.h"
 
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -44,10 +45,10 @@ std::vector<uint8_t> serialize_version_edit(const VersionEdit& ve) {
 
     offset = encode_uint32(ve.added.size(), buf, offset); /* added length */
     for (const auto& a : ve.added) {
-        offset += encode_uint64(a.id.value, buf, offset);
-        offset += encode_uint64(a.size_bytes, buf, offset);
-        offset += encode_uint64(a.entry_count, buf, offset);
-        offset += encode_uint64(a.max_sequence, buf, offset);
+        offset = encode_uint64(a.id.value, buf, offset);
+        offset = encode_uint64(a.size_bytes, buf, offset);
+        offset = encode_uint64(a.entry_count, buf, offset);
+        offset = encode_uint64(a.max_sequence, buf, offset);
     }
 
     if (ve.next_sst_id.has_value()) {
@@ -65,13 +66,13 @@ std::vector<uint8_t> serialize_version_edit(const VersionEdit& ve) {
     return out;
 }
 
-Result<VersionEdit> deserialize_version_edit(const uint8_t* buffer, size_t length) {
+Result<size_t> deserialize_version_edit(const uint8_t* buffer, size_t length, VersionEdit& edit) {
     VersionEdit ve;
     size_t offset = 0;
 
     constexpr size_t MIN_RECORD_SIZE = /* header */ 8 + /* lengths */ 8 + /* sstid flag */ 1;
     if (length < MIN_RECORD_SIZE) {
-        return Result<VersionEdit>::err(Error::incomplete_record("buffer too small for version edit"));
+        return Result<size_t>::err(Error::incomplete_record("buffer too small for version edit"));
     }
 
     /* --- read header --- */
@@ -81,64 +82,83 @@ Result<VersionEdit> deserialize_version_edit(const uint8_t* buffer, size_t lengt
     offset += 4;
 
     if (body_length > length - 8) {
-        return Result<VersionEdit>::err(Error::corruption("corrupt record expected body to contain more data"));
+        return Result<size_t>::err(Error::corruption("corrupt record expected body to contain more data"));
     }
+
+    auto record_boundry = body_length + 8;
 
     /* validate checksum */
     auto gen_checksum = compute_crc_32(buffer + 8, body_length);
     if (checksum != gen_checksum) {
-        return Result<VersionEdit>::err(Error::checksum_mismatch("checksum mismatch - corrupted data found"));
+        return Result<size_t>::err(Error::checksum_mismatch("checksum mismatch - corrupted data found"));
     }
 
     /* --- read removed sstable ids --- */
-    if (offset + 4 > length) {
-        return Result<VersionEdit>::err(Error::corruption("corrupt record expected body to contain more data"));
+    if (offset + 4 > record_boundry) {
+        return Result<size_t>::err(Error::corruption("corrupt record expected body to contain more data"));
     }
 
     auto removed_count = decode_uint32(buffer, offset);
     offset += 4;
 
+    size_t max_plausible_removed = (record_boundry - offset) / 8;
+    if (removed_count > max_plausible_removed) {
+        return Result<size_t>::err(Error::corruption("removed count exceeds the max boundry"));
+    }
+
     ve.removed.reserve(removed_count);
     for (size_t i = 0; i < removed_count; i++) {
-        ve.removed[i] = SSTableId{decode_uint64(buffer, offset)};
+        ve.removed.push_back(SSTableId{decode_uint64(buffer, offset)});
         offset += 8;
     }
 
     /* --- read added sstable metas --- */
-    if (offset + 4 > length) {
-        return Result<VersionEdit>::err(Error::corruption("corrupt record expected body to contain more data"));
+    if (offset + 4 > record_boundry) {
+        return Result<size_t>::err(Error::corruption("corrupt record expected body to contain more data"));
     }
 
     auto added_count = decode_uint32(buffer, offset);
     offset += 4;
 
+    size_t max_plausible_added = (record_boundry - offset) / SSTABLE_META_SIZE;
+    if (added_count > max_plausible_added) {
+        return Result<size_t>::err(Error::corruption("added count exceeds the max boundry"));
+    }
+
     ve.added.reserve(added_count);
     for (size_t i = 0; i < added_count; i++) {
-        ve.added[i].id = SSTableId{decode_uint64(buffer, offset)};
+        auto id = SSTableId{decode_uint64(buffer, offset)};
         offset += 8;
-        ve.added[i].size_bytes = decode_uint64(buffer, offset);
+        auto size_bytes = decode_uint64(buffer, offset);
         offset += 8;
-        ve.added[i].entry_count = decode_uint64(buffer, offset);
+        auto entry_count = decode_uint64(buffer, offset);
         offset += 8;
-        ve.added[i].max_sequence = decode_uint64(buffer, offset);
+        auto max_sequence = decode_uint64(buffer, offset);
         offset += 8;
+        ve.added.push_back(
+            SSTableMeta{.id = id, .size_bytes = size_bytes, .entry_count = entry_count, .max_sequence = max_sequence});
     }
 
     /* --- read next sstable id --- */
-    if (offset + 1 > length) {
-        return Result<VersionEdit>::err(Error::corruption("corrupt record expected body to contain more data"));
+    if (offset + 1 > record_boundry) {
+        return Result<size_t>::err(Error::corruption("corrupt record expected body to contain more data"));
     }
 
     auto has_id = decode_uint8(buffer, offset);
     offset += 1;
     if (has_id == 1) {
-        if (offset + 8 > length) {
-            return Result<VersionEdit>::err(Error::corruption("corrupt record expected body to contain more data"));
+        if (offset + 8 > record_boundry) {
+            return Result<size_t>::err(Error::corruption("corrupt record expected body to contain more data"));
         }
         ve.next_sst_id = decode_uint64(buffer, offset);
+        offset += 8;
     }
 
-    return Result<VersionEdit>::ok(ve);
+    assert(offset == record_boundry);
+
+    // move the local edit to ve
+    edit = std::move(ve);
+    return Result<size_t>::ok(offset);
 }
 
 }  // namespace enigmadb::dazzle
