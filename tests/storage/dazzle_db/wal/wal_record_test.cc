@@ -49,7 +49,7 @@ TEST(WAL_Record, detects_corruption) {
     ASSERT_FALSE(deserialized_result.has_value());
     auto& error = deserialized_result.error();
 
-    ASSERT_EQ(error.code, ErrorCode::BAD_CONFIG);
+    ASSERT_EQ(error.code, ErrorCode::CHECKSUM_MISMATCH);
 }
 
 TEST(WAL_Record, truncated_buffer) {

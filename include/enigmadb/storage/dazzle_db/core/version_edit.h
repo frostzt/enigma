@@ -29,7 +29,7 @@ struct VersionEdit {
 /// Serializes VersionEdit to write ready binary
 [[nodiscard]] std::vector<uint8_t> serialize_version_edit(const VersionEdit& ve);
 
-/// Deserializes VersionEdit from binary
+/// Deserializes VersionEdit from binary, returns total bytes consumsed `ve` will be untouched if we encounter error
 [[nodiscard]] Result<size_t> deserialize_version_edit(const uint8_t* buffer, size_t length, VersionEdit& ve);
 
 }  // namespace enigmadb::dazzle

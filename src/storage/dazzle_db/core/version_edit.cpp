@@ -38,12 +38,12 @@ std::vector<uint8_t> serialize_version_edit(const VersionEdit& ve) {
     offset = encode_uint32(0, buf, offset);
 
     /* --- write body --- */
-    offset = encode_uint32(ve.removed.size(), buf, offset); /* removed length */
+    offset = encode_uint32(static_cast<uint32_t>(ve.removed.size()), buf, offset); /* removed length */
     for (const auto& r : ve.removed) {
         offset = encode_uint64(r.value, buf, offset);
     }
 
-    offset = encode_uint32(ve.added.size(), buf, offset); /* added length */
+    offset = encode_uint32(static_cast<uint32_t>(ve.added.size()), buf, offset); /* added length */
     for (const auto& a : ve.added) {
         offset = encode_uint64(a.id.value, buf, offset);
         offset = encode_uint64(a.size_bytes, buf, offset);
@@ -82,7 +82,7 @@ Result<size_t> deserialize_version_edit(const uint8_t* buffer, size_t length, Ve
     offset += 4;
 
     if (body_length > length - 8) {
-        return Result<size_t>::err(Error::corruption("corrupt record expected body to contain more data"));
+        return Result<size_t>::err(Error::incomplete_record("the record body is incomplete"));
     }
 
     auto record_boundry = body_length + 8;
@@ -154,7 +154,9 @@ Result<size_t> deserialize_version_edit(const uint8_t* buffer, size_t length, Ve
         offset += 8;
     }
 
-    assert(offset == record_boundry);
+    if (offset != record_boundry) {
+        return Result<size_t>::err(Error::corruption("corrupt record expected body to contain more data"));
+    }
 
     // move the local edit to ve
     edit = std::move(ve);

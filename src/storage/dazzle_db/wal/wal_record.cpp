@@ -79,7 +79,7 @@ Result<WalRecord> deserialize_wal_record(const uint8_t* buffer, size_t length) {
     /* validate checksum */
     auto gen_checksum = compute_crc_32(buffer + 8, body_length);
     if (checksum != gen_checksum) {
-        return Result<WalRecord>::err(Error{ErrorCode::BAD_CONFIG, "checksum mismatch corrupted data found"});
+        return Result<WalRecord>::err(Error::checksum_mismatch("checksum mismatch corrupted data found"));
     }
 
     /* --- read body fixed parts --- */
