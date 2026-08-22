@@ -80,9 +80,12 @@ class BufferReader {
     std::optional<Error> err_;
 };
 
+/// Raw buffer writer which writes binary directly into the memory buffer can be used to contruct anything
+/// that requires writing raw binary buffers. Note that a poisoned BufferWriter that contains an error
+/// found via `ok` will NOT perform any writes or patches
 class BufferWriter {
    public:
-    BufferWriter(size_t prealloc, std::optional<Error> error = std::nullopt) : err_(error) { data_.reserve(prealloc); }
+    BufferWriter(size_t prealloc) : err_(std::nullopt) { data_.reserve(prealloc); }
 
     /* Writer can only be moved */
     BufferWriter(BufferWriter&&) = default;
@@ -108,7 +111,7 @@ class BufferWriter {
     /// Writes raw bytes into the internal vector
     void write_bytes(std::span<const uint8_t> value);
 
-    /// Reserves n bytes writes zeros and returns its offset
+    /// Reserves n bytes writes zeros and returns its offset, a poisoned BufferWriter would simply return 0
     size_t reserve_slot(size_t n);
 
     /* --- core patching methods --- */
@@ -138,11 +141,15 @@ class BufferWriter {
     /// Returns the current size of the internal data vector
     size_t size() const;
 
+    /// Returns the current capacity of the internal vector
+    size_t capacity() const;
+
     /* --- core methods --- */
-    /// Clears the internal data vector and resets the position, clears the held error as well
+    /// Clears the internal data vector and clears the held error as well
     void clear();
 
-    /// Returns a non-owning view of the current internal data vector
+    /// Returns a non-owning view of the current internal data vector, the data is NON-OWNING if the internal
+    /// vector is reallocated post a write using the old span would be a UB
     std::span<const uint8_t> data() const;
 
     /// Reserves the capacity for this write buffer, ALWAYS prefer providing the ctor with the capacity

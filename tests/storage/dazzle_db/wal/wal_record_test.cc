@@ -66,5 +66,5 @@ TEST(WAL_Record, truncated_buffer) {
     ASSERT_FALSE(deserialized_result.has_value());
     auto& error = deserialized_result.error();
 
-    ASSERT_EQ(error.code, ErrorCode::READ_OUT_OF_RANGE);
+    ASSERT_EQ(error.code, ErrorCode::OUT_OF_RANGE);
 }

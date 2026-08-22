@@ -26,7 +26,7 @@ namespace enigmadb {
     X(BAD_CONFIG, bad_config, 4)                   \
     X(WRITE_ERR, write_err, 5)                     \
     X(READ_ERR, read_err, 6)                       \
-    X(READ_OUT_OF_RANGE, read_out_of_range, 7)     \
+    X(OUT_OF_RANGE, out_of_range, 7)               \
     X(ERR_EOF, err_eof, 8)                         \
     X(FSTAT_ERR, fstat_err, 9)                     \
     X(BAD_MAGIC, bad_magic, 10)                    \
