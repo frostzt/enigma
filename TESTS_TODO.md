@@ -429,6 +429,58 @@ None of this is covered today. The machinery is in and the suite is green, but *
 
 ---
 
+## Module 15 — `buffer.h` (BufferReader / BufferWriter)
+
+These two classes are about to become the only bounds-checking code in the codebase — `version_edit`, the manifest, and eventually the WAL and SSTable readers all delegate to them. A bug here is a bug everywhere, so §15.A must be green **before anything consumes them**.
+
+Design invariant under test throughout: **every mutator early-returns when `!ok()`.** The safety argument for the whole sticky-error design rests on it — a poisoned reader returning `0` and a poisoned writer returning offset `0` are only harmless because everything downstream also no-ops.
+
+### 15.A — Core
+
+**Format pinning (writer alone — no reader involved)**
+- [x] **TEST-600** [UNIT] **Golden bytes, big-endian.** `write_u32(0x01020304)` → exactly `{0x01,0x02,0x03,0x04}`. Repeat per width with a value whose bytes all differ, so no byte-order bug can hide behind symmetry. Round-trip tests cannot catch this: reader and writer sharing one wrong convention pass them.
+- [x] **TEST-601** [UNIT] `write_bytes` appends verbatim, no length prefix, no padding.
+
+**Round-trip**
+- [x] **TEST-602** [UNIT] Each width written then read back equals the original, at min, max, and an alternating-bit value.
+- [x] **TEST-603** [UNIT] Mixed sequence (u8, u64, bytes, u16, u32) reads back in order; `consumed()` equals writer `size()` at the end.
+
+**Reader failure paths — hand-built buffers, since a correct writer cannot produce these**
+- [ ] **TEST-610** [UNIT] Read past the end sets the error; read landing *exactly* on the end succeeds. Both boundaries, every width.
+- [ ] **TEST-611** [UNIT] ⭐ After a failed read, subsequent reads return `0` **and `consumed()` does not advance**. The no-advance half is the one that silently breaks record framing.
+- [ ] **TEST-612** [UNIT] `sub(n)` where `n > remaining()` → parent poisoned, child is zero-length, parent's `consumed()` unchanged.
+- [ ] **TEST-613** [UNIT] `sub()` on an already-poisoned parent yields a poisoned child.
+- [ ] **TEST-614** [UNIT] `sub()` success: child sees exactly `n` bytes, parent advanced by exactly `n`, child cannot read past its own end even though the parent's buffer continues.
+- [ ] **TEST-615** [UNIT] `read_bytes` returns `{}` on failure; `read_bytes(0)` on a healthy reader also returns `{}` but leaves `ok()` true. Only `ok()` distinguishes them.
+- [ ] **TEST-616** [UNIT] `skip(n > remaining())` poisons and does not advance.
+- [ ] **TEST-617** [UNIT] Constructor guard: `nullptr` data with non-zero length → poisoned, `length_` forced to 0.
+
+**Writer failure paths**
+- [ ] **TEST-620** [UNIT] `patch_*` boundary: `offset == size()` fails; `offset == size() - width` succeeds. Every width.
+- [ ] **TEST-621** [UNIT] `patch_*` with an offset far past the end fails without UB (run under ASan).
+- [ ] **TEST-622** [UNIT] `truncate(mark > size())` poisons; `truncate(size())` is a no-op; `truncate(0)` empties.
+- [ ] **TEST-623** [UNIT] ⭐ **Poison propagation.** Poison a writer, then call every mutator — `write_*`, `write_bytes`, `reserve_slot`, `patch_*`, `truncate` — and assert `size()` is unchanged by all of them. This is the invariant the class's safety rests on; it must be re-run whenever a method is added.
+- [ ] **TEST-624** [UNIT] `clear()` resets both the data and the error — a poisoned writer is reusable afterwards.
+- [ ] **TEST-625** [UNIT] `reserve_slot(n)` returns the pre-call `size()`, zero-fills `n` bytes, and grows `size()` by exactly `n`.
+
+**End-to-end rehearsal**
+- [ ] **TEST-630** [UNIT] ⭐ **Framing round-trip.** `reserve_slot(8)` → write a body → `patch_u32` length and CRC into the slot → read back: header parses, `sub(body_length)` carves the body, and the sub-reader ends with `remaining() == 0`. This single test exercises the exact pattern the manifest record depends on.
+- [ ] **TEST-631** [UNIT] Truncated record: take a valid framed buffer, cut it short, assert the reader poisons rather than reading into whatever follows.
+
+### 15.B — Delayed
+
+- [ ] **TEST-640** [FUZZ] Random write sequences → read back → equality. 10k iterations.
+- [ ] **TEST-641** [FUZZ] Random byte buffers fed to a reader performing a random read sequence — never crashes, never reads out of bounds (ASan), always ends poisoned or fully consumed.
+- [ ] **TEST-642** [UNIT] Nested `sub()` — a sub-reader of a sub-reader stays bounded by the innermost span.
+- [ ] **TEST-643** [UNIT] Move semantics: moved-from reader/writer is in a valid, empty state; the moved-to one retains position, data, and error.
+- [ ] **TEST-644** [PERF] A writer reused across N records via `clear()` performs **zero** reallocations after warmup — assert `capacity()` is stable. This is the whole reason `data()`/`clear()` exist instead of a `finish() &&`.
+- [ ] **TEST-645** [UNIT] `data()` span invalidation is documented, not tested — but assert the span's `size()` tracks `size()` at the moment it's taken.
+- [ ] **TEST-646** [ASAN] Reader over a heap buffer that is freed → use-after-free is caught. Documents the non-owning lifetime contract.
+- [ ] **TEST-647** [UNIT] `error()` on a healthy reader/writer throws rather than returning garbage (matches TEST-013's contract for `Result`).
+- [ ] **TEST-648** [PERF] `write_u64` in a tight loop — guards against the `resize`-then-`encode` double-write becoming a bottleneck if this ever moves to the SSTable block path.
+
+---
+
 ## Module 14 — Future modules (write these alongside the feature)
 
 ### Manifest (1L)
@@ -454,6 +506,7 @@ None of this is covered today. The machinery is in and the suite is green, but *
 
 ## Suggested order
 
+0. **Module 15.A** (buffer) — blocking. `version_edit` and the manifest are being rewritten on top of these classes right now; every bounds check in the codebase is about to live here. TEST-600, TEST-611, TEST-623 and TEST-630 are the four that carry the design.
 1. **Module 3** (key encoding) — untested, and everything rests on it. TEST-080 and TEST-087 first.
 2. **TEST-350** (model-based fuzz) — highest bug-per-effort ratio in the whole document.
 3. **Module 9** tombstone GC tests — alongside TICKET-130/131, since they define the predicate.
