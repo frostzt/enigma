@@ -4,14 +4,20 @@
 
 using namespace enigmadb;
 
-TEST(crc32, produces_same_checksum) {
+TEST(CRC32, validity) {
+    uint8_t buffer[] = "123456789";
+    auto comp = compute_crc_32(buffer, 9);
+    ASSERT_EQ(comp, 0xE3069283);
+}
+
+TEST(CRC32, produces_same_checksum) {
     uint8_t buffer[] = "sourav";
     auto crc32 = compute_crc_32(buffer, 6);
     auto crc32_d = compute_crc_32(buffer, 6);
     ASSERT_EQ(crc32, crc32_d);
 }
 
-TEST(crc32, produces_different_checksum) {
+TEST(CRC32, produces_different_checksum) {
     uint8_t buffer[] = "sourav";
     uint8_t buffer2[] = "gourav";
     auto crc32 = compute_crc_32(buffer, 6);
@@ -19,7 +25,7 @@ TEST(crc32, produces_different_checksum) {
     ASSERT_NE(crc32, crc32_d);
 }
 
-TEST(crc32, corruption_with_byte_flipped) {
+TEST(CRC32, corruption_with_byte_flipped) {
     uint8_t buffer[] = "sourav";
     auto crc32 = compute_crc_32(buffer, 6);
     buffer[2] ^= 0xFF;
