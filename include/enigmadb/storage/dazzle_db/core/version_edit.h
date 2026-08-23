@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "enigmadb/base.h"
+#include "enigmadb/buffer.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_common.h"
 
 namespace enigmadb::dazzle {
@@ -15,22 +16,11 @@ struct VersionEdit {
     std::optional<uint64_t> next_sst_id{};
 };
 
-[[nodiscard]] inline size_t get_version_edit_record_size(const VersionEdit& ve) {
-    size_t total_size =
-        /* len */ 4 + /* checksum */ 4 + /* removed len */ 4 + /* added len */ 4 + /* next sst id flag */ 1;
-    total_size += /* sstid size */ 8 * ve.removed.size();
-    total_size += /* sstmeta size */ SSTABLE_META_SIZE * ve.added.size();
-    if (ve.next_sst_id.has_value()) {
-        total_size += /* next sst id size */ 8;
-    }
-    return total_size;
-}
+/// Encodes version edit into the buffer writer
+void encode_version_edit(BufferWriter&, const VersionEdit&);
 
-/// Serializes VersionEdit to write ready binary
-[[nodiscard]] std::vector<uint8_t> serialize_version_edit(const VersionEdit& ve);
-
-/// Deserializes VersionEdit from binary, returns total bytes consumsed `ve` will be untouched if we encounter error
-[[nodiscard]] Result<size_t> deserialize_version_edit(const uint8_t* buffer, size_t length, VersionEdit& ve);
+/// Decodes a possible version edit buffer into the buffer reader
+[[nodiscard]] Result<void> decode_version_edit(BufferReader&, VersionEdit&);
 
 }  // namespace enigmadb::dazzle
 

@@ -7,6 +7,8 @@
 #include <span>
 #include <vector>
 
+#include "enigmadb/base.h"
+#include "enigmadb/crc32.h"
 #include "error.h"
 
 namespace enigmadb {
@@ -34,20 +36,20 @@ class BufferReader {
     size_t remaining() const;
 
     /// Reads 8 bytes from the buffer as unsigned integer and returns it as value
-    uint64_t read_u64();
+    [[nodiscard]] uint64_t read_u64();
 
     /// Reads 4 bytes from the buffer as unsigned integer and returns it as value
-    uint32_t read_u32();
+    [[nodiscard]] uint32_t read_u32();
 
     /// Reads 2 bytes from the buffer as unsigned integer and returns it as value
-    uint16_t read_u16();
+    [[nodiscard]] uint16_t read_u16();
 
     /// Reads 1 byte from the buffer as unsigned integer and returns it as value
-    uint8_t read_u8();
+    [[nodiscard]] uint8_t read_u8();
 
     /// Reads n bytes from the buffer and returns a non-owning view on top of it
     /// returns an empty span `{}` on invalid reads MUST BE validated using `ok()`
-    std::span<const uint8_t> read_bytes(size_t n);
+    [[nodiscard]] std::span<const uint8_t> read_bytes(size_t n);
 
     /// Skips n bytes
     void skip(size_t n);
@@ -55,16 +57,16 @@ class BufferReader {
     /// Returns a new BufferReader over the next `n` bytes advances the parent by n bytes, the new BufferReader
     /// owns the next n bytes if an error is encountered the child will contain that error and the caller is
     /// responsible for validating and making sure that the error encountered wasn't silently swallowed
-    BufferReader sub(size_t n);
+    [[nodiscard]] BufferReader sub(size_t n);
 
     /// Return the current position of the buffer's cursor
-    size_t consumed() const;
+    [[nodiscard]] size_t consumed() const;
 
     /// Returns weather the read so far was successful or not
-    bool ok() const;
+    [[nodiscard]] bool ok() const;
 
     /// Returns the error encountered during the read, NOTE: if read pre-emptively when there is no `err_` WILL throw
-    const Error& error() const;
+    [[nodiscard]] const Error& error() const;
 
    private:
     /// Pointer to the buffer
@@ -111,8 +113,8 @@ class BufferWriter {
     /// Writes raw bytes into the internal vector
     void write_bytes(std::span<const uint8_t> value);
 
-    /// Reserves n bytes writes zeros and returns its offset, a poisoned BufferWriter would simply return 0
-    size_t reserve_slot(size_t n);
+    /// Reserves n bytes writes zeros and returns its start offset, a poisoned BufferWriter would simply return 0
+    [[nodiscard]] size_t reserve_slot(size_t n);
 
     /* --- core patching methods --- */
     /// Patches a 8 bytes value at the provided offset
@@ -132,17 +134,17 @@ class BufferWriter {
 
     /* --- checking methods --- */
     /// Returns weather the read so far was successful or not
-    bool ok() const;
+    [[nodiscard]] bool ok() const;
 
     /// Returns the error encountered during patches, NOTE: if read pre-emptively when there is no `err_` WILL throw,
     /// writes won't throw
-    const Error& error() const;
+    [[nodiscard]] const Error& error() const;
 
     /// Returns the current size of the internal data vector
-    size_t size() const;
+    [[nodiscard]] size_t size() const;
 
     /// Returns the current capacity of the internal vector
-    size_t capacity() const;
+    [[nodiscard]] size_t capacity() const;
 
     /* --- core methods --- */
     /// Clears the internal data vector and clears the held error as well
@@ -150,7 +152,7 @@ class BufferWriter {
 
     /// Returns a non-owning view of the current internal data vector, the data is NON-OWNING if the internal
     /// vector is reallocated post a write using the old span would be a UB
-    std::span<const uint8_t> data() const;
+    [[nodiscard]] std::span<const uint8_t> data() const;
 
     /// Reserves the capacity for this write buffer, ALWAYS prefer providing the ctor with the capacity
     void reserve(size_t alloc);
@@ -162,6 +164,47 @@ class BufferWriter {
     /// Holds an active error if encountered throughout the write buffer's lifecycle
     std::optional<Error> err_;
 };
+
+template <typename Encode>
+void write_framed(BufferWriter& bw, Encode&& encode) {
+    if (!bw.ok()) return;
+
+    const size_t hdr = bw.reserve_slot(8);
+    const size_t body_begin = hdr + 8;
+
+    /* encode the body */
+    encode(bw);
+    if (!bw.ok()) return;
+
+    const size_t body_len = bw.size() - body_begin;
+    bw.patch_u32(hdr, static_cast<uint32_t>(body_len));
+
+    const auto buf = bw.data();
+    bw.patch_u32(hdr + 4, compute_crc_32(buf.data() + body_begin, body_len));
+}
+
+template <typename T, typename Decode>
+Result<T> read_framed(BufferReader& br, Decode&& decode) {
+    if (!br.ok()) return Result<T>::err(br.error());
+
+    const uint32_t len = br.read_u32();
+    const uint32_t checksum = br.read_u32();
+    const auto body = br.read_bytes(len);
+    if (!br.ok()) return Result<T>::err(Error::incomplete_record("Received bytes fewer than claimed"));
+    if (compute_crc_32(body.data(), len) != checksum) {
+        return Result<T>::err(Error::checksum_mismatch("checksum mismatch"));
+    }
+
+    BufferReader body_reader(body.data(), len);
+    T out = decode(body_reader);
+    if (!body_reader.ok()) {
+        return Result<T>::err(Error::incomplete_record("The body is shorter than the record claimed"));
+    }
+    if (body_reader.remaining() != 0) {
+        return Result<T>::err(Error::corruption("The body is longer than the record claimed"));
+    }
+    return Result<T>::ok(std::move(out));
+}
 
 }  // namespace enigmadb
 
