@@ -200,14 +200,19 @@ void BufferWriter::patch_u64(size_t offset, uint64_t value) {
     encode_uint64(value, data_.data(), offset);
 }
 
-void BufferWriter::truncate(size_t mark) {
-    if (!ok()) return;
+void BufferWriter::truncate(size_t mark, bool clear_error) {
     if (mark > size()) {
         err_ = Error::out_of_range("Truncation failed as the mark provided exceeds the current size");
         return;
     }
 
     data_.resize(mark);
+
+    /* Defaults to true. Generally the idea is that the writer truncates post a bad write
+     * that leaves the writer poisoned */
+    if (clear_error) {
+        err_ = std::nullopt;
+    }
 }
 
 void BufferWriter::clear() {

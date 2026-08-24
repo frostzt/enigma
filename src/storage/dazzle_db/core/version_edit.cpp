@@ -35,13 +35,13 @@ void encode_version_edit(BufferWriter& bw, const VersionEdit& ve) {
     }
 }
 
-Result<void> decode_version_edit(BufferReader& br, VersionEdit& ve) {
+Result<VersionEdit> decode_version_edit(BufferReader& br) {
     VersionEdit local;
 
     /* --- read removed ids --- */
     auto removed_count = br.read_u32();
     if (removed_count > br.remaining() / 8)
-        return Result<void>::err(Error::corruption("removed count exceeds the max boundry"));
+        return Result<VersionEdit>::err(Error::corruption("removed count exceeds the max boundry"));
     local.removed.reserve(removed_count);
     for (size_t i = 0; i < removed_count; i++) {
         local.removed.push_back(SSTableId{br.read_u64()});
@@ -50,7 +50,7 @@ Result<void> decode_version_edit(BufferReader& br, VersionEdit& ve) {
     /* --- read added sst metas --- */
     auto added_count = br.read_u32();
     if (added_count > br.remaining() / SSTABLE_META_SIZE) {
-        return Result<void>::err(Error::corruption("added count exceeds the max boundry"));
+        return Result<VersionEdit>::err(Error::corruption("added count exceeds the max boundry"));
     }
     local.added.reserve(added_count);
     for (size_t i = 0; i < added_count; i++) {
@@ -68,10 +68,8 @@ Result<void> decode_version_edit(BufferReader& br, VersionEdit& ve) {
         local.next_sst_id = br.read_u64();
     }
 
-    if (!br.ok()) return Result<void>::err(br.error());
-
-    ve = std::move(local);
-    return Result<void>::ok();
+    if (!br.ok()) return Result<VersionEdit>::err(br.error());
+    return Result<VersionEdit>::ok(std::move(local));
 }
 
 }  // namespace enigmadb::dazzle

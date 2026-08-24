@@ -9,6 +9,7 @@
 
 #include "enigmadb/base.h"
 #include "enigmadb/crc32.h"
+#include "enigmadb/log.h"
 #include "error.h"
 
 namespace enigmadb {
@@ -130,7 +131,7 @@ class BufferWriter {
     void patch_u8(size_t offset, uint8_t value);
 
     /// Drops everything post the provided byte mark
-    void truncate(size_t mark);
+    void truncate(size_t mark, bool clear_error = true);
 
     /* --- checking methods --- */
     /// Returns weather the read so far was successful or not
@@ -166,25 +167,48 @@ class BufferWriter {
 };
 
 template <typename Encode>
-void write_framed(BufferWriter& bw, Encode&& encode) {
-    if (!bw.ok()) return;
+[[nodiscard]] Result<void> write_framed(BufferWriter& bw, Encode&& encode) {
+    if (!bw.ok()) return Result<void>::err(bw.error());
 
     const size_t hdr = bw.reserve_slot(8);
     const size_t body_begin = hdr + 8;
 
     /* encode the body */
     encode(bw);
-    if (!bw.ok()) return;
+    if (!bw.ok()) {
+        auto err = bw.error();
+        bw.truncate(hdr);
+        return Result<void>::err(err);
+    };
 
     const size_t body_len = bw.size() - body_begin;
+    if (body_len > UINT32_MAX) {
+        LOG_ERROR(Category::General,
+                  "Encountered body length for a buffer being read from the frame reader to be more than UINT32_MAX");
+        bw.truncate(hdr);
+        return Result<void>::err(Error::buffer_too_large("Encountered body length too large"));
+    }
+
     bw.patch_u32(hdr, static_cast<uint32_t>(body_len));
+    if (!bw.ok()) {
+        auto err = bw.error();
+        bw.truncate(hdr);
+        return Result<void>::err(err);
+    }
 
     const auto buf = bw.data();
     bw.patch_u32(hdr + 4, compute_crc_32(buf.data() + body_begin, body_len));
+    if (!bw.ok()) {
+        auto err = bw.error();
+        bw.truncate(hdr);
+        return Result<void>::err(err);
+    }
+
+    return Result<void>::ok();
 }
 
 template <typename T, typename Decode>
-Result<T> read_framed(BufferReader& br, Decode&& decode) {
+[[nodiscard]] Result<T> read_framed(BufferReader& br, Decode&& decode) {
     if (!br.ok()) return Result<T>::err(br.error());
 
     const uint32_t len = br.read_u32();
@@ -196,14 +220,16 @@ Result<T> read_framed(BufferReader& br, Decode&& decode) {
     }
 
     BufferReader body_reader(body.data(), len);
-    T out = decode(body_reader);
+    Result<T> out = decode(body_reader);
+    if (!out.has_value()) return out;
+
     if (!body_reader.ok()) {
         return Result<T>::err(Error::incomplete_record("The body is shorter than the record claimed"));
     }
     if (body_reader.remaining() != 0) {
         return Result<T>::err(Error::corruption("The body is longer than the record claimed"));
     }
-    return Result<T>::ok(std::move(out));
+    return out;
 }
 
 }  // namespace enigmadb

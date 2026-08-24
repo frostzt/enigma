@@ -35,6 +35,7 @@ namespace enigmadb {
     X(CHECKSUM_MISMATCH, checksum_mismatch, 13)    \
     X(CORRUPTION, corruption, 14)                  \
     X(INCOMPLETE_RECORD, incomplete_record, 15)    \
+    X(BUFFER_TOO_LARGE, buffer_too_large, 16)      \
     /* Concurrency and Version errors */           \
     X(STALE_VERSION, stale_version, 1001)
 
