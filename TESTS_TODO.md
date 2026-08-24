@@ -423,6 +423,24 @@ None of this is covered today. The machinery is in and the suite is green, but *
 - [ ] **TEST-555** [ASAN] Concurrent `apply` from N threads: every edit either applies cleanly or is rejected with `STALE_VERSION`. **No edit is ever silently lost** — assert the final file set equals the union of what the winners published.
 - [ ] **TEST-556** [UNIT] `apply` never holds the lock across a filesystem call — assert with a counting `IOEngine` that no `remove` happens before `apply` returns.
 
+### 13.5 VersionEdit codec ⚠️ BLOCKING — 1L rests on this
+
+Two layers, tested separately (see 15.C for the rule). `encode_version_edit` / `decode_version_edit` are **payload only** — no length, no CRC. Framing lives in `write_framed` / `read_framed`.
+
+**Payload — `[x]` are written**
+- [x] **TEST-560** [UNIT] Round-trip with removed + added + watermark; every field varies per element so a decoder returning element 0 repeatedly cannot pass. Assert `br.remaining() == 0` afterward.
+- [x] **TEST-561** [UNIT] Round-trip with `next_sst_id == nullopt` — exercises the `write_u8(0)` branch that the default-valued fixture never reached.
+- [x] **TEST-562** [UNIT] Empty edit: nothing removed, nothing added, no watermark. Body is exactly 9 bytes (4 + 4 + 1).
+- [ ] **TEST-563** [UNIT] ⭐ **Count guards.** Hand-build a body whose `removed_count` is `UINT32_MAX`, feed it to `decode_version_edit`, assert `CORRUPTION` — and that no huge allocation is attempted. Same for `added_count`. These guards exist because the reader bounds *reads*, not `reserve()`.
+- [ ] **TEST-564** [UNIT] `decode_version_edit` called directly on a truncated payload returns an error rather than a zero-filled edit. Note the code is `OUT_OF_RANGE` here (the buffer's vocabulary) — the translation to `INCOMPLETE_RECORD` happens in `read_framed`. This test pins that the standalone contract is honest.
+- [ ] **TEST-565** [UNIT] Golden bytes for a known small edit — pins the on-disk layout independently of the decoder. Everything already written on disk depends on this not moving.
+
+**Framed — `[x]` are written**
+- [x] **TEST-566** [UNIT] Framed round-trip.
+- [x] **TEST-567** [UNIT] ⭐ CRC catches a flip at every body byte (sweep, not one).
+- [x] **TEST-568** [UNIT] ⭐ Truncation sweep: every proper prefix → `INCOMPLETE_RECORD`, never a crash, never a valid decode.
+- [ ] **TEST-569** [UNIT] ⭐ Two edits in one writer, both read back correctly — see TEST-655.
+
 ### 13.4 Known gaps to test *when* they're fixed
 - [ ] **TEST-557** [CRASH] Rejected `apply` leaves its compaction output orphaned; after 1L, assert startup ignores it rather than republishing it.
 - [ ] **TEST-558** [UNIT] After TICKET-1K5-7 (explicit `Ref`/`Unref`), the liveness tests above should pass unchanged. If they need editing, the refactor changed observable behaviour.
@@ -463,9 +481,27 @@ Design invariant under test throughout: **every mutator early-returns when `!ok(
 - [ ] **TEST-624** [UNIT] `clear()` resets both the data and the error — a poisoned writer is reusable afterwards.
 - [ ] **TEST-625** [UNIT] `reserve_slot(n)` returns the pre-call `size()`, zero-fills `n` bytes, and grows `size()` by exactly `n`.
 
-**End-to-end rehearsal**
-- [ ] **TEST-630** [UNIT] ⭐ **Framing round-trip.** `reserve_slot(8)` → write a body → `patch_u32` length and CRC into the slot → read back: header parses, `sub(body_length)` carves the body, and the sub-reader ends with `remaining() == 0`. This single test exercises the exact pattern the manifest record depends on.
-- [ ] **TEST-631** [UNIT] Truncated record: take a valid framed buffer, cut it short, assert the reader poisons rather than reading into whatever follows.
+### 15.C — Framing layer (`write_framed` / `read_framed`) ⚠️ BLOCKING
+
+The framing layer owns length, CRC, and rollback. The **layering rule** these tests enforce: byte-level validation belongs to whoever bounded the bytes (`read_framed`, which creates `body_reader`); semantic validation belongs to whoever knows the type (the decoder's count guards). A test that asserts `CHECKSUM_MISMATCH` from the payload codec is testing the wrong layer — the payload codec writes no header and cannot detect it.
+
+**Error-code mapping — this is the recovery contract, not cosmetics**
+- [ ] **TEST-650** [UNIT] ⭐ Buffer shorter than the declared body → `INCOMPLETE_RECORD`. This is crash-mid-append; the replay loop must truncate and continue, so miscoding it as `CORRUPTION` makes the DB unopenable after every crash.
+- [ ] **TEST-651** [UNIT] ⭐ Body flipped after a valid CRC was written → `CHECKSUM_MISMATCH`. Sweep the flip across **every** body byte, not one.
+- [ ] **TEST-652** [UNIT] Decoder consumed fewer bytes than the record declared → `CORRUPTION` (`body_reader.remaining() != 0`).
+- [ ] **TEST-653** [UNIT] Decoder's own semantic error (a count guard firing) propagates with **its** code, not remapped by the framing layer.
+- [ ] **TEST-654** [UNIT] Header itself truncated (fewer than 8 bytes available) → `INCOMPLETE_RECORD`, no read past the end.
+
+**Writer framing**
+- [ ] **TEST-655** [UNIT] ⭐ **Two records in one writer.** Write two edits back to back, read both back, assert the second's contents are correct and the reader lands exactly at the end. A one-record test cannot catch a CRC computed from the buffer start instead of `body_begin` — that bug shipped and this is the test that would have caught it.
+- [ ] **TEST-656** [UNIT] ⭐ **Rollback.** A failing encoder leaves the writer at exactly its pre-`write_framed` size — no partial record, no orphaned header slot. Then assert the *next* `write_framed` on the same writer succeeds (`clear_error` defaults true, so a rolled-back writer is reusable).
+- [ ] **TEST-657** [UNIT] `write_framed` on an already-poisoned writer returns the existing error and writes nothing.
+- [ ] **TEST-658** [UNIT] Body exceeding `UINT32_MAX` → `BUFFER_TOO_LARGE`, and the writer is rolled back. (Skip on 32-bit; the check is tautological there.)
+- [ ] **TEST-659** [UNIT] Empty body: a `VersionEdit` with nothing removed, nothing added, no watermark still frames and round-trips.
+
+**End-to-end**
+- [ ] **TEST-630** [UNIT] ⭐ **Framing round-trip.** Write one framed record, read it back, confirm the body reader ends with `remaining() == 0`. The exact pattern the manifest record depends on.
+- [ ] **TEST-631** [UNIT] ⭐ **Truncation sweep.** Cut a valid framed buffer at *every* prefix length, assert each one errors, never crashes, and never allocates absurdly. One arbitrary cut proves much less than the sweep.
 
 ### 15.B — Delayed
 
@@ -506,7 +542,7 @@ Design invariant under test throughout: **every mutator early-returns when `!ok(
 
 ## Suggested order
 
-0. **Module 15.A** (buffer) — blocking. `version_edit` and the manifest are being rewritten on top of these classes right now; every bounds check in the codebase is about to live here. TEST-600, TEST-611, TEST-623 and TEST-630 are the four that carry the design.
+0. **Module 15.A + 15.C** (buffer + framing) — blocking. `version_edit` and the manifest sit on top of these; every bounds check in the codebase now lives here. TEST-611, TEST-623, TEST-650 and TEST-655 are the four that carry the design. Then **13.5** (VersionEdit codec) — TEST-563 and TEST-569 are the gaps left after tonight.
 1. **Module 3** (key encoding) — untested, and everything rests on it. TEST-080 and TEST-087 first.
 2. **TEST-350** (model-based fuzz) — highest bug-per-effort ratio in the whole document.
 3. **Module 9** tombstone GC tests — alongside TICKET-130/131, since they define the predicate.
