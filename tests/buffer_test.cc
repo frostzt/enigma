@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "gtest/gtest.h"
+#include "test_support/macros.h"
 
 using namespace enigmadb;
 
@@ -306,4 +307,176 @@ TEST(BufferWriter, every_width_min_max) {
     EXPECT_EQ(std::vector<uint8_t>(w.data().begin(), w.data().end()),
               (std::vector<uint8_t>{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}));
     w.clear();
+}
+
+TEST(BufferWriter, patch_boundary) {
+    BufferWriter w(32);
+
+    /* --- 8 bit width --- */
+    w.write_u8(10);
+    ASSERT_TRUE(w.ok());
+
+    /* offset == size() */
+    w.patch_u8(8, 11);
+    ASSERT_FALSE(w.ok());
+    ASSERT_TRUE(w.error().is_out_of_range());
+    w.clear();
+
+    /* offset == size() - width */
+    w.write_u8(10);
+    ASSERT_TRUE(w.ok());
+    w.patch_u8(0, 11);
+    ASSERT_TRUE(w.ok());
+
+    /* --- 16 bit width --- */
+    w.write_u16(100);
+    ASSERT_TRUE(w.ok());
+
+    /* offset == size() */
+    w.patch_u16(16, 101);
+    ASSERT_FALSE(w.ok());
+    ASSERT_TRUE(w.error().is_out_of_range());
+    w.clear();
+
+    /* offset == size() - width */
+    w.write_u16(100);
+    ASSERT_TRUE(w.ok());
+    w.patch_u16(0, 101);
+    ASSERT_TRUE(w.ok());
+
+    /* --- 32 bit width --- */
+    w.write_u32(1000);
+    ASSERT_TRUE(w.ok());
+
+    /* offset == size() */
+    w.patch_u32(32, 1001);
+    ASSERT_FALSE(w.ok());
+    ASSERT_TRUE(w.error().is_out_of_range());
+    w.clear();
+
+    /* offset == size() - width */
+    w.write_u32(1000);
+    ASSERT_TRUE(w.ok());
+    w.patch_u32(0, 1001);
+    ASSERT_TRUE(w.ok());
+
+    /* --- 64 bit width --- */
+    w.write_u32(10000);
+    ASSERT_TRUE(w.ok());
+
+    /* offset == size() */
+    w.patch_u64(64, 10001);
+    ASSERT_FALSE(w.ok());
+    ASSERT_TRUE(w.error().is_out_of_range());
+    w.clear();
+
+    /* offset == size() - width */
+    w.write_u64(10000);
+    ASSERT_TRUE(w.ok());
+    w.patch_u64(0, 10001);
+    ASSERT_TRUE(w.ok());
+}
+
+TEST(BufferWriter, patch_beyond_offset_NO_UB_UNDER_ASAN) {
+    if (!ASAN_ENABLED) GTEST_SKIP() << "Skipping test: AddressSanitizer (ASan) is not enabled";
+
+    BufferWriter w(32);
+    w.write_u64(345678);
+
+    ASSERT_TRUE(w.ok());
+
+    w.patch_u64(32, 2345); /* patching beyond both capacity (i don't think matters) and size */
+
+    /* NO UB */
+    ASSERT_FALSE(w.ok());
+}
+
+TEST(BufferWriter, truncate) {
+    BufferWriter w(32);
+    w.write_u64(100);
+
+    ASSERT_TRUE(w.ok());
+
+    w.truncate(16, true); /* current is 8 bytes */
+    ASSERT_FALSE(w.ok());
+
+    w.clear();
+
+    /* insert 3 post clear -> 24 */
+    w.write_u64(100);
+    w.write_u64(100);
+    w.write_u64(100);
+
+    ASSERT_EQ(w.size(), 24);
+
+    w.truncate(24, true); /* noop */
+    ASSERT_TRUE(w.ok());
+    ASSERT_EQ(w.size(), 24);
+
+    /* trunc 0 empties */
+    w.truncate(0, true);
+    ASSERT_TRUE(w.ok());
+    ASSERT_EQ(w.size(), 0);
+}
+
+TEST(BufferWriter, poison_propagation) {
+    BufferWriter w(32);
+    w.write_u64(32);
+
+    ASSERT_TRUE(w.ok());
+    ASSERT_EQ(w.size(), 8);
+
+    w.patch_u64(999, 999); /* poison writer */
+
+    ASSERT_FALSE(w.ok());
+    ASSERT_EQ(w.size(), 8);
+
+    /* none of the methods should not impact */
+    w.write_u8(1);
+    ASSERT_FALSE(w.ok());
+    ASSERT_EQ(w.size(), 8);
+
+    w.patch_u8(0, 16);
+    ASSERT_FALSE(w.ok());
+    ASSERT_EQ(w.size(), 8);
+
+    w.write_u16(1);
+    ASSERT_FALSE(w.ok());
+    ASSERT_EQ(w.size(), 8);
+
+    w.patch_u16(0, 16);
+    ASSERT_FALSE(w.ok());
+    ASSERT_EQ(w.size(), 8);
+
+    w.write_u32(1);
+    ASSERT_FALSE(w.ok());
+    ASSERT_EQ(w.size(), 8);
+
+    w.patch_u32(0, 16);
+    ASSERT_FALSE(w.ok());
+    ASSERT_EQ(w.size(), 8);
+
+    w.write_u64(1);
+    ASSERT_FALSE(w.ok());
+    ASSERT_EQ(w.size(), 8);
+
+    w.patch_u64(0, 16);
+    ASSERT_FALSE(w.ok());
+    ASSERT_EQ(w.size(), 8);
+
+    std::vector<uint8_t> value = {1, 2, 3, 4, 5};
+    std::span<const uint8_t> vref{value};
+    w.write_bytes(vref);
+    ASSERT_FALSE(w.ok());
+    ASSERT_EQ(w.size(), 8);
+
+    auto s = w.reserve_slot(0);
+    ASSERT_EQ(s, 0);
+    ASSERT_FALSE(w.ok());
+    ASSERT_EQ(w.size(), 8);
+}
+
+TEST(BufferWriter, clear) {
+    BufferWriter w(32);
+    w.write_u64(32);
 }

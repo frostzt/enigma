@@ -474,10 +474,10 @@ Design invariant under test throughout: **every mutator early-returns when `!ok(
 - [x] **TEST-617** [UNIT] Constructor guard: `nullptr` data with non-zero length → poisoned, `length_` forced to 0.
 
 **Writer failure paths**
-- [ ] **TEST-620** [UNIT] `patch_*` boundary: `offset == size()` fails; `offset == size() - width` succeeds. Every width.
-- [ ] **TEST-621** [UNIT] `patch_*` with an offset far past the end fails without UB (run under ASan).
-- [ ] **TEST-622** [UNIT] `truncate(mark > size())` poisons; `truncate(size())` is a no-op; `truncate(0)` empties.
-- [ ] **TEST-623** [UNIT] ⭐ **Poison propagation.** Poison a writer, then call every mutator — `write_*`, `write_bytes`, `reserve_slot`, `patch_*`, `truncate` — and assert `size()` is unchanged by all of them. This is the invariant the class's safety rests on; it must be re-run whenever a method is added.
+- [x] **TEST-620** [UNIT] `patch_*` boundary: `offset == size()` fails; `offset == size() - width` succeeds. Every width.
+- [x] **TEST-621** [UNIT] `patch_*` with an offset far past the end fails without UB (run under ASan).
+- [x] **TEST-622** [UNIT] `truncate(mark > size())` poisons; `truncate(size())` is a no-op; `truncate(0)` empties.
+- [x] **TEST-623** [UNIT] ⭐ **Poison propagation.** Poison a writer, then call every mutator — `write_*`, `write_bytes`, `reserve_slot`, `patch_*` — and assert `size()` is unchanged by all of them. This is the invariant the class's safety rests on; it must be re-run whenever a method is added.
 - [ ] **TEST-624** [UNIT] `clear()` resets both the data and the error — a poisoned writer is reusable afterwards.
 - [ ] **TEST-625** [UNIT] `reserve_slot(n)` returns the pre-call `size()`, zero-fills `n` bytes, and grows `size()` by exactly `n`.
 

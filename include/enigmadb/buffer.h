@@ -135,8 +135,11 @@ class BufferWriter {
     /// Patches a 1 byte value at the provided offset
     void patch_u8(size_t offset, uint8_t value);
 
-    /// Drops everything post the provided byte mark
-    void truncate(size_t mark, bool clear_error = true);
+    /// Drops everything post the provided byte mark, clears errors if `clear_error` argument is set to true
+    /// otherwise acts pessimistically and keeps the error as is.
+    /// Truncate WILL NOT RESPECT a poisoned writer and perform the truncation, if the truncation removes a
+    /// record that poisoned the writer `clear_error = true` would be a good idea.
+    void truncate(size_t mark, bool clear_error = false);
 
     /* --- checking methods --- */
     /// Returns weather the read so far was successful or not
@@ -182,7 +185,7 @@ template <typename Encode>
     encode(bw);
     if (!bw.ok()) {
         auto err = bw.error();
-        bw.truncate(hdr);
+        bw.truncate(hdr, true);
         return Result<void>::err(err);
     };
 
@@ -190,14 +193,14 @@ template <typename Encode>
     if (body_len > UINT32_MAX) {
         LOG_ERROR(Category::General,
                   "Encountered body length for a buffer being read from the frame reader to be more than UINT32_MAX");
-        bw.truncate(hdr);
+        bw.truncate(hdr, true);
         return Result<void>::err(Error::buffer_too_large("Encountered body length too large"));
     }
 
     bw.patch_u32(hdr, static_cast<uint32_t>(body_len));
     if (!bw.ok()) {
         auto err = bw.error();
-        bw.truncate(hdr);
+        bw.truncate(hdr, true);
         return Result<void>::err(err);
     }
 
@@ -205,7 +208,7 @@ template <typename Encode>
     bw.patch_u32(hdr + 4, compute_crc_32(buf.data() + body_begin, body_len));
     if (!bw.ok()) {
         auto err = bw.error();
-        bw.truncate(hdr);
+        bw.truncate(hdr, true);
         return Result<void>::err(err);
     }
 
