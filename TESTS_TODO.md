@@ -464,14 +464,14 @@ Design invariant under test throughout: **every mutator early-returns when `!ok(
 - [x] **TEST-603** [UNIT] Mixed sequence (u8, u64, bytes, u16, u32) reads back in order; `consumed()` equals writer `size()` at the end.
 
 **Reader failure paths — hand-built buffers, since a correct writer cannot produce these**
-- [ ] **TEST-610** [UNIT] Read past the end sets the error; read landing *exactly* on the end succeeds. Both boundaries, every width.
-- [ ] **TEST-611** [UNIT] ⭐ After a failed read, subsequent reads return `0` **and `consumed()` does not advance**. The no-advance half is the one that silently breaks record framing.
-- [ ] **TEST-612** [UNIT] `sub(n)` where `n > remaining()` → parent poisoned, child is zero-length, parent's `consumed()` unchanged.
-- [ ] **TEST-613** [UNIT] `sub()` on an already-poisoned parent yields a poisoned child.
-- [ ] **TEST-614** [UNIT] `sub()` success: child sees exactly `n` bytes, parent advanced by exactly `n`, child cannot read past its own end even though the parent's buffer continues.
-- [ ] **TEST-615** [UNIT] `read_bytes` returns `{}` on failure; `read_bytes(0)` on a healthy reader also returns `{}` but leaves `ok()` true. Only `ok()` distinguishes them.
-- [ ] **TEST-616** [UNIT] `skip(n > remaining())` poisons and does not advance.
-- [ ] **TEST-617** [UNIT] Constructor guard: `nullptr` data with non-zero length → poisoned, `length_` forced to 0.
+- [x] **TEST-610** [UNIT] Read past the end sets the error; read landing *exactly* on the end succeeds. Both boundaries, every width.
+- [x] **TEST-611** [UNIT] ⭐ After a failed read, subsequent reads return `0` **and `consumed()` does not advance**. The no-advance half is the one that silently breaks record framing.
+- [x] **TEST-612** [UNIT] `sub(n)` where `n > remaining()` → parent poisoned, child is zero-length, parent's `consumed()` unchanged.
+- [x] **TEST-613** [UNIT] `sub()` on an already-poisoned parent yields a poisoned child.
+- [x] **TEST-614** [UNIT] `sub()` success: child sees exactly `n` bytes, parent advanced by exactly `n`, child cannot read past its own end even though the parent's buffer continues.
+- [x] **TEST-615** [UNIT] `read_bytes` returns `{}` on failure; `read_bytes(0)` on a healthy reader also returns `{}` but leaves `ok()` true. Only `ok()` distinguishes them.
+- [x] **TEST-616** [UNIT] `skip(n > remaining())` poisons and does not advance.
+- [x] **TEST-617** [UNIT] Constructor guard: `nullptr` data with non-zero length → poisoned, `length_` forced to 0.
 
 **Writer failure paths**
 - [ ] **TEST-620** [UNIT] `patch_*` boundary: `offset == size()` fails; `offset == size() - width` succeeds. Every width.

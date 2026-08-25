@@ -95,6 +95,8 @@ void BufferReader::skip(size_t n) {
     pos_ += n;
 }
 
+size_t BufferReader::buffer_length() const { return length_; }
+
 BufferReader BufferReader::sub(size_t n) {
     if (!ok()) return BufferReader(data_ + pos_, 0, err_);
     if (remaining() < n) {

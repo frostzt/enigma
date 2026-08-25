@@ -55,6 +55,11 @@ class BufferReader {
     /// Skips n bytes
     void skip(size_t n);
 
+    /// Returns the length of the buffer this is generally the length provided during contruction
+    /// when creating a sub buffer this is the sub buffer length, an invalid read of a sub buffer
+    /// would be zero
+    size_t buffer_length() const;
+
     /// Returns a new BufferReader over the next `n` bytes advances the parent by n bytes, the new BufferReader
     /// owns the next n bytes if an error is encountered the child will contain that error and the caller is
     /// responsible for validating and making sure that the error encountered wasn't silently swallowed

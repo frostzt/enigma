@@ -122,3 +122,176 @@ TEST(Buffer, reads_back_in_order) {
     ASSERT_TRUE(r.ok());
     ASSERT_EQ(r.consumed(), w.size());
 }
+
+TEST(BufferReader, read_past_ends) {
+    BufferWriter bw(16);
+    bw.write_u64(444);
+    bw.write_u64(666);
+
+    BufferReader br(bw.data().data(), bw.size());
+    br.skip(16); /* end */
+
+    ASSERT_TRUE(br.ok());
+
+    br.skip(1); /* +1 the end */
+
+    ASSERT_FALSE(br.ok());
+    ASSERT_TRUE(br.error().is_out_of_range());
+}
+
+TEST(BufferReader, poisoned_reader_checks) {
+    BufferWriter bw(24);
+
+    bw.write_u64(8);
+    bw.write_u64(8);
+    bw.write_u64(8);
+
+    BufferReader br(bw.data().data(), bw.size());
+    br.skip((8 * 3) + 1); /* poison */
+
+    ASSERT_EQ(br.consumed(), 0);
+
+    ASSERT_FALSE(br.ok());
+
+    auto pv1 = br.read_u64();
+    ASSERT_FALSE(br.ok());
+    ASSERT_EQ(pv1, 0);
+    ASSERT_EQ(br.consumed(), 0);
+}
+
+TEST(BufferReader, out_of_range_sub_buffer) {
+    BufferWriter bw(16);
+
+    bw.write_u64(8);
+    bw.write_u64(8);
+
+    BufferReader br(bw.data().data(), bw.size());
+
+    auto v1 = br.read_u64();
+    ASSERT_TRUE(br.ok());
+    ASSERT_EQ(v1, 8);
+    ASSERT_EQ(br.remaining(), 8);
+
+    auto sub = br.sub(10); /* out of range sub */
+    ASSERT_FALSE(br.ok()); /* parent is poisioned */
+    ASSERT_EQ(br.remaining(), 8);
+    ASSERT_EQ(sub.remaining(), 0);
+    ASSERT_EQ(sub.buffer_length(), 0);
+}
+
+TEST(BufferReader, poisoned_parent_poisoned_child) {
+    BufferWriter bw(16);
+
+    bw.write_u64(8);
+    bw.write_u64(8);
+
+    BufferReader br(bw.data().data(), bw.size());
+    ASSERT_EQ(br.read_u64(), 8);
+    ASSERT_EQ(br.read_u64(), 8);
+    ASSERT_TRUE(br.ok());
+
+    br.skip(1); /* poison */
+
+    ASSERT_FALSE(br.ok());
+
+    auto sub = br.sub(10);
+    ASSERT_FALSE(sub.ok());
+    ASSERT_EQ(sub.buffer_length(), 0);
+}
+
+TEST(BufferReader, subframe_should_not_read_beyond_provided_frame) {
+    BufferWriter bw(48);
+
+    bw.write_u64(10);
+    bw.write_u64(20);
+    bw.write_u64(30);
+    bw.write_u64(40);
+    bw.write_u64(50);
+    bw.write_u64(60);
+
+    BufferReader br(bw.data().data(), bw.size());
+    ASSERT_EQ(br.read_u64(), 10);
+    ASSERT_TRUE(br.ok());
+
+    auto sub = br.sub(16);
+    ASSERT_TRUE(sub.ok());
+
+    /* parent moves past imm */
+    ASSERT_EQ(br.remaining(), 24);
+
+    /* sub should contain exactly 16 bytes */
+    ASSERT_EQ(sub.remaining(), 16);
+    ASSERT_EQ(sub.buffer_length(), 16);
+    ASSERT_EQ(sub.read_u64(), 20);
+    ASSERT_EQ(sub.read_u64(), 30);
+
+    sub.skip(8); /* should poison sub NOT parent */
+
+    ASSERT_FALSE(sub.ok());
+    ASSERT_TRUE(br.ok()); /* parent should be fine */
+
+    ASSERT_EQ(sub.read_u64(), 0); /* further reads return 0 for poisoned */
+
+    ASSERT_EQ(br.remaining(), 24);
+
+    ASSERT_EQ(br.read_u64(), 40);
+    ASSERT_EQ(br.read_u64(), 50);
+    ASSERT_EQ(br.read_u64(), 60);
+    ASSERT_EQ(br.remaining(), 0);
+}
+
+TEST(BufferReader, read_bytes_returns_empty_on_failure) {
+    BufferWriter bw(32);
+
+    std::vector<uint8_t> bytes = {0x02, 0x01, 0xAA, 0xAB, 0xFF, 0xFF, 0x02, 0x07};
+
+    /* write a bunc of data */
+    bw.write_u8(121);
+    bw.write_u16(1345);
+    bw.write_bytes({bytes});
+    bw.write_u32(235626);
+
+    /* --- poisoned reader --- */
+    BufferReader brp(bw.data().data(), bw.size());
+    ASSERT_EQ(brp.read_u8(), 121);
+    ASSERT_EQ(brp.read_u16(), 1345);
+    auto gotp = brp.read_bytes(bytes.size() + 4 + /* invalid read */ 8);
+
+    /* empty and ok is false */
+    ASSERT_FALSE(brp.ok());
+    ASSERT_TRUE(gotp.empty());
+
+    /* --- good reader --- */
+    BufferReader brg(bw.data().data(), bw.size());
+    ASSERT_EQ(brg.read_u8(), 121);
+    ASSERT_EQ(brg.read_u16(), 1345);
+    auto gotg = brg.read_bytes(bytes.size());
+    ASSERT_TRUE(std::equal(gotg.begin(), gotg.end(), bytes.begin(), bytes.end()));
+    ASSERT_TRUE(brg.ok());
+    ASSERT_EQ(brg.read_u32(), 235626);
+
+    auto emp = brg.read_bytes(0);
+    ASSERT_TRUE(emp.empty());
+    ASSERT_TRUE(brg.ok());
+}
+
+TEST(BufferReader, skip_beyond_bounds) {
+    BufferWriter bw(24);
+
+    bw.write_u64(10);
+    bw.write_u64(20);
+    bw.write_u64(30);
+
+    BufferReader br(bw.data().data(), bw.size());
+    ASSERT_EQ(br.read_u64(), 10);
+
+    br.skip(24); /* +8 more than the buf */
+
+    ASSERT_FALSE(br.ok());
+}
+
+TEST(BufferReader, ctor_nullptr_check) {
+    BufferReader br(nullptr, 10);
+    ASSERT_FALSE(br.ok());
+    ASSERT_TRUE(br.error().is_bad_config());
+}
