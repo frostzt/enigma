@@ -479,4 +479,32 @@ TEST(BufferWriter, poison_propagation) {
 TEST(BufferWriter, clear) {
     BufferWriter w(32);
     w.write_u64(32);
+    ASSERT_TRUE(w.ok());
+    ASSERT_TRUE(w.data().size() > 0);
+    ASSERT_TRUE(w.size() > 0);
+
+    w.patch_u64(999, 7);
+    ASSERT_FALSE(w.ok());
+
+    w.clear();
+    ASSERT_TRUE(w.ok());
+    ASSERT_EQ(w.data().size(), 0);
+    ASSERT_EQ(w.size(), 0);
+}
+
+TEST(BufferWriter, reserve_slot) {
+    BufferWriter w(32);
+    w.write_u64(32);
+
+    auto psize = w.size();
+    ASSERT_EQ(psize, 8);
+
+    auto offset = w.reserve_slot(24);
+    ASSERT_EQ(offset, psize);
+
+    BufferReader br(w.data().data(), w.size());
+    ASSERT_EQ(br.read_u64(), 32);
+    auto got = br.read_bytes(psize);
+    std::vector<uint8_t> expected(got.size(), 0);
+    EXPECT_TRUE(std::equal(got.begin(), got.end(), expected.begin()));
 }

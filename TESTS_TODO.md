@@ -478,8 +478,8 @@ Design invariant under test throughout: **every mutator early-returns when `!ok(
 - [x] **TEST-621** [UNIT] `patch_*` with an offset far past the end fails without UB (run under ASan).
 - [x] **TEST-622** [UNIT] `truncate(mark > size())` poisons; `truncate(size())` is a no-op; `truncate(0)` empties.
 - [x] **TEST-623** [UNIT] ⭐ **Poison propagation.** Poison a writer, then call every mutator — `write_*`, `write_bytes`, `reserve_slot`, `patch_*` — and assert `size()` is unchanged by all of them. This is the invariant the class's safety rests on; it must be re-run whenever a method is added.
-- [ ] **TEST-624** [UNIT] `clear()` resets both the data and the error — a poisoned writer is reusable afterwards.
-- [ ] **TEST-625** [UNIT] `reserve_slot(n)` returns the pre-call `size()`, zero-fills `n` bytes, and grows `size()` by exactly `n`.
+- [x] **TEST-624** [UNIT] `clear()` resets both the data and the error — a poisoned writer is reusable afterwards.
+- [x] **TEST-625** [UNIT] `reserve_slot(n)` returns the pre-call `size()`, zero-fills `n` bytes, and grows `size()` by exactly `n`.
 
 ### 15.C — Framing layer (`write_framed` / `read_framed`) ⚠️ BLOCKING
 
