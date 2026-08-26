@@ -4,10 +4,38 @@
 #include <span>
 #include <vector>
 
+#include "enigmadb/base.h"
 #include "gtest/gtest.h"
 #include "test_support/macros.h"
 
 using namespace enigmadb;
+
+namespace {
+
+struct Blackhole {
+    uint32_t len;
+    std::vector<uint64_t> entities;
+};
+
+void encode_blackhole_buffer(BufferWriter& bw, const Blackhole bh) {
+    bw.write_u32(bh.len); /* length */
+    for (const auto i : bh.entities) {
+        bw.write_u64(i);
+    }
+}
+
+Result<Blackhole> decode_blackhole_buffer(BufferReader& br) {
+    Blackhole local;
+    auto len = br.read_u32();
+    local.len = len;
+    local.entities.reserve(len);
+    for (size_t i = 0; i < len; i++) {
+        local.entities.push_back(br.read_u64());
+    }
+    return Result<Blackhole>::ok(std::move(local));
+}
+
+}  // namespace
 
 /* --------------------------------
  * BUFFER
@@ -507,4 +535,18 @@ TEST(BufferWriter, reserve_slot) {
     auto got = br.read_bytes(psize);
     std::vector<uint8_t> expected(got.size(), 0);
     EXPECT_TRUE(std::equal(got.begin(), got.end(), expected.begin()));
+}
+
+/* --------------------------------
+ * Framed Layer
+ * -------------------------------- */
+
+TEST(Framed, asdf) {
+    BufferWriter w(32);
+    Blackhole bh{5, {1, 2, 3, 4, 5}};
+
+    auto r = write_framed(w, [&](BufferWriter& b) { encode_blackhole_buffer(b, bh); });
+    ASSERT_TRUE(r.has_value());
+
+    /* manually truncate this record */
 }
