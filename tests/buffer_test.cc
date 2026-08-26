@@ -545,8 +545,14 @@ TEST(Framed, asdf) {
     BufferWriter w(32);
     Blackhole bh{5, {1, 2, 3, 4, 5}};
 
-    auto r = write_framed(w, [&](BufferWriter& b) { encode_blackhole_buffer(b, bh); });
-    ASSERT_TRUE(r.has_value());
+    auto wr = write_framed(w, [&](BufferWriter& b) { encode_blackhole_buffer(b, bh); });
+    ASSERT_TRUE(wr.has_value());
 
     /* manually truncate this record */
+    auto tr = w.data();
+    std::vector<uint8_t> truncated(tr.begin(), tr.begin() + 12); /* (header) 8 */
+    BufferReader r(truncated.data(), truncated.size());
+    auto rfr = read_framed<Blackhole>(r, [](BufferReader& r) { return decode_blackhole_buffer(r); });
+
+    ASSERT_TRUE(rfr.has_value());
 }
