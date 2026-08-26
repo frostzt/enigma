@@ -3,7 +3,8 @@ project(enigmadb VERSION 0.0.1 LANGUAGES CXX)
 
 # --- Options ---
 
-option(ENIGMADB_BUILD_TOOLS "build developer/debug tools" OFF)
+option(ENIGMADB_BUILD_TOOLS "Build developer/debug tools" OFF)
+option(ENIGMADB_BUILD_BENCHMARKS "Build microbenchmarks" OFF)
 
 # --- CMake Flags ---
 
@@ -72,6 +73,11 @@ add_subdirectory(docs)
 
 # Test files
 add_subdirectory(tests)
+
+# Benchmark files
+if (ENIGMADB_BUILD_BENCHMARKS)
+  add_subdirectory(benchmark)
+endif()
 
 if (ENIGMADB_BUILD_TOOLS)
   add_subdirectory(tools)
