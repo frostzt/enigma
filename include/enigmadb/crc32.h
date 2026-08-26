@@ -54,6 +54,11 @@ uint32_t crc32c_scaler(const uint8_t* data, size_t length);
 __attribute__((target("sse4.2"))) uint32_t crc32c_hw(const uint8_t* data, size_t length);
 #endif
 
+#if defined(__aarch64__)
+#define ENIGMADB_CRC32_ARM 1
+uint32_t crc32c_hw(const uint8_t* data, size_t length);
+#endif
+
 }  // namespace enigmadb
 
 #endif  // ENIGMA_DB_CRC32_H
