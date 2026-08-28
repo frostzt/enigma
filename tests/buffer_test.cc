@@ -538,10 +538,10 @@ TEST(BufferWriter, reserve_slot) {
 }
 
 /* --------------------------------
- * Framed Layer
+ * BufferFrame Layer
  * -------------------------------- */
 
-TEST(Framed, asdf) {
+TEST(BufferFrame, shorter_buffer_than_declared_body_returns_incomplete_record) {
     BufferWriter w(32);
     Blackhole bh{5, {1, 2, 3, 4, 5}};
 
@@ -554,5 +554,6 @@ TEST(Framed, asdf) {
     BufferReader r(truncated.data(), truncated.size());
     auto rfr = read_framed<Blackhole>(r, [](BufferReader& r) { return decode_blackhole_buffer(r); });
 
-    ASSERT_TRUE(rfr.has_value());
+    ASSERT_FALSE(rfr.has_value());
+    ASSERT_TRUE(rfr.error().is_incomplete_record());
 }

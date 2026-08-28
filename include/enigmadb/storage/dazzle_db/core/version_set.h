@@ -30,7 +30,6 @@ class VersionSet {
         return current_version_;
     };
 
-    /* TODO: Manifest changes pending */
     Result<std::vector<SSTableId>> apply(VersionEdit edit) {
         std::lock_guard<std::mutex> lock(mu_);
         for (const auto& id : edit.removed) {

@@ -39,6 +39,9 @@ Result<void> ManifestWriter::append(const VersionEdit& ve) {
         return Result<void>::err(ares.error());
     }
 
+    /* clear for next */
+    buf_writer_.clear();
+
     /* fsync to disk */
     auto fsres = engine_.sync_data(fh_);
     if (!fsres.has_value()) {

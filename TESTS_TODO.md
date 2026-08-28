@@ -486,7 +486,7 @@ Design invariant under test throughout: **every mutator early-returns when `!ok(
 The framing layer owns length, CRC, and rollback. The **layering rule** these tests enforce: byte-level validation belongs to whoever bounded the bytes (`read_framed`, which creates `body_reader`); semantic validation belongs to whoever knows the type (the decoder's count guards). A test that asserts `CHECKSUM_MISMATCH` from the payload codec is testing the wrong layer — the payload codec writes no header and cannot detect it.
 
 **Error-code mapping — this is the recovery contract, not cosmetics**
-- [ ] **TEST-650** [UNIT] ⭐ Buffer shorter than the declared body → `INCOMPLETE_RECORD`. This is crash-mid-append; the replay loop must truncate and continue, so miscoding it as `CORRUPTION` makes the DB unopenable after every crash.
+- [x] **TEST-650** [UNIT] ⭐ Buffer shorter than the declared body → `INCOMPLETE_RECORD`. This is crash-mid-append; the replay loop must truncate and continue, so miscoding it as `CORRUPTION` makes the DB unopenable after every crash.
 - [ ] **TEST-651** [UNIT] ⭐ Body flipped after a valid CRC was written → `CHECKSUM_MISMATCH`. Sweep the flip across **every** body byte, not one.
 - [ ] **TEST-652** [UNIT] Decoder consumed fewer bytes than the record declared → `CORRUPTION` (`body_reader.remaining() != 0`).
 - [ ] **TEST-653** [UNIT] Decoder's own semantic error (a count guard firing) propagates with **its** code, not remapped by the framing layer.
