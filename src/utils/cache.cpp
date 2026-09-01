@@ -88,7 +88,9 @@ class HashMap {
         }
         auto new_list = new LRUHandle*[new_length];
         std::memset(new_list, 0, sizeof(new_list[0]) * new_length);
+#ifndef NDEBUG
         uint32_t count = 0;
+#endif
         for (uint32_t i = 0; i < len_; i++) {
             auto h = list_[i];
             while (h != nullptr) {
@@ -98,7 +100,9 @@ class HashMap {
                 h->next_hash = *ptr;
                 *ptr = h;
                 h = next;
+#ifndef NDEBUG
                 count++;
+#endif
             }
         }
         assert(elems_ == count);
