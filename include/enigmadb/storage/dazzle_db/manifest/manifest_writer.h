@@ -16,11 +16,11 @@ class ManifestWriter {
     static Result<ManifestWriter> Open(io::IOEngine& engine, const std::string& path, const size_t prealloc = 100);
 
     /// Frames the VersionEdit encodes it and writes it to disk
-    Result<void> append(const VersionEdit&);
+    [[nodiscard]] Result<void> append(const VersionEdit&);
 
    private:
-    ManifestWriter(io::IOEngine& engine, const std::string& path, io::FileHandle fh, BufferWriter& bufwriter)
-        : path_(path), engine_(engine), fh_(std::move(fh)), buf_writer_(bufwriter) {}
+    ManifestWriter(io::IOEngine& engine, const std::string& path, io::FileHandle fh, BufferWriter bufwriter)
+        : path_(path), engine_(engine), fh_(std::move(fh)), buf_writer_(std::move(bufwriter)) {}
 
     /// Path to the current manifest file being written
     std::string path_;
@@ -32,7 +32,7 @@ class ManifestWriter {
     io::FileHandle fh_;
 
     /// Owns manifest writing end to end
-    BufferWriter& buf_writer_;
+    BufferWriter buf_writer_;
 };
 
 }  // namespace enigmadb::dazzle

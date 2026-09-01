@@ -16,8 +16,9 @@ Result<ManifestWriter> ManifestWriter::Open(io::IOEngine& engine, const std::str
 
     /* create required components */
     auto& fh = ores.value();
+
     BufferWriter bw(prealloc);
-    ManifestWriter mw(engine, path, std::move(fh), bw);
+    ManifestWriter mw(engine, path, std::move(fh), std::move(bw));
     return Result<ManifestWriter>::ok(std::move(mw));
 }
 

@@ -23,6 +23,7 @@
 #include "enigmadb/storage/dazzle_db/compaction/compaction.h"
 #include "enigmadb/storage/dazzle_db/compaction/compaction_policy.h"
 #include "enigmadb/storage/dazzle_db/core/version_set.h"
+#include "enigmadb/storage/dazzle_db/manifest/manifest_writer.h"
 #include "enigmadb/storage/dazzle_db/memtable/memtable.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_common.h"
 #include "enigmadb/storage/dazzle_db/sstable/table_cache.h"
@@ -77,6 +78,8 @@ class Dazzle : public storage::StorageEngine {
     std::atomic<uint64_t> next_wal_seq_{0};
     /// Sequence number for the next SSTable file.
     std::atomic<uint64_t> next_sst_seq_{0};
+    /// Sequence number for manifest files
+    std::atomic<uint64_t> manifest_seq_{0};
 
     uint64_t bump_lsn_sequence() { return lsn_.fetch_add(1, std::memory_order_relaxed); }
     uint64_t mint_sst_id() { return next_sst_seq_.fetch_add(1, std::memory_order_relaxed); }
@@ -109,7 +112,8 @@ class Dazzle : public storage::StorageEngine {
      */
     Dazzle(io::IOEngine& engine, std::string data_dir, WalWriter wal_writer, uint64_t memtable_size,
            Memtable active_memtable, std::map<SSTableId, SSTableMeta, SSTableIdComparator> sst_meta,
-           uint64_t next_wal_seq, uint64_t next_sst_seq, std::unique_ptr<TableCache> tc, uint64_t highest_sequence = 0,
+           uint64_t next_wal_seq, uint64_t next_sst_seq, std::unique_ptr<TableCache> tc, ManifestWriter manifest_writer,
+           uint64_t manifest_sequence = 0, uint64_t highest_sequence = 0,
            std::unique_ptr<CompactionPolicy> policy = nullptr)
         : engine_(engine),
           data_dir_(data_dir),
@@ -117,10 +121,11 @@ class Dazzle : public storage::StorageEngine {
           memtable_size_(memtable_size),
           active_memtable_(std::move(active_memtable)),
           table_cache_(std::move(tc)),
-          version_set_(std::make_unique<VersionSet>(std::move(sst_meta))),
+          version_set_(std::make_unique<VersionSet>(std::move(sst_meta), manifest_writer)),
           lsn_{highest_sequence},
           next_wal_seq_{next_wal_seq},
           next_sst_seq_{next_sst_seq},
+          manifest_seq_(manifest_sequence),
           policy_(policy ? std::move(policy) : std::make_unique<SizeTieredCompactionPolicy>(4, 8)),
           compactor_(Compactor::create(engine, data_dir)) {}
 
