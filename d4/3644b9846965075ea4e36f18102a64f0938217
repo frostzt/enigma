@@ -1,0 +1,27 @@
+include/enigmadb/storage/dazzle_db/core/version_set.h
+  s_3836a6ef44bba5::t_35ad9dbcd7ef92 13,16,23-24,58-64,72-75
+include/enigmadb/storage/dazzle_db/dazzle_engine.h
+  s_3836a6ef44bba5::t_dbe4eabd6ec72e 26,81-82,115-116,124,128
+include/enigmadb/storage/dazzle_db/manifest/manifest_writer.h
+  s_3836a6ef44bba5::t_d89c77e52667f9 19,22-23,35
+src/storage/dazzle_db/dazzle_engine.cpp
+  s_3836a6ef44bba5::t_f16cad33ac4817 24-25,109-110,123-128,200-208,213
+src/storage/dazzle_db/manifest/manifest_writer.cpp
+  s_3836a6ef44bba5::t_99946ab708c17f 19,21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "d43644b9846965075ea4e36f18102a64f0938217",
+  "prompts": {},
+  "sessions": {
+    "s_3836a6ef44bba5": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_12f7ad815ffeZfQK6ay1QBigP6",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "frostzt <aidenfrostbite@gmail.com>"
+    }
+  }
+}
