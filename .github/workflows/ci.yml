@@ -78,6 +78,42 @@ jobs:
           UBSAN_OPTIONS: "halt_on_error=1:print_stacktrace=1"
         run: ctest --test-dir build --output-on-failure
 
+  benchmarks:
+    name: Benchmarks
+    needs: lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ubuntu-benchmarks-ccache
+
+      - name: Configure CMake
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DENIGMADB_BUILD_BENCHMARKS=ON \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build benchmarks
+        run: cmake --build build --target benchmark_enigma --parallel
+
+      - name: Run benchmarks
+        run: |
+          ./build/benchmark/benchmark_enigma \
+            --benchmark_min_time=0.05s \
+            --benchmark_out=benchmark_results.json \
+            --benchmark_out_format=json
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: benchmark_results.json
+
   thread-sanitizer:
     name: "Ubuntu (TSan)"
     needs: lint

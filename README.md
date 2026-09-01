@@ -33,6 +33,14 @@ enigmadb/
 └── third_party/                (vendored dependencies)
 ```
 
+## Benchmarking
+
+```shell
+cmake -B build -DENIGMADB_BUILD_BENCHMARKS=ON
+cmake --build build --target benchmark_enigma -j
+./build/benchmark/benchmark_enigma
+```
+
 ## Debugging and tols
 
 Have created a bunch of tools to help debug and understand stuff inside tools dir

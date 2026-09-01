@@ -47,6 +47,18 @@ static constexpr uint32_t crc_32_table[256] = {
 
 uint32_t compute_crc_32(const uint8_t* data, size_t length);
 
+uint32_t crc32c_scaler(const uint8_t* data, size_t length);
+
+#if defined(__x86_64__) || defined(__i386__)
+#define ENIGMADB_CRC32_X86 1
+__attribute__((target("sse4.2"))) uint32_t crc32c_hw(const uint8_t* data, size_t length);
+#endif
+
+#if defined(__aarch64__)
+#define ENIGMADB_CRC32_ARM 1
+uint32_t crc32c_hw(const uint8_t* data, size_t length);
+#endif
+
 }  // namespace enigmadb
 
 #endif  // ENIGMA_DB_CRC32_H

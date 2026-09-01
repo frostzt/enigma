@@ -9,5 +9,12 @@ FetchContent_Declare(
   SYSTEM
 )
 
+FetchContent_Declare(
+  googlebenchmark
+  GIT_REPOSITORY https://github.com/google/benchmark.git
+  GIT_TAG        main
+  SYSTEM
+)
+
 # Populate the content
-FetchContent_MakeAvailable(googletest)
+FetchContent_MakeAvailable(googletest googlebenchmark)
