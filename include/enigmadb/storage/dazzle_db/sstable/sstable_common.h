@@ -27,6 +27,10 @@ constexpr size_t MAX_PAGING_SIZE_BYTES = 4096;
 /// @brief Current SSTable on-disk format version.
 constexpr size_t SSTABLE_FORMAT_VERSION = 4;
 
+/// Size of SSTable metadata struct
+constexpr size_t SSTABLE_META_SIZE = 32;
+static_assert(SSTABLE_META_SIZE == 4 * sizeof(uint64_t));
+
 /// @brief Size of the magic identifier in the footer, in bytes.
 static constexpr size_t MAGIC_SIZE = 8;
 

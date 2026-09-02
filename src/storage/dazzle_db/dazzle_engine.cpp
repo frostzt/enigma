@@ -21,6 +21,8 @@
 #include "enigmadb/storage/dazzle_db/compaction/compaction.h"
 #include "enigmadb/storage/dazzle_db/compaction/compaction_policy.h"
 #include "enigmadb/storage/dazzle_db/core/version_edit.h"
+#include "enigmadb/storage/dazzle_db/manifest/manifest_common.h"
+#include "enigmadb/storage/dazzle_db/manifest/manifest_writer.h"
 #include "enigmadb/storage/dazzle_db/memtable/memtable.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_common.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_reader.h"
@@ -104,6 +106,8 @@ Result<std::unique_ptr<Dazzle>> Dazzle::open(io::IOEngine& engine, const std::st
     /* create dirs if they don't exist */
     fs::path wal_dir_path = data_dir + "/wal";
     fs::path sst_dir_path = data_dir + "/sst";
+    fs::path manifest_dir_path = data_dir + "/manifest";
+
     if (!fs::is_directory(wal_dir_path)) {
         if (!fs::create_directory(wal_dir_path)) {
             return Result<std::unique_ptr<Dazzle>>::err(Error::unexpected("failed to create wal dir"));
@@ -113,6 +117,12 @@ Result<std::unique_ptr<Dazzle>> Dazzle::open(io::IOEngine& engine, const std::st
     if (!fs::is_directory(sst_dir_path)) {
         if (!fs::create_directory(sst_dir_path)) {
             return Result<std::unique_ptr<Dazzle>>::err(Error::unexpected("failed to create sst dir"));
+        }
+    }
+
+    if (!fs::is_directory(manifest_dir_path)) {
+        if (!fs::create_directory(manifest_dir_path)) {
+            return Result<std::unique_ptr<Dazzle>>::err(Error::unexpected("failed to create manifest dir"));
         }
     }
 
@@ -187,11 +197,20 @@ Result<std::unique_ptr<Dazzle>> Dazzle::open(io::IOEngine& engine, const std::st
     auto tcr = TableCache::create(engine, data_dir, std::move(cache));
     if (!tcr.has_value()) return Result<std::unique_ptr<Dazzle>>::err(tcr.error());
 
+    /* Init the manifest writer */
+    std::stringstream manifest_ss;
+    manifest_ss << data_dir << "/manifest/" << get_manifest_filename(ManifestId{0});
+    auto mwres = ManifestWriter::Open(engine, manifest_ss.str(), 250);
+    if (!mwres.has_value()) {
+        LOG_ERROR(Category::ENGINE_DAZZLE, "Engine failed to open with error={}", mwres.error().message);
+        return Result<std::unique_ptr<Dazzle>>::err(mwres.error());
+    }
+
     /* Create the dazzle engine */
     auto storage_engine = std::unique_ptr<Dazzle>(
         new Dazzle(engine, data_dir, std::move(wal_writer_res.value()), memtable_size, std::move(mtable),
                    std::move(sst_meta), highest_wal_seq + 1, highest_sst_seq + 1, std::move(tcr.value()),
-                   max_sst_sequence_found + 1, std::move(policy)));
+                   std::move(mwres.value()), 1, max_sst_sequence_found + 1, std::move(policy)));
 
     /* try and recover */
     auto recover_result = storage_engine->recover();
