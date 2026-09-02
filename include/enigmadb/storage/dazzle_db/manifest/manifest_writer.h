@@ -1,6 +1,7 @@
 #ifndef ENIGMADB_DAZZLEDB_MANIFEST_WRITER_H_
 #define ENIGMADB_DAZZLEDB_MANIFEST_WRITER_H_
 
+#include <memory>
 #include <string>
 
 #include "enigmadb/base.h"
@@ -13,7 +14,8 @@ namespace enigmadb::dazzle {
 class ManifestWriter {
    public:
     /// Creates a new ManifestWriter and opens a new FileDescriptor and owns it
-    static Result<ManifestWriter> Open(io::IOEngine& engine, const std::string& path, const size_t prealloc = 100);
+    static Result<std::unique_ptr<ManifestWriter>> Open(io::IOEngine& engine, const std::string& path,
+                                                        const size_t prealloc = 100);
 
     /// Frames the VersionEdit encodes it and writes it to disk
     [[nodiscard]] Result<void> append(const VersionEdit&);

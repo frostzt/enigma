@@ -20,8 +20,8 @@ namespace enigmadb::dazzle {
 
 class VersionSet {
    public:
-    VersionSet(std::map<SSTableId, SSTableMeta, SSTableIdComparator> sst_meta, ManifestWriter& writer)
-        : current_version_(std::make_shared<const Version>(std::move(sst_meta))), manifest_writer_(writer) {
+    VersionSet(std::map<SSTableId, SSTableMeta, SSTableIdComparator> sst_meta, std::unique_ptr<ManifestWriter> writer)
+        : current_version_(std::make_shared<const Version>(std::move(sst_meta))), manifest_writer_(std::move(writer)) {
         live_versions_.push_back(current_version_);
     }
 
@@ -56,7 +56,7 @@ class VersionSet {
         auto published = append_version(next_version, edit.removed);
 
         /* Purge all the changes in this VersionEdit as a Manifest file */
-        auto mwres = manifest_writer_.append(edit);
+        auto mwres = manifest_writer_->append(edit);
         if (!mwres.has_value()) {
             LOG_ERROR(Category::ENGINE_DAZZLE, "Failed to write VersionEdit changes to disk as manifest");
             return Result<std::vector<SSTableId>>::err(mwres.error());
@@ -71,7 +71,7 @@ class VersionSet {
     std::set<SSTableId> pending_obsolete_ids_;
 
     /// Used to write the VersionEdit changes as Manifests to disk
-    ManifestWriter& manifest_writer_;
+    std::unique_ptr<ManifestWriter> manifest_writer_;
 
     mutable std::mutex mu_;
 

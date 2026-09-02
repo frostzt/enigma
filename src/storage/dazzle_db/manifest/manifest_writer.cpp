@@ -1,5 +1,6 @@
 #include "enigmadb/storage/dazzle_db/manifest/manifest_writer.h"
 
+#include <memory>
 #include <string>
 
 #include "enigmadb/base.h"
@@ -10,16 +11,17 @@
 
 namespace enigmadb::dazzle {
 
-Result<ManifestWriter> ManifestWriter::Open(io::IOEngine& engine, const std::string& path, const size_t prealloc) {
+Result<std::unique_ptr<ManifestWriter>> ManifestWriter::Open(io::IOEngine& engine, const std::string& path,
+                                                             const size_t prealloc) {
     auto ores = engine.open(path, io::Mode::Write);
-    if (!ores.has_value()) return Result<ManifestWriter>::err(ores.error());
+    if (!ores.has_value()) return Result<std::unique_ptr<ManifestWriter>>::err(ores.error());
 
     /* create required components */
     auto& fh = ores.value();
 
     BufferWriter bw(prealloc);
-    ManifestWriter mw(engine, path, std::move(fh), std::move(bw));
-    return Result<ManifestWriter>::ok(std::move(mw));
+    auto mw = std::unique_ptr<ManifestWriter>(new ManifestWriter(engine, path, std::move(fh), std::move(bw)));
+    return Result<std::unique_ptr<ManifestWriter>>::ok(std::move(mw));
 }
 
 Result<void> ManifestWriter::append(const VersionEdit& ve) {

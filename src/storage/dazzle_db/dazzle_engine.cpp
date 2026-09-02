@@ -200,7 +200,7 @@ Result<std::unique_ptr<Dazzle>> Dazzle::open(io::IOEngine& engine, const std::st
     /* Init the manifest writer */
     std::stringstream manifest_ss;
     manifest_ss << data_dir << "/manifest/" << get_manifest_filename(ManifestId{0});
-    auto mwres = ManifestWriter::Open(engine, manifest_ss.str());
+    auto mwres = ManifestWriter::Open(engine, manifest_ss.str(), 250);
     if (!mwres.has_value()) {
         LOG_ERROR(Category::ENGINE_DAZZLE, "Engine failed to open with error={}", mwres.error().message);
         return Result<std::unique_ptr<Dazzle>>::err(mwres.error());

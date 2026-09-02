@@ -112,16 +112,16 @@ class Dazzle : public storage::StorageEngine {
      */
     Dazzle(io::IOEngine& engine, std::string data_dir, WalWriter wal_writer, uint64_t memtable_size,
            Memtable active_memtable, std::map<SSTableId, SSTableMeta, SSTableIdComparator> sst_meta,
-           uint64_t next_wal_seq, uint64_t next_sst_seq, std::unique_ptr<TableCache> tc, ManifestWriter manifest_writer,
-           uint64_t manifest_sequence = 0, uint64_t highest_sequence = 0,
-           std::unique_ptr<CompactionPolicy> policy = nullptr)
+           uint64_t next_wal_seq, uint64_t next_sst_seq, std::unique_ptr<TableCache> tc,
+           std::unique_ptr<ManifestWriter> manifest_writer, uint64_t manifest_sequence = 0,
+           uint64_t highest_sequence = 0, std::unique_ptr<CompactionPolicy> policy = nullptr)
         : engine_(engine),
           data_dir_(data_dir),
           wal_writer_(std::move(wal_writer)),
           memtable_size_(memtable_size),
           active_memtable_(std::move(active_memtable)),
           table_cache_(std::move(tc)),
-          version_set_(std::make_unique<VersionSet>(std::move(sst_meta), manifest_writer)),
+          version_set_(std::make_unique<VersionSet>(std::move(sst_meta), std::move(manifest_writer))),
           lsn_{highest_sequence},
           next_wal_seq_{next_wal_seq},
           next_sst_seq_{next_sst_seq},
