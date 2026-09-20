@@ -86,6 +86,7 @@ class Dazzle : public storage::StorageEngine {
     uint64_t peek_sst_id() const { return next_sst_seq_.load(std::memory_order_relaxed); }
     uint64_t mint_wal_id() { return next_wal_seq_.fetch_add(1, std::memory_order_relaxed); }
     uint64_t peek_wal_id() const { return next_wal_seq_.load(std::memory_order_relaxed); }
+    uint64_t bump_manifest_sequence() { return manifest_seq_.fetch_add(1, std::memory_order_relaxed); }
 
     /* --------------------------------------------------
      * Compaction

@@ -348,6 +348,7 @@ Result<void> Dazzle::install_flushed_sst(SSTableMeta meta) {
     auto edit = VersionEdit({}, {meta});
     auto applied = version_set_->apply(edit);
     if (!applied.has_value()) return Result<void>::err(applied.error());
+    bump_manifest_sequence();
 
     /* reclaim files deleted */
     reclaim(applied.value());
@@ -372,6 +373,7 @@ Result<void> Dazzle::install(const CompactionTask& task) {
     /* update version */
     auto applied = version_set_->apply(edit);
     if (!applied.has_value()) return Result<void>::err(applied.error());
+    bump_manifest_sequence();
 
     /* reclaim files deleted */
     reclaim(applied.value());

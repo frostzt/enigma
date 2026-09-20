@@ -34,12 +34,22 @@ class VersionSet {
 
     Result<std::vector<SSTableId>> apply(VersionEdit edit) {
         std::lock_guard<std::mutex> lock(mu_);
+
+        /* Validate if this version has all the removed files NOT consumed anywhere else */
         for (const auto& id : edit.removed) {
             if (current_version_->files().find(id) == current_version_->files().end()) {
                 return Result<std::vector<SSTableId>>::err(Error::stale_version("VersionEdit already consumed"));
             }
         }
 
+        /* Purge all the changes in this VersionEdit as a Manifest file */
+        auto mwres = manifest_writer_->append(edit);
+        if (!mwres.has_value()) {
+            LOG_ERROR(Category::ENGINE_DAZZLE, "Failed to write VersionEdit changes to disk as manifest");
+            return Result<std::vector<SSTableId>>::err(mwres.error());
+        }
+
+        /* Swap readers and get reclaimable files */
         auto new_map = current_version_->files();
 
         /* remove all the removed files */
@@ -54,13 +64,6 @@ class VersionSet {
 
         auto next_version = std::make_shared<Version>(std::move(new_map));
         auto published = append_version(next_version, edit.removed);
-
-        /* Purge all the changes in this VersionEdit as a Manifest file */
-        auto mwres = manifest_writer_->append(edit);
-        if (!mwres.has_value()) {
-            LOG_ERROR(Category::ENGINE_DAZZLE, "Failed to write VersionEdit changes to disk as manifest");
-            return Result<std::vector<SSTableId>>::err(mwres.error());
-        }
 
         return Result<std::vector<SSTableId>>::ok(published);
     }
