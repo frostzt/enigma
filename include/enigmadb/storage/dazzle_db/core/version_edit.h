@@ -22,10 +22,7 @@ void encode_version_edit(BufferWriter&, const VersionEdit&);
 /// Decodes a possible version edit buffer into the buffer reader, the function
 /// validates the body reader in read_framed as the entire thing is wrapped in
 /// a frame its much better to call this from read_frame.
-///
-/// Accepts a second parameter that populates the total bytes read from while
-/// reading the manifest file.
-[[nodiscard]] Result<VersionEdit> decode_version_edit(BufferReader&, size_t&);
+[[nodiscard]] Result<VersionEdit> decode_version_edit(BufferReader&);
 
 }  // namespace enigmadb::dazzle
 

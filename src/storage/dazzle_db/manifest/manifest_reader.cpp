@@ -34,11 +34,10 @@ Result<const VersionEdit> ManifestReader::next() {
     if (pos_ + 1 >= bytes_.size()) return Result<const VersionEdit>::err(Error::err_eof("EOF"));
 
     BufferReader br(bytes_.data() + pos_, bytes_.size() - pos_);
-    size_t read_bytes = 0;
-    auto rres = read_framed<VersionEdit>(br, [&](BufferReader& b) { return decode_version_edit(b, read_bytes); });
+    auto rres = read_framed<VersionEdit>(br, [&](BufferReader& b) { return decode_version_edit(b); });
     if (!rres.has_value()) return Result<const VersionEdit>::err(rres.error());
 
-    pos_ += read_bytes;
+    pos_ += br.consumed();
 
     return Result<const VersionEdit>::ok(rres.value());
 }

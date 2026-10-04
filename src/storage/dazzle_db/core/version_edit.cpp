@@ -35,13 +35,11 @@ void encode_version_edit(BufferWriter& bw, const VersionEdit& ve) {
     }
 }
 
-Result<VersionEdit> decode_version_edit(BufferReader& br, size_t& bytes_read) {
+Result<VersionEdit> decode_version_edit(BufferReader& br) {
     VersionEdit local;
-    size_t total_bytes = 0;
 
     /* --- read removed ids --- */
     auto removed_count = br.read_u32();
-    total_bytes += 4;
 
     if (removed_count > br.remaining() / 8) {
         return Result<VersionEdit>::err(Error::corruption("removed count exceeds the max boundry"));
@@ -50,12 +48,10 @@ Result<VersionEdit> decode_version_edit(BufferReader& br, size_t& bytes_read) {
     local.removed.reserve(removed_count);
     for (size_t i = 0; i < removed_count; i++) {
         local.removed.push_back(SSTableId{br.read_u64()});
-        total_bytes += 8;
     }
 
     /* --- read added sst metas --- */
     auto added_count = br.read_u32();
-    total_bytes += 4;
     if (added_count > br.remaining() / SSTABLE_META_SIZE) {
         return Result<VersionEdit>::err(Error::corruption("added count exceeds the max boundry"));
     }
@@ -63,26 +59,18 @@ Result<VersionEdit> decode_version_edit(BufferReader& br, size_t& bytes_read) {
     local.added.reserve(added_count);
     for (size_t i = 0; i < added_count; i++) {
         auto id = SSTableId{br.read_u64()};
-        total_bytes += 8;
         auto szbytes = br.read_u64();
-        total_bytes += 8;
         auto ecount = br.read_u64();
-        total_bytes += 8;
         auto max_seq = br.read_u64();
-        total_bytes += 8;
         local.added.push_back(
             SSTableMeta{.id = id, .size_bytes = szbytes, .entry_count = ecount, .max_sequence = max_seq});
     }
 
     /* --- read next sstable id --- */
     auto has_id = br.read_u8();
-    total_bytes += 1;
     if (has_id == 1) {
         local.next_sst_id = br.read_u64();
-        total_bytes += 8;
     }
-
-    bytes_read = total_bytes;
 
     if (!br.ok()) return Result<VersionEdit>::err(br.error());
     return Result<VersionEdit>::ok(std::move(local));

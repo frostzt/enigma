@@ -34,12 +34,10 @@ int run(std::string filepath) {
     BufferReader br(bytes.data(), filesize);
 
     while (pos_ <= filesize) {
-        size_t bytes_read = 0;
-        auto rf = read_framed<dazzle::VersionEdit>(
-            br, [&](BufferReader& b) { return dazzle::decode_version_edit(b, bytes_read); });
+        auto rf = read_framed<dazzle::VersionEdit>(br, [&](BufferReader& b) { return dazzle::decode_version_edit(b); });
         if (!rf.has_value()) return 1;
 
-        pos_ += bytes_read;
+        pos_ += br.consumed();
 
         auto& ve = rf.value();
 
