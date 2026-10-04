@@ -94,12 +94,12 @@ Result<SSTableReader> SSTableReader::create(io::IOEngine& engine, const std::str
     while (offset < index_block_size) {
         IndexEntry entry;
         if (offset + 4 > index_block_size) {
-            return Result<SSTableReader>::err(Error{ErrorCode::READ_OUT_OF_RANGE, "key read out of range"});
+            return Result<SSTableReader>::err(Error{ErrorCode::OUT_OF_RANGE, "key read out of range"});
         }
         auto key_len = decode_uint32(buffer.data(), offset);
         offset += 4;
         if (offset + key_len + 8 + 4 > index_block_size) {
-            return Result<SSTableReader>::err(Error{ErrorCode::READ_OUT_OF_RANGE, "index entry out of range"});
+            return Result<SSTableReader>::err(Error{ErrorCode::OUT_OF_RANGE, "index entry out of range"});
         }
         entry.first_key.assign(buffer.data() + offset, buffer.data() + offset + key_len);
         offset += key_len;

@@ -130,5 +130,5 @@ TEST(WAL, crash_recovery) {
     ASSERT_FALSE(read_res.has_value());
 
     auto& err = read_res.error();
-    ASSERT_EQ(err.code, ErrorCode::BAD_CONFIG);
+    ASSERT_EQ(err.code, ErrorCode::CHECKSUM_MISMATCH);
 }

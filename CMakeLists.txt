@@ -14,7 +14,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # --- Compile Flags ---
 
 add_compile_options(
-  -Wall -Wextra -Werror -Wpedantic -Wreorder
+  -Wall -Wextra -Werror -Wpedantic -Wreorder -Wimplicit-fallthrough -Wreturn-type
 )
 add_compile_options(-Wno-gnu-zero-variadic-macro-arguments)
 

@@ -24,7 +24,18 @@
 namespace enigmadb {
 
 enum class Level : uint8_t { Trace, Debug, Info, Warn, Error, Fatal, Off };
-enum class Category : uint8_t { General, Wal, SSTable, Memtable, Catalog, Compaction, IO, ENGINE_DAZZLE, _Count };
+enum class Category : uint8_t {
+    General,
+    Wal,
+    SSTable,
+    Memtable,
+    Catalog,
+    Compaction,
+    IO,
+    ENGINE_DAZZLE,
+    DAZZLE_MANIFEST,
+    _Count
+};
 
 #ifndef NDEBUG
 inline constexpr Level kCompileMinLevel = Level::Trace;

@@ -1,8 +1,8 @@
 #ifndef ENIGMA_DB_BASE_H
 #define ENIGMA_DB_BASE_H
 
-#include "enigmadb/error.h"
-#include "enigmadb/result.h"
+#include "error.h"
+#include "result.h"
 
 namespace enigmadb {
 

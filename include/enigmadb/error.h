@@ -26,12 +26,16 @@ namespace enigmadb {
     X(BAD_CONFIG, bad_config, 4)                   \
     X(WRITE_ERR, write_err, 5)                     \
     X(READ_ERR, read_err, 6)                       \
-    X(READ_OUT_OF_RANGE, read_out_of_range, 7)     \
+    X(OUT_OF_RANGE, out_of_range, 7)               \
     X(ERR_EOF, err_eof, 8)                         \
     X(FSTAT_ERR, fstat_err, 9)                     \
     X(BAD_MAGIC, bad_magic, 10)                    \
     X(BAD_FILE, bad_file, 11)                      \
     X(STRUCTURE_EMPTY, structure_empty, 12)        \
+    X(CHECKSUM_MISMATCH, checksum_mismatch, 13)    \
+    X(CORRUPTION, corruption, 14)                  \
+    X(INCOMPLETE_RECORD, incomplete_record, 15)    \
+    X(BUFFER_TOO_LARGE, buffer_too_large, 16)      \
     /* Concurrency and Version errors */           \
     X(STALE_VERSION, stale_version, 1001)
 

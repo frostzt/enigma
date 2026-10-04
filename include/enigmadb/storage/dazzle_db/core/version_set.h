@@ -2,6 +2,7 @@
 #define ENIGMADB_DAZZLEDB_CORE_VERSION_SET_H_
 
 #include <algorithm>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <set>
@@ -9,16 +10,19 @@
 #include <vector>
 
 #include "enigmadb/base.h"
+#include "enigmadb/log.h"
 #include "enigmadb/storage/dazzle_db/core/version.h"
 #include "enigmadb/storage/dazzle_db/core/version_edit.h"
+#include "enigmadb/storage/dazzle_db/manifest/manifest_reader.h"
+#include "enigmadb/storage/dazzle_db/manifest/manifest_writer.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_common.h"
 
 namespace enigmadb::dazzle {
 
 class VersionSet {
    public:
-    VersionSet(std::map<SSTableId, SSTableMeta, SSTableIdComparator> sst_meta)
-        : current_version_(std::make_shared<const Version>(std::move(sst_meta))) {
+    VersionSet(std::map<SSTableId, SSTableMeta, SSTableIdComparator> sst_meta, std::unique_ptr<ManifestWriter> writer)
+        : current_version_(std::make_shared<const Version>(std::move(sst_meta))), manifest_writer_(std::move(writer)) {
         live_versions_.push_back(current_version_);
     }
 
@@ -29,15 +33,24 @@ class VersionSet {
         return current_version_;
     };
 
-    /* TODO: Manifest changes pending */
-    Result<std::vector<SSTableId>> apply(VersionEdit edit) {
+    Result<std::vector<SSTableId>> apply(VersionEdit& edit) {
         std::lock_guard<std::mutex> lock(mu_);
+
+        /* Validate if this version has all the removed files NOT consumed anywhere else */
         for (const auto& id : edit.removed) {
             if (current_version_->files().find(id) == current_version_->files().end()) {
                 return Result<std::vector<SSTableId>>::err(Error::stale_version("VersionEdit already consumed"));
             }
         }
 
+        /* Purge all the changes in this VersionEdit as a Manifest file */
+        auto mwres = manifest_writer_->append(edit);
+        if (!mwres.has_value()) {
+            LOG_ERROR(Category::ENGINE_DAZZLE, "Failed to write VersionEdit changes to disk as manifest");
+            return Result<std::vector<SSTableId>>::err(mwres.error());
+        }
+
+        /* Swap readers and get reclaimable files */
         auto new_map = current_version_->files();
 
         /* remove all the removed files */
@@ -60,6 +73,13 @@ class VersionSet {
     std::shared_ptr<const Version> current_version_;
     std::vector<std::shared_ptr<const Version>> live_versions_;
     std::set<SSTableId> pending_obsolete_ids_;
+
+    /// Used to write the VersionEdit changes as Manifest to disk
+    std::unique_ptr<ManifestWriter> manifest_writer_;
+
+    /// Used to read the VersionEdit changes in the Manifest file
+    std::unique_ptr<ManifestReader> manifest_reader_;
+
     mutable std::mutex mu_;
 
     std::vector<SSTableId> append_version(std::shared_ptr<Version> new_version,
