@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "enigmadb/base.h"
+#include "enigmadb/common.h"
 #include "enigmadb/crc32.h"
 #include "enigmadb/log.h"
 #include "error.h"
@@ -26,13 +27,8 @@ class BufferReader {
         }
     };
 
-    /* Reader can only be moved */
-    BufferReader(BufferReader&&) = default;
-    BufferReader& operator=(BufferReader&&) = default;
-
-    /* Reader cannot be copied */
-    BufferReader(const BufferReader&) = delete;
-    BufferReader& operator=(const BufferReader&) = delete;
+    CLASS_DEFAULT_MOVE(BufferReader);
+    DELETE_CLASS_COPY(BufferReader);
 
     size_t remaining() const;
 

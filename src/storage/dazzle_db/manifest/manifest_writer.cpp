@@ -13,7 +13,7 @@ namespace enigmadb::dazzle {
 
 Result<std::unique_ptr<ManifestWriter>> ManifestWriter::Open(io::IOEngine& engine, const std::string& path,
                                                              const size_t prealloc) {
-    auto ores = engine.open(path, io::Mode::Write);
+    auto ores = engine.open(path, io::Mode::Append);
     if (!ores.has_value()) return Result<std::unique_ptr<ManifestWriter>>::err(ores.error());
 
     /* create required components */
@@ -39,14 +39,15 @@ Result<void> ManifestWriter::append(const VersionEdit& ve) {
     auto ares = engine_.append(fh_, buf_writer_.data().data(), buf_writer_.size());
     if (!ares.has_value()) {
         LOG_ERROR(Category::DAZZLE_MANIFEST, "Manifest writer failed to append VersionEdit into manifest file");
+        buf_writer_.clear();
         return Result<void>::err(ares.error());
     }
 
     /* clear for next */
     buf_writer_.clear();
 
-    /* fsync to disk */
-    auto fsres = engine_.sync_data(fh_);
+    /* full fsync to disk */
+    auto fsres = engine_.sync_all(fh_);
     if (!fsres.has_value()) {
         LOG_ERROR(Category::DAZZLE_MANIFEST, "Manifest writer failed to purge VersionEdit into disk");
         return Result<void>::err(fsres.error());

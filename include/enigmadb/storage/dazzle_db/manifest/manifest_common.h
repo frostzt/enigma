@@ -12,7 +12,7 @@ struct ManifestId {
     /// ID of the manifest file
     uint64_t value;
 
-    bool operator<=>(const ManifestId& other) const = default;
+    auto operator<=>(const ManifestId& other) const = default;
     bool operator==(const ManifestId& other) const { return value == other.value; };
 };
 
@@ -25,4 +25,4 @@ inline std::string get_manifest_filename(const ManifestId id) {
 
 }  // namespace enigmadb::dazzle
 
-#endif  // ENIGMADB_DAZZLEDB_MANIFEST_READER_H_
+#endif  // ENIGMADB_DAZZLEDB_MANIFEST_COMMON_H_

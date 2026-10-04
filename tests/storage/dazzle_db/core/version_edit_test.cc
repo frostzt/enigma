@@ -41,7 +41,9 @@ std::vector<uint8_t> framed_bytes(const dazzle::VersionEdit& ve) {
 /// Reads one framed VersionEdit back out of a byte buffer.
 Result<dazzle::VersionEdit> read_edit(const std::vector<uint8_t>& bytes) {
     BufferReader br(bytes.data(), bytes.size());
-    return read_framed<dazzle::VersionEdit>(br, [](BufferReader& r) { return dazzle::decode_version_edit(r); });
+    size_t bytes_read = 0;
+    return read_framed<dazzle::VersionEdit>(
+        br, [&](BufferReader& r) { return dazzle::decode_version_edit(r, bytes_read); });
 }
 
 void expect_same(const dazzle::VersionEdit& lhs, const dazzle::VersionEdit& rhs) {
@@ -75,7 +77,8 @@ TEST(VersionEdit, round_trip_payload) {
     ASSERT_TRUE(bw.ok());
 
     BufferReader br(bw.data().data(), bw.size());
-    auto decoded = dazzle::decode_version_edit(br);
+    size_t bytes_read = 0;
+    auto decoded = dazzle::decode_version_edit(br, bytes_read);
 
     ASSERT_TRUE(decoded.has_value());
     EXPECT_TRUE(br.ok());
@@ -92,7 +95,8 @@ TEST(VersionEdit, round_trip_payload_without_watermark) {
     ASSERT_TRUE(bw.ok());
 
     BufferReader br(bw.data().data(), bw.size());
-    auto decoded = dazzle::decode_version_edit(br);
+    size_t bytes_read = 0;
+    auto decoded = dazzle::decode_version_edit(br, bytes_read);
 
     ASSERT_TRUE(decoded.has_value());
     EXPECT_FALSE(decoded.value().next_sst_id.has_value());
@@ -112,7 +116,8 @@ TEST(VersionEdit, round_trip_payload_empty) {
     EXPECT_EQ(bw.size(), 9u);
 
     BufferReader br(bw.data().data(), bw.size());
-    auto decoded = dazzle::decode_version_edit(br);
+    size_t bytes_read = 0;
+    auto decoded = dazzle::decode_version_edit(br, bytes_read);
 
     ASSERT_TRUE(decoded.has_value());
     expect_same(original, decoded.value());

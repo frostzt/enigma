@@ -13,6 +13,7 @@
 #include "enigmadb/log.h"
 #include "enigmadb/storage/dazzle_db/core/version.h"
 #include "enigmadb/storage/dazzle_db/core/version_edit.h"
+#include "enigmadb/storage/dazzle_db/manifest/manifest_reader.h"
 #include "enigmadb/storage/dazzle_db/manifest/manifest_writer.h"
 #include "enigmadb/storage/dazzle_db/sstable/sstable_common.h"
 
@@ -32,7 +33,7 @@ class VersionSet {
         return current_version_;
     };
 
-    Result<std::vector<SSTableId>> apply(VersionEdit edit) {
+    Result<std::vector<SSTableId>> apply(VersionEdit& edit) {
         std::lock_guard<std::mutex> lock(mu_);
 
         /* Validate if this version has all the removed files NOT consumed anywhere else */
@@ -73,8 +74,11 @@ class VersionSet {
     std::vector<std::shared_ptr<const Version>> live_versions_;
     std::set<SSTableId> pending_obsolete_ids_;
 
-    /// Used to write the VersionEdit changes as Manifests to disk
+    /// Used to write the VersionEdit changes as Manifest to disk
     std::unique_ptr<ManifestWriter> manifest_writer_;
+
+    /// Used to read the VersionEdit changes in the Manifest file
+    std::unique_ptr<ManifestReader> manifest_reader_;
 
     mutable std::mutex mu_;
 

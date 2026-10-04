@@ -15,7 +15,7 @@ class ManifestWriter {
    public:
     /// Creates a new ManifestWriter and opens a new FileDescriptor and owns it
     static Result<std::unique_ptr<ManifestWriter>> Open(io::IOEngine& engine, const std::string& path,
-                                                        const size_t prealloc = 100);
+                                                        const size_t prealloc = 120);
 
     /// Frames the VersionEdit encodes it and writes it to disk
     [[nodiscard]] Result<void> append(const VersionEdit&);
